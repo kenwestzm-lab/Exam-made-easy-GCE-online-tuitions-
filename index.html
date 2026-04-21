@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="theme-color" content="#064d2c"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>Peace Mindset Private School — GCE Online</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{--g:#0a6e3f;--gd:#064d2c;--gl:#12a05c;--gp:#edf7f2;--gold:#c9930a;--d:#dc2626;--ok:#16a34a;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'DM Sans',sans-serif;background:#f3f7f5;color:#111827;-webkit-tap-highlight-color:transparent}
+#root{height:100vh;overflow:hidden}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+h1,h2,h3{font-family:'Playfair Display',serif}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#12a05c;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react,env">
+const {useState, useEffect, useRef, useCallback, createContext, useContext} = React;
+
+// ====================================================
+// CHANGE THIS TO YOUR RENDER BACKEND URL!
+// ====================================================
+const BACKEND = "https://exam-made-easy-gce-online-tuitions.onrender.com";
+// ====================================================
+
+const api = async (method, path, body, token, formData) => {
+  const opts = { method, headers: {} };
+  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+  if (body && !formData) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  else if (formData) opts.body = formData;
+  const r = await fetch(`${BACKEND}/api${path}`, opts);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Error ${r.status}`);
+  return d;
+};
+
+const SUBJECTS = [
+  {id:1,name:"Mathematics",icon:"📐"},{id:2,name:"English Language",icon:"📖"},
+  {id:3,name:"Biology",icon:"🌿"},{id:4,name:"Chemistry",icon:"⚗️"},
+  {id:5,name:"Physics",icon:"⚡"},{id:6,name:"Civic Education",icon:"🏛️"},
+  {id:7,name:"Geography",icon:"🌍"},{id:8,name:"Commerce",icon:"💼"},
+  {id:9,name:"Accounts",icon:"📊"},{id:10,name:"History",icon:"📜"},
+  {id:11,name:"Religious Education",icon:"✝️"},{id:12,name:"Add. Maths",icon:"🔢"},
+  {id:13,name:"Home Economics",icon:"🏠"},{id:14,name:"Computer Studies",icon:"💻"},
+];
+const PROVINCES = ["Central","Copperbelt","Eastern","Luapula","Lusaka","Muchinga","Northern","North-Western","Southern","Western"];
+
+const sn = id => SUBJECTS.find(s => s.id === Number(id))?.name || "Unknown";
+const si = id => SUBJECTS.find(s => s.id === Number(id))?.icon || "📚";
+const fd = d => d ? new Date(d).toLocaleDateString("en-GB", {day:"numeric",month:"short",year:"numeric"}) : "";
+const isSub = (subs, pays, sid) => {
+  return (subs||[]).some(x => Number(x.subject_id)===Number(sid) && x.payment_status==="approved" && x.status==="active")
+    || (pays||[]).some(x => Number(x.subject_id)===Number(sid) && x.status==="approved");
+};
+
+// Styles
+const C = {g:"#0a6e3f",gd:"#064d2c",gl:"#12a05c",gp:"#edf7f2",gold:"#c9930a",goldp:"#fef9e7",w:"#fff",bg:"#f3f7f5",gr:"#6b7280",grl:"#dde8e3",grd:"#374151",dk:"#111827",d:"#dc2626",dl:"#fee2e2",ok:"#16a34a",okl:"#dcfce7",wa:"#d97706",wal:"#fef3c7"};
+const Btn = (v="p", sm=false) => ({display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",border:"none",borderRadius:10,padding:sm?"7px 14px":"11px 20px",fontSize:sm?12:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",
+  ...(v==="p"?{background:`linear-gradient(135deg,${C.gd},${C.g})`,color:"#fff",boxShadow:"0 2px 10px rgba(10,110,63,0.25)"}
+    :v==="gold"?{background:`linear-gradient(135deg,#a07010,${C.gold})`,color:"#fff"}
+    :v==="d"?{background:C.d,color:"#fff"}:v==="gh"?{background:C.gp,color:C.g}:{background:C.grl,color:C.grd})});
+const INP = {width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #dde8e3",fontSize:14,fontFamily:"'DM Sans',sans-serif",outline:"none",background:"#fff",boxSizing:"border-box"};
+const CARD = {background:"#fff",borderRadius:16,boxShadow:"0 2px 18px rgba(6,77,44,0.09)",padding:18,marginBottom:14,border:"1px solid #eef3f1"};
+const LBL = {fontSize:13,fontWeight:600,color:C.grd,marginBottom:6,display:"block"};
+
+// Auth Context
+const AuthCtx = createContext(null);
+function AuthProvider({children}) {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    const t = localStorage.getItem("pms_tok");
+    if (!t) { setLoading(false); return; }
+    try { const u = await api("GET", "/auth/me", null, t); setProfile(u); }
+    catch { localStorage.removeItem("pms_tok"); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const signIn = async (email, password) => {
+    const d = await api("POST", "/auth/login", {email, password});
+    localStorage.setItem("pms_tok", d.token); setProfile(d.user); return d.user;
+  };
+  const signUp = async (form) => {
+    const d = await api("POST", "/auth/register", form);
+    localStorage.setItem("pms_tok", d.token); setProfile(d.user); return d.user;
+  };
+  const signOut = () => { localStorage.removeItem("pms_tok"); setProfile(null); };
+  const updateProfile = async (updates) => {
+    const t = localStorage.getItem("pms_tok");
+    const u = await api("PUT", "/auth/profile", updates, t);
+    setProfile(u); return u;
+  };
+  return <AuthCtx.Provider value={{profile, loading, signIn, signUp, signOut, updateProfile, setProfile}}>{children}</AuthCtx.Provider>;
+}
+const useAuth = () => useContext(AuthCtx);
+
+// Toast Context
+const ToastCtx = createContext(null);
+function ToastProvider({children}) {
+  const [toasts, setToasts] = useState([]);
+  const add = useCallback(({title, body, icon="🔔", type="i"}) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p.slice(-3), {id, title, body, icon, type}]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000);
+  }, []);
+  const bg = t => ({m:`linear-gradient(135deg,${C.gd},${C.g})`,w:`linear-gradient(135deg,#92400e,${C.gold})`,i:"linear-gradient(135deg,#1e3a8a,#3b82f6)",d:`linear-gradient(135deg,#7f1d1d,${C.d})`})[t] || `linear-gradient(135deg,${C.gd},${C.g})`;
+  return (
+    <ToastCtx.Provider value={{add}}>
+      {children}
+      <div style={{position:"fixed",top:14,right:14,zIndex:99999,display:"flex",flexDirection:"column",gap:8,maxWidth:300,width:"calc(100vw - 28px)"}}>
+        {toasts.map(t => (
+          <div key={t.id} onClick={() => setToasts(p => p.filter(x => x.id !== t.id))}
+            style={{background:bg(t.type),color:"#fff",borderRadius:12,padding:"11px 13px",boxShadow:"0 8px 28px rgba(0,0,0,0.2)",cursor:"pointer",display:"flex",gap:9,alignItems:"flex-start",animation:"fadeUp 0.3s ease"}}>
+            <span style={{fontSize:18}}>{t.icon}</span>
+            <div><div style={{fontWeight:700,fontSize:12}}>{t.title}</div>{t.body && <div style={{fontSize:11,opacity:.9,marginTop:2}}>{t.body}</div>}</div>
+          </div>
+        ))}
+      </div>
+    </ToastCtx.Provider>
+  );
+}
+const useToast = () => useContext(ToastCtx);
+
+// Spinner
+const Spin = ({s=32}) => <div style={{display:"flex",justifyContent:"center",padding:28}}><div style={{width:s,height:s,border:"3px solid #edf7f2",borderTop:`3px solid ${C.g}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
+
+// Data hook
+function useApi(path, deps=[]) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    const t = localStorage.getItem("pms_tok"); if (!t) return;
+    try { const d = await api("GET", path, null, t); setData(Array.isArray(d) ? d : d); }
+    catch(e) { console.warn(path, e.message); }
+    finally { setLoading(false); }
+  }, [path, ...deps]);
+  useEffect(() => { load(); }, [load]);
+  return {data, setData, loading, refetch: load};
+}
+
+// ── AUTH SCREEN ────────────────────────────────────────
+function AuthScreen() {
+  const {signIn, signUp} = useAuth();
+  const {add} = useToast();
+  const [mode, setMode] = useState("login");
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({name:"",email:"",password:"",role:"student",phone:"",grade:"",province:"Lusaka"});
+  const set = (k, v) => setF(p => ({...p, [k]:v}));
+  const doLogin = async e => {
+    e.preventDefault(); setBusy(true);
+    try { await signIn(f.email, f.password); }
+    catch(e) { add({title:"Login failed", body:e.message, icon:"❌", type:"d"}); }
+    finally { setBusy(false); }
+  };
+  const doReg = async e => {
+    e.preventDefault(); if (!f.name||!f.email||!f.password) return; setBusy(true);
+    try {
+      await signUp(f);
+      if (f.role==="tutor") add({title:"Registered! ⏳", body:"Wait for admin approval. WhatsApp 0772799672", icon:"⏳", type:"w"});
+      else add({title:"Welcome! 🎉", body:"Account created successfully", icon:"🎓", type:"i"});
+    }
+    catch(e) { add({title:"Failed", body:e.message, icon:"❌", type:"d"}); }
+    finally { setBusy(false); }
+  };
+  const I = (props) => <input style={{...INP, marginBottom:12}} {...props}/>;
+  return (
+    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(150deg,${C.gd},#085e35,${C.gl})`,padding:14,overflow:"auto"}}>
+      <div style={{background:"#fff",borderRadius:24,padding:28,width:"100%",maxWidth:390,boxShadow:"0 24px 80px rgba(0,0,0,0.25)",maxHeight:"92vh",overflowY:"auto"}}>
+        <div style={{textAlign:"center",marginBottom:22}}>
+          <div style={{width:68,height:68,borderRadius:20,background:`linear-gradient(135deg,#a07010,${C.gold})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,margin:"0 auto 12px",animation:"breathe 2s ease-in-out infinite"}}>🎓</div>
+          <h1 style={{fontSize:19,color:C.gd,marginBottom:4}}>Peace Mindset</h1>
+          <p style={{fontSize:10,color:C.gr,letterSpacing:"1.5px",textTransform:"uppercase"}}>Private School · GCE Online · Zambia 🇿🇲</p>
+        </div>
+        <div style={{display:"flex",background:"#f3f7f5",borderRadius:10,padding:3,marginBottom:20,gap:4}}>
+          {[["login","🔑 Sign In"],["register","✨ Register"]].map(([m,l]) => (
+            <button key={m} onClick={() => setMode(m)} style={{flex:1,padding:"9px 0",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,background:mode===m?`linear-gradient(135deg,${C.gd},${C.g})`:"transparent",color:mode===m?"#fff":C.gr}}>{l}</button>
+          ))}
+        </div>
+        {mode==="login" ? (
+          <form onSubmit={doLogin}>
+            <label style={LBL}>Email Address</label>
+            <I type="email" placeholder="your@email.com" value={f.email} onChange={e=>set("email",e.target.value)} required/>
+            <label style={LBL}>Password</label>
+            <I type="password" placeholder="••••••••" value={f.password} onChange={e=>set("password",e.target.value)} required/>
+            <button type="submit" disabled={busy} style={{...Btn(),width:"100%",justifyContent:"center",fontSize:15,padding:"13px",opacity:busy?.7:1}}>
+              {busy ? "⏳ Signing in..." : "🔑 Sign In"}
+            </button>
+            <p style={{textAlign:"center",marginTop:14,fontSize:13,color:C.gr}}>📱 WhatsApp: <strong style={{color:C.g}}>0772799672</strong></p>
+          </form>
+        ) : (
+          <form onSubmit={doReg}>
+            <label style={LBL}>Full Name *</label><I placeholder="Your full name" value={f.name} onChange={e=>set("name",e.target.value)} required/>
+            <label style={LBL}>Email *</label><I type="email" value={f.email} onChange={e=>set("email",e.target.value)} required/>
+            <label style={LBL}>Password *</label><I type="password" placeholder="Min 6 characters" minLength={6} value={f.password} onChange={e=>set("password",e.target.value)} required/>
+            <label style={LBL}>Phone (WhatsApp)</label><I placeholder="e.g. 0977123456" value={f.phone} onChange={e=>set("phone",e.target.value)}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={LBL}>Register as</label>
+                <select style={INP} value={f.role} onChange={e=>set("role",e.target.value)}>
+                  <option value="student">👤 Student</option>
+                  <option value="tutor">📚 Tutor</option>
+                </select>
+              </div>
+              <div>
+                <label style={LBL}>Province</label>
+                <select style={INP} value={f.province} onChange={e=>set("province",e.target.value)}>
+                  {PROVINCES.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            {f.role==="student" && (
+              <div style={{marginBottom:12}}>
+                <label style={LBL}>Grade</label>
+                <select style={INP} value={f.grade} onChange={e=>set("grade",e.target.value)}>
+                  <option value="">Select grade...</option>
+                  {["Form 1","Form 2","Form 3","Form 4","Form 5 (Grade 11)","Grade 12","Repeater"].map(g=><option key={g}>{g}</option>)}
+                </select>
+              </div>
+            )}
+            {f.role==="tutor" && <div style={{background:C.goldp,borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.gold,fontWeight:600}}>⏳ Tutor accounts need admin approval before access.</div>}
+            <button type="submit" disabled={busy} style={{...Btn(),width:"100%",justifyContent:"center",fontSize:15,padding:"13px",marginTop:8,opacity:busy?.7:1}}>
+              {busy ? "⏳ Creating..." : "✨ Create Account"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── LAYOUT ─────────────────────────────────────────────
+function Layout({nav, active, setActive, children}) {
+  const {profile, signOut} = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const NavItem = ({item}) => {
+    const on = active === item.id;
+    return (
+      <div onClick={() => {setActive(item.id); setMenuOpen(false);}}
+        style={{display:"flex",alignItems:"center",gap:11,padding:"10px 14px",borderRadius:12,cursor:"pointer",marginBottom:2,position:"relative",transition:"all 0.15s",background:on?`linear-gradient(135deg,${C.gd},${C.g})`:"transparent",color:on?"#fff":C.grd}}>
+        <span style={{fontSize:17,minWidth:20,textAlign:"center"}}>{item.icon}</span>
+        <span style={{fontSize:13,fontWeight:on?700:500}}>{item.label}</span>
+        {item.badge>0 && <span style={{position:"absolute",right:10,background:C.d,color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:700}}>{item.badge}</span>}
+      </div>
+    );
+  };
+  const Sidebar = () => (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:"#fff",borderRight:`1px solid ${C.grl}`}}>
+      <div style={{padding:"18px 14px 14px",background:`linear-gradient(135deg,${C.gd},${C.g})`}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+          <div style={{width:42,height:42,borderRadius:12,background:`linear-gradient(135deg,#a07010,${C.gold})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🎓</div>
+          <div>
+            <div style={{color:"#fff",fontWeight:800,fontSize:12,fontFamily:"'Playfair Display',serif"}}>PEACE MINDSET</div>
+            <div style={{color:"rgba(255,255,255,0.65)",fontSize:9,letterSpacing:"1.5px",textTransform:"uppercase"}}>GCE Online · Zambia 🇿🇲</div>
+          </div>
+        </div>
+        <div style={{background:"rgba(255,255,255,0.15)",borderRadius:10,padding:"8px 10px",display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:profile?.role==="tutor"?C.gold:C.gl,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:14,overflow:"hidden",flexShrink:0}}>
+            {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : (profile?.avatar||profile?.name?.[0]||"?")}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{color:"#fff",fontWeight:700,fontSize:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{profile?.name}</div>
+            <div style={{color:"rgba(255,255,255,0.65)",fontSize:10,textTransform:"capitalize"}}>{profile?.role}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"10px 8px"}}>
+        {nav.map(item => <NavItem key={item.id} item={item}/>)}
+      </div>
+      <div style={{padding:"10px 8px",borderTop:`1px solid ${C.grl}`}}>
+        <div onClick={signOut} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",color:C.d,fontWeight:600,fontSize:13,borderRadius:10}}>
+          <span>🚪</span> Sign Out
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{height:"100vh",display:"flex",overflow:"hidden"}}>
+      <div style={{width:220,flexShrink:0,display:"none"}} id="sidebar"><Sidebar/></div>
+      {menuOpen && (
+        <div style={{position:"fixed",inset:0,zIndex:500,display:"flex"}}>
+          <div style={{width:250,height:"100%"}}><Sidebar/></div>
+          <div onClick={() => setMenuOpen(false)} style={{flex:1,background:"rgba(0,0,0,0.5)"}}/>
+        </div>
+      )}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <button onClick={() => setMenuOpen(true)} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:8,width:36,height:36,cursor:"pointer",color:"#fff",fontSize:18}}>☰</button>
+          <div style={{flex:1,color:"#fff",fontWeight:700,fontSize:14}}>
+            {nav.find(n=>n.id===active)?.icon} {nav.find(n=>n.id===active)?.label}
+          </div>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:14,overflow:"hidden"}}>
+            {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/> : (profile?.avatar||profile?.name?.[0]||"?")}
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 14px"}}>{children}</div>
+        <div style={{background:"#fff",borderTop:`1px solid ${C.grl}`,display:"flex",flexShrink:0}}>
+          {nav.slice(0,5).map(item => {
+            const on = active===item.id;
+            return (
+              <div key={item.id} onClick={() => setActive(item.id)}
+                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"7px 2px 9px",cursor:"pointer",color:on?C.g:C.gr,position:"relative"}}>
+                <span style={{fontSize:20}}>{item.icon}</span>
+                <span style={{fontSize:9,fontWeight:on?700:400,marginTop:2}}>{item.label.split(" ")[0]}</span>
+                {item.badge>0 && <span style={{position:"absolute",top:4,right:"50%",transform:"translateX(8px)",background:C.d,color:"#fff",borderRadius:10,padding:"1px 5px",fontSize:9}}>{item.badge}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <style>{`@media(min-width:768px){#sidebar{display:block!important}}`}</style>
+    </div>
+  );
+}
+
+// ── PROFILE PAGE (works for all roles) ─────────────────
+function ProfilePage() {
+  const {profile, updateProfile, setProfile} = useAuth();
+  const {add} = useToast();
+  const [f, setF] = useState({name:profile?.name||"",phone:profile?.phone||"",grade:profile?.grade||"",province:profile?.province||"",bio:profile?.bio||""});
+  const [saving, setSaving] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const tok = localStorage.getItem("pms_tok");
+
+  const save = async () => {
+    setSaving(true);
+    try { await updateProfile(f); add({title:"✅ Profile saved!", icon:"👤", type:"i"}); }
+    catch(e) { add({title:"Error", body:e.message, icon:"❌", type:"d"}); }
+    finally { setSaving(false); }
+  };
+
+  const uploadPic = async () => {
+    if (!avatarFile) return;
+    setUploading(true);
+    try {
+      const fd = new FormData(); fd.append("avatar", avatarFile);
+      const d = await api("POST", "/auth/avatar", null, tok, fd);
+      setProfile(d.user);
+      add({title:"✅ Picture uploaded to Cloudinary!", icon:"🖼️", type:"i"});
+      setAvatarFile(null);
+    }
+    catch(e) { add({title:"Upload failed", body:e.message, icon:"❌", type:"d"}); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div style={{maxWidth:460}}>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>👤 My Profile</h2>
+      <div style={CARD}>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{width:76,height:76,borderRadius:"50%",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:30,margin:"0 auto 10px",overflow:"hidden"}}>
+            {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : (profile?.avatar||profile?.name?.[0]||"?")}
+          </div>
+          <div style={{marginBottom:8}}><input type="file" accept="image/*" onChange={e=>setAvatarFile(e.target.files[0])} style={{fontSize:12,color:C.gr}}/></div>
+          {avatarFile && <button style={{...Btn("p",true),fontSize:12}} onClick={uploadPic} disabled={uploading}>{uploading?"⏳ Uploading...":"📤 Upload Picture"}</button>}
+        </div>
+        {[["name","Full Name"],["phone","Phone / WhatsApp"],["grade","Grade / Form"],["province","Province"]].map(([k,label]) => (
+          <div key={k} style={{marginBottom:12}}>
+            <label style={LBL}>{label}</label>
+            <input style={INP} value={f[k]} onChange={e=>setF(p=>({...p,[k]:e.target.value}))}/>
+          </div>
+        ))}
+        <div style={{marginBottom:16}}>
+          <label style={LBL}>Bio</label>
+          <textarea style={{...INP,height:76,resize:"vertical"}} value={f.bio} onChange={e=>setF(p=>({...p,bio:e.target.value}))} placeholder="About yourself..."/>
+        </div>
+        <div style={{background:C.gp,borderRadius:10,padding:"10px 12px",marginBottom:16}}>
+          <div style={{fontSize:12,color:C.gd,fontWeight:600,marginBottom:4}}>Account Info</div>
+          <div style={{fontSize:11,color:C.gr}}>Email: <strong>{profile?.email}</strong></div>
+          <div style={{fontSize:11,color:C.gr,marginTop:3}}>Role: <strong style={{textTransform:"capitalize"}}>{profile?.role}</strong></div>
+          {profile?.role==="tutor" && <div style={{fontSize:11,marginTop:3}}>Status: <strong style={{color:profile?.approved?C.ok:C.wa}}>{profile?.approved?"✅ Approved":"⏳ Pending Approval"}</strong></div>}
+        </div>
+        <button style={{...Btn(),width:"100%",justifyContent:"center"}} onClick={save} disabled={saving}>{saving?"⏳ Saving...":"💾 Save Changes"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── STUDENT DASHBOARD ──────────────────────────────────
+function Dashboard({subs, payments, setActiveNav}) {
+  const {profile} = useAuth();
+  const {data:anns} = useApi("/announcements");
+  const {data:live} = useApi("/live-classes");
+  const {data:mats} = useApi("/materials");
+  const {data:asns} = useApi("/assignments");
+  const {data:tests} = useApi("/tests");
+  const h = new Date().getHours();
+  const greet = h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+  const actIds = [...new Set([...subs.filter(s=>s.payment_status==="approved"&&s.status==="active").map(s=>Number(s.subject_id)),...payments.filter(p=>p.status==="approved").map(p=>Number(p.subject_id))])];
+  return (
+    <div style={{animation:"fadeUp 0.4s ease"}}>
+      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g},#1ab866)`,borderRadius:20,padding:"24px 22px",marginBottom:18,color:"#fff",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-30,right:-30,width:140,height:140,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
+        <p style={{margin:"0 0 3px",fontSize:12,opacity:.8}}>{greet} 👋</p>
+        <h2 style={{margin:"0 0 5px",fontSize:20}}>{profile?.name?.split(" ")[0]}!</h2>
+        <p style={{margin:0,fontSize:12,opacity:.8}}>{actIds.length>0?`${actIds.length} active subject${actIds.length!==1?"s":""} · Keep going! 💪`:"Subscribe to unlock your subjects and start learning."}</p>
+        {actIds.length===0 && <button onClick={()=>setActiveNav("pay")} style={{marginTop:12,background:`linear-gradient(135deg,#a07010,${C.gold})`,border:"none",borderRadius:9,padding:"8px 18px",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:12}}>💳 Subscribe Now →</button>}
+        {actIds.length>0 && <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>{actIds.slice(0,4).map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:"rgba(255,255,255,0.2)",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>{s.icon} {s.name}</span>:null;})}</div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(108px,1fr))",gap:10,marginBottom:18}}>
+        {[["📚","Subjects",actIds.length,"subjects",C.g],["📝","Assignments",asns.length,"asns","#7c3aed"],["✏️","Tests",tests.length,"tests","#db7706"],["🎥","Live",live.filter(l=>l.status==="upcoming").length,"live","#0891b2"],["📄","Materials",mats.length,"mats",C.g]].map(([ic,lb,vl,nv,co])=>(
+          <div key={lb} onClick={()=>setActiveNav(nv)} style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",cursor:"pointer",boxShadow:"0 2px 12px rgba(6,77,44,0.07)",border:"1px solid #eef3f1"}}>
+            <div style={{fontSize:22}}>{ic}</div>
+            <div style={{fontSize:22,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div>
+            <div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={CARD}>
+          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:13}}>📢 Announcements</h3>
+          {anns.length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center"}}>None yet</p>:anns.slice(0,3).map(a=>(
+            <div key={a._id} style={{borderLeft:`3px solid ${a.important?C.d:C.g}`,paddingLeft:10,marginBottom:10,paddingBottom:10}}>
+              <div style={{fontWeight:600,fontSize:12}}>{a.important&&"🔴 "}{a.title}</div>
+              <div style={{fontSize:10,color:C.gr,marginTop:2}}>{fd(a.createdAt)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={CARD}>
+          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:13}}>🎥 Upcoming Classes</h3>
+          {live.filter(l=>l.status==="upcoming").length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center"}}>None scheduled</p>:live.filter(l=>l.status==="upcoming").slice(0,2).map(lc=>(
+            <div key={lc._id} style={{background:C.gp,borderRadius:8,padding:"9px 10px",marginBottom:8}}>
+              <div style={{fontWeight:600,fontSize:12,color:C.gd}}>{lc.title}</div>
+              <div style={{fontSize:10,color:C.gr,margin:"2px 0 6px"}}>{sn(lc.subject_id)} · {lc.scheduled_date}</div>
+              <a href={lc.meet_link} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:4,background:`linear-gradient(135deg,${C.gd},${C.g})`,color:"#fff",borderRadius:6,padding:"4px 10px",fontSize:10,textDecoration:"none",fontWeight:700}}>🔗 Join</a>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── STUDENT APP ────────────────────────────────────────
+function StudentApp() {
+  const {profile} = useAuth();
+  const [activeNav, setActiveNav] = useState("home");
+  const {data:subs} = useApi("/subscriptions/mine", [profile?._id]);
+  const {data:payments} = useApi("/subscriptions/payments/mine", [profile?._id]);
+  const pending = payments.filter(p=>p.status==="pending").length;
+  const nav = [
+    {id:"home",icon:"🏠",label:"Dashboard"},
+    {id:"subjects",icon:"📚",label:"Subjects"},
+    {id:"mats",icon:"📄",label:"Materials"},
+    {id:"asns",icon:"📝",label:"Assignments"},
+    {id:"tests",icon:"✏️",label:"Tests"},
+    {id:"live",icon:"🎥",label:"Live Classes"},
+    {id:"pay",icon:"💳",label:"Subscribe",badge:pending||null},
+    {id:"anns",icon:"📢",label:"Announcements"},
+    {id:"profile",icon:"👤",label:"Profile"},
+  ];
+  const content = () => {
+    switch(activeNav) {
+      case"subjects": return <SubjectsPage subs={subs} payments={payments}/>;
+      case"mats": return <MaterialsPage subs={subs} payments={payments}/>;
+      case"asns": return <AssignmentsPage subs={subs} payments={payments}/>;
+      case"tests": return <TestsPage subs={subs} payments={payments}/>;
+      case"live": return <LivePage/>;
+      case"pay": return <SubscribePage/>;
+      case"anns": return <AnnouncementsPage/>;
+      case"profile": return <ProfilePage/>;
+      default: return <Dashboard subs={subs} payments={payments} setActiveNav={setActiveNav}/>;
+    }
+  };
+  return <Layout nav={nav} active={activeNav} setActive={setActiveNav}>{content()}</Layout>;
+}
+
+function SubjectsPage({subs, payments}) {
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>📚 My Subjects</h2>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(148px,1fr))",gap:12}}>
+        {SUBJECTS.map(s => {
+          const ok = isSub(subs, payments, s.id);
+          return (
+            <div key={s.id} style={{background:"#fff",borderRadius:14,padding:"20px 14px",textAlign:"center",border:`2px solid ${ok?C.g:"#eef3f1"}`,boxShadow:"0 2px 12px rgba(6,77,44,0.07)",position:"relative"}}>
+              {ok && <div style={{position:"absolute",top:8,right:8,width:8,height:8,borderRadius:"50%",background:C.ok,boxShadow:"0 0 0 2px #dcfce7"}}/>}
+              <div style={{fontSize:34,marginBottom:8}}>{s.icon}</div>
+              <div style={{fontWeight:700,fontSize:13,color:C.dk,marginBottom:6}}>{s.name}</div>
+              {ok ? <span style={{background:C.okl,color:C.ok,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600}}>✓ Active</span>
+                : <><span style={{background:C.dl,color:C.d,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600}}>Locked</span><div style={{fontSize:10,color:C.gr,marginTop:4}}>ZMW 85/month</div></>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MaterialsPage({subs, payments}) {
+  const {data:mats, loading} = useApi("/materials");
+  const [filter, setFilter] = useState(0);
+  const filtered = filter===0 ? mats : mats.filter(m=>m.subject_id===filter);
+  const tIcon = t => ({pdf:"📄",pptx:"📊",video:"🎬",audio:"🎵",word:"📝",image:"🖼️",link:"🔗"})[t]||"📁";
+  if (loading) return <Spin/>;
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:12,fontSize:18}}>📄 Study Materials</h2>
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        <button onClick={()=>setFilter(0)} style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,background:filter===0?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===0?"#fff":C.gr}}>All ({mats.length})</button>
+        {SUBJECTS.map(s=><button key={s.id} onClick={()=>setFilter(s.id)} style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,background:filter===s.id?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===s.id?"#fff":C.gr}}>{s.icon}</button>)}
+      </div>
+      {filtered.length===0 && <div style={{textAlign:"center",padding:40,color:C.gr}}>No materials found</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
+        {filtered.map(m => {
+          const ok = !m.premium || isSub(subs, payments, m.subject_id);
+          return (
+            <div key={m._id} style={{background:"#fff",borderRadius:14,padding:16,boxShadow:"0 2px 12px rgba(6,77,44,0.06)",border:"1px solid #eef3f1",opacity:ok?1:.85}}>
+              <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                <div style={{width:44,height:44,borderRadius:12,background:"#f3f7f5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{tIcon(m.type)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:13,color:C.dk,marginBottom:2}}>{m.title}</div>
+                  <div style={{fontSize:11,color:C.gr,marginBottom:6}}>{sn(m.subject_id)}{m.size&&` · ${m.size}`}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                    <span style={{background:C.grl,color:C.grd,borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:600}}>{m.type?.toUpperCase()}</span>
+                    {m.premium && <span style={{background:C.goldp,color:C.gold,borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:600}}>Premium</span>}
+                    {ok ? (m.file_url ? <a href={m.file_url} target="_blank" rel="noreferrer" style={{...Btn("p",true),textDecoration:"none",fontSize:10,padding:"4px 10px"}}>⬇ Download</a> : <span style={{fontSize:10,color:C.gr}}>No file</span>)
+                      : <span style={{fontSize:11,color:C.d,fontWeight:600}}>🔒 Subscribe</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AssignmentsPage({subs, payments}) {
+  const {profile} = useAuth(); const {add} = useToast();
+  const {data:asns, loading} = useApi("/assignments");
+  const {data:mysubs, refetch} = useApi("/assignments/my-submissions", [profile?._id]);
+  const [sub, setSub] = useState(null); const [txt, setTxt] = useState(""); const [fi, setFi] = useState(null); const [busy, setBusy] = useState(false);
+  const tok = localStorage.getItem("pms_tok");
+  const doSub = async (a) => {
+    if (!txt.trim()&&!fi) return; setBusy(true);
+    try { const fd = new FormData(); fd.append("content",txt); if(fi) fd.append("file",fi); await api("POST",`/assignments/${a._id}/submit`,null,tok,fd); setSub(null); setTxt(""); setFi(null); refetch(); add({title:"✅ Submitted!", icon:"📝", type:"i"}); }
+    catch(e) { add({title:"Failed", body:e.message, icon:"❌", type:"d"}); }
+    finally { setBusy(false); }
+  };
+  if (loading) return <Spin/>;
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>📝 Assignments</h2>
+      {asns.length===0 && <div style={{textAlign:"center",padding:40,color:C.gr}}>No assignments yet</div>}
+      {asns.map(a => {
+        const s = mysubs.find?mysubs.find(x=>x.assignment_id===a._id):null;
+        const ok = isSub(subs, payments, a.subject_id);
+        return (
+          <div key={a._id} style={{...CARD,borderLeft:`4px solid ${s?s.status==="graded"?C.ok:C.wa:C.g}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+              <div><div style={{fontWeight:700,fontSize:15}}>{a.title}</div><div style={{fontSize:12,color:C.gr}}>{si(a.subject_id)} {sn(a.subject_id)}{a.due_date&&` · Due: ${a.due_date}`}{a.max_marks&&` · ${a.max_marks} marks`}</div></div>
+              {s && <span style={{background:s.status==="graded"?C.okl:C.wal,color:s.status==="graded"?C.ok:C.wa,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>{s.status==="graded"?`✓ Grade: ${s.grade||s.marks}`:"⏳ Submitted"}</span>}
+            </div>
+            {a.description && <p style={{fontSize:13,color:C.grd,marginBottom:10,lineHeight:1.5}}>{a.description}</p>}
+            {a.file_url && <a href={a.file_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.g,fontWeight:600,display:"block",marginBottom:8}}>📎 View file</a>}
+            {s?.feedback && <div style={{background:C.gp,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.gd,marginBottom:8}}>💬 Tutor: {s.feedback}</div>}
+            {!s && ok && (sub===a._id ? (
+              <div style={{marginTop:10}}>
+                <textarea placeholder="Your answer..." value={txt} onChange={e=>setTxt(e.target.value)} style={{...INP,height:70,resize:"vertical",marginBottom:8}}/>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <input type="file" onChange={e=>setFi(e.target.files[0])} style={{fontSize:12}}/>
+                  <button style={{...Btn("p",true),fontSize:12}} onClick={()=>doSub(a)} disabled={busy}>{busy?"⏳...":"📤 Submit"}</button>
+                  <button style={{...Btn("gh",true),fontSize:12}} onClick={()=>{setSub(null);setTxt("");setFi(null);}}>Cancel</button>
+                </div>
+              </div>
+            ) : <button style={Btn("p",true)} onClick={()=>setSub(a._id)}>📤 Submit Assignment</button>)}
+            {!ok && <span style={{fontSize:12,color:C.d,fontWeight:600}}>🔒 Subscribe to submit</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TestsPage({subs, payments}) {
+  const {profile} = useAuth(); const {add} = useToast();
+  const {data:tests, loading} = useApi("/tests");
+  const {data:questions} = useApi("/tests/questions");
+  const {data:results, refetch} = useApi("/tests/results", [profile?._id]);
+  const [active, setActive] = useState(null); const [answers, setAnswers] = useState({}); const [timeLeft, setTimeLeft] = useState(0); const [done, setDone] = useState(false); const timer = useRef(null);
+  const tok = localStorage.getItem("pms_tok");
+  const start = test => {setActive(test); setAnswers({}); setDone(false); setTimeLeft(test.duration*60);};
+  useEffect(() => { if (!active||done) return; timer.current = setInterval(()=>setTimeLeft(t=>{if(t<=1){clearInterval(timer.current);submit();return 0;}return t-1;}),1000); return ()=>clearInterval(timer.current); }, [active,done]);
+  const submit = async () => {
+    if (!active||done) return; clearInterval(timer.current); setDone(true);
+    try { await api("POST",`/tests/${active._id}/submit`,{answers},tok); refetch(); add({title:"✅ Test Submitted!", icon:"🎯", type:"i"}); setTimeout(()=>{setActive(null);setDone(false);},2000); }
+    catch(e) { add({title:"Error", body:e.message, icon:"⚠️", type:"w"}); setTimeout(()=>setActive(null),2000); }
+  };
+  if (active) {
+    const qs = questions.filter(q=>q.test_id===active._id);
+    const m = Math.floor(timeLeft/60).toString().padStart(2,"0");
+    const s = (timeLeft%60).toString().padStart(2,"0");
+    return (
+      <div style={{maxWidth:620}}>
+        <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:14,padding:"14px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",color:"#fff"}}>
+          <div><div style={{fontWeight:700,fontSize:15}}>{active.title}</div><div style={{fontSize:11,opacity:.8}}>{qs.length} questions</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:800,color:timeLeft<60?"#fca5a5":"#fff"}}>{m}:{s}</div><div style={{fontSize:10,opacity:.7}}>Time Left</div></div>
+          <button style={{...Btn("d",true),fontSize:12}} onClick={submit} disabled={done}>{done?"⏳":"📤 Submit"}</button>
+        </div>
+        {qs.map((q,i) => (
+          <div key={q._id} style={CARD}>
+            <div style={{fontWeight:600,fontSize:14,marginBottom:12}}>Q{i+1}. {q.question}</div>
+            {q.type==="mcq" && q.options?.map(o => (<label key={o} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:9,marginBottom:7,cursor:"pointer",border:`2px solid ${answers[q._id]===o?C.g:C.grl}`,background:answers[q._id]===o?C.gp:"#fff",transition:"all 0.15s"}}><input type="radio" name={q._id} checked={answers[q._id]===o} onChange={()=>setAnswers(p=>({...p,[q._id]:o}))} style={{accentColor:C.g}}/><span style={{fontSize:13}}>{o}</span></label>))}
+            {q.type==="truefalse" && ["True","False"].map(o => (<label key={o} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:9,marginBottom:7,cursor:"pointer",border:`2px solid ${answers[q._id]===o.toLowerCase()?C.g:C.grl}`,background:answers[q._id]===o.toLowerCase()?C.gp:"#fff"}}><input type="radio" name={q._id} checked={answers[q._id]===o.toLowerCase()} onChange={()=>setAnswers(p=>({...p,[q._id]:o.toLowerCase()}))} style={{accentColor:C.g}}/><span style={{fontSize:13,fontWeight:600}}>{o}</span></label>))}
+            {q.type==="short" && <input style={INP} placeholder="Type your answer..." value={answers[q._id]||""} onChange={e=>setAnswers(p=>({...p,[q._id]:e.target.value}))}/>}
+          </div>
+        ))}
+        <button style={{...Btn(),width:"100%",justifyContent:"center",fontSize:15}} onClick={submit} disabled={done}>{done?"⏳ Submitting...":"📤 Submit Test"}</button>
+      </div>
+    );
+  }
+  if (loading) return <Spin/>;
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>✏️ Tests & Quizzes</h2>
+      {tests.length===0 && <div style={{textAlign:"center",padding:40,color:C.gr}}>No tests yet</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:14}}>
+        {tests.map(t => {
+          const qs = questions.filter(q=>q.test_id===t._id);
+          const ok = isSub(subs, payments, t.subject_id);
+          const res = results.find?results.find(r=>r.test_id===t._id):null;
+          const pct = res?.percent??null;
+          return (
+            <div key={t._id} style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 2px 12px rgba(6,77,44,0.07)",border:`2px solid ${res?pct>=70?"#bbf7d0":pct>=50?"#fde68a":"#fecaca":"#eef3f1"}`,position:"relative"}}>
+              {res && <div style={{position:"absolute",top:12,right:12,background:pct>=70?C.okl:pct>=50?C.goldp:C.dl,color:pct>=70?C.ok:pct>=50?C.gold:C.d,borderRadius:9,padding:"5px 10px",fontWeight:800,fontSize:15}}>{pct}%</div>}
+              <div style={{fontSize:32,marginBottom:8}}>{si(t.subject_id)}</div>
+              <h3 style={{margin:"0 0 5px",color:C.gd,fontSize:14,paddingRight:res?55:0}}>{t.title}</h3>
+              <div style={{fontSize:11,color:C.gr,marginBottom:12}}>{sn(t.subject_id)} · {qs.length} Q · {t.duration}min</div>
+              {!ok ? <span style={{fontSize:12,color:C.d,fontWeight:600}}>🔒 Subscribe to unlock</span>
+                : res ? <div style={{fontSize:13,color:pct>=50?C.ok:C.d,fontWeight:700}}>{res.score}/{res.total} · {pct>=50?"✅ Passed":"❌ Failed"}</div>
+                : <button style={{...Btn("p",true),width:"100%",justifyContent:"center"}} onClick={()=>start(t)}>▶ Start Test</button>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LivePage() {
+  const {data:live, loading} = useApi("/live-classes");
+  if (loading) return <Spin/>;
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>🎥 Live Classes</h2>
+      {live.length===0 && <div style={{textAlign:"center",padding:40,color:C.gr}}>No classes yet</div>}
+      {live.map(lc => (
+        <div key={lc._id} style={{...CARD,borderLeft:`4px solid ${lc.status==="live"?C.d:lc.status==="upcoming"?C.g:C.gr}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{lc.title}</div>
+              <div style={{fontSize:12,color:C.gr}}>{si(lc.subject_id)} {sn(lc.subject_id)} · {lc.scheduled_date} {lc.scheduled_time}</div>
+              {lc.description && <div style={{fontSize:12,color:C.grd,marginTop:4}}>{lc.description}</div>}
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{background:lc.status==="live"?C.dl:lc.status==="upcoming"?C.okl:C.grl,color:lc.status==="live"?C.d:lc.status==="upcoming"?C.ok:C.gr,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>{lc.status==="live"?"🔴 LIVE":lc.status==="upcoming"?"📅 Upcoming":"✓ Ended"}</span>
+              {lc.meet_link && lc.status!=="ended" && <a href={lc.meet_link} target="_blank" rel="noreferrer" style={{...Btn("p",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>📹 Join Meet</a>}
+              {lc.recording_url && <a href={lc.recording_url} target="_blank" rel="noreferrer" style={{...Btn("gh",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>▶ Recording</a>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SubscribePage() {
+  const {profile} = useAuth(); const {add} = useToast();
+  const {data:subs} = useApi("/subscriptions/mine", [profile?._id]);
+  const {data:pays, refetch} = useApi("/subscriptions/payments/mine", [profile?._id]);
+  const [sel, setSel] = useState([]); const [method, setMethod] = useState("mtn"); const [txn, setTxn] = useState(""); const [months, setMonths] = useState(1); const [notes, setNotes] = useState(""); const [receipt, setReceipt] = useState(null); const [busy, setBusy] = useState(false);
+  const tok = localStorage.getItem("pms_tok");
+  const actIds = new Set([...subs.filter(s=>s.payment_status==="approved"&&s.status==="active").map(s=>Number(s.subject_id)),...pays.filter(p=>p.status==="approved").map(p=>Number(p.subject_id))]);
+  const pendIds = new Set(pays.filter(p=>p.status==="pending").map(p=>Number(p.subject_id)));
+  const toggle = id => setSel(p => p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const price = 85;
+  const submit = async () => {
+    if (!sel.length||!txn.trim()) {add({title:"Missing info", body:"Select subjects & enter transaction ID", icon:"⚠️", type:"w"}); return;}
+    setBusy(true);
+    try {
+      for (const sid of sel) {
+        const fd = new FormData(); fd.append("subject_id",sid); fd.append("amount",price*months); fd.append("months",months); fd.append("method",method); fd.append("transaction_id",txn); fd.append("notes",notes); if (receipt) fd.append("receipt",receipt);
+        await api("POST", "/subscriptions/payment", null, tok, fd);
+      }
+      add({title:"✅ Payment submitted!", body:"Admin will verify. WhatsApp 0772799672 for fast approval.", icon:"💳", type:"i"});
+      setSel([]); setTxn(""); setReceipt(null); setNotes(""); refetch();
+    }
+    catch(e) { add({title:"Error", body:e.message, icon:"❌", type:"d"}); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{maxWidth:620}}>
+      <h2 style={{color:C.gd,marginBottom:4,fontSize:18}}>💳 Subscribe to Subjects</h2>
+      <p style={{color:C.gr,fontSize:13,marginBottom:14}}>ZMW 85 per subject per month</p>
+      <div style={{...CARD,background:C.gp,border:"1px solid #c8e8d8",marginBottom:14}}>
+        <h3 style={{color:C.gd,margin:"0 0 10px",fontSize:14}}>💳 Payment Numbers</h3>
+        {[{lb:"📱 MTN Mobile Money",num:"0761468402"},{lb:"📱 Airtel Money",num:"0570109056"},{lb:"🏦 Bank (Absa)",num:"Visit school"},{lb:"💵 Cash",num:"School office"}].map(p=>(
+          <div key={p.lb} style={{display:"flex",gap:10,marginBottom:6}}><strong style={{fontSize:13}}>{p.lb}:</strong><span style={{fontSize:13,color:C.gr}}>{p.num}</span></div>
+        ))}
+        <div style={{borderTop:"1px solid #c8e8d8",marginTop:10,paddingTop:10,fontSize:12,color:C.gd,fontWeight:600}}>Pay first → come back here → submit your receipt below ↓</div>
+      </div>
+      {actIds.size>0 && <div style={{...CARD,marginBottom:14}}><h3 style={{color:C.gd,margin:"0 0 10px",fontSize:14}}>✅ Active Subscriptions</h3><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{[...actIds].map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:C.okl,color:C.ok,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600}}>{s.icon} {s.name}</span>:null;})}</div></div>}
+      <div style={CARD}>
+        <h3 style={{color:C.gd,margin:"0 0 14px",fontSize:14}}>📚 Select Subjects</h3>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(128px,1fr))",gap:8}}>
+          {SUBJECTS.map(s => {
+            const act=actIds.has(s.id),pend=pendIds.has(s.id),picked=sel.includes(s.id);
+            return (
+              <div key={s.id} onClick={()=>!act&&!pend&&toggle(s.id)}
+                style={{borderRadius:10,padding:"10px 12px",border:`2px solid ${act?C.ok:pend?C.gold:picked?C.g:C.grl}`,cursor:act||pend?"not-allowed":"pointer",background:act?C.okl:pend?C.goldp:picked?C.gp:"#fff",textAlign:"center",transition:"all 0.15s"}}>
+                <div style={{fontSize:24,marginBottom:4}}>{s.icon}</div>
+                <div style={{fontSize:11,fontWeight:700,marginBottom:3}}>{s.name}</div>
+                {act?<span style={{fontSize:9,color:C.ok,fontWeight:600}}>Active</span>:pend?<span style={{fontSize:9,color:C.gold,fontWeight:600}}>Pending</span>:picked?<span style={{fontSize:9,color:C.g,fontWeight:600}}>✓ Selected</span>:<span style={{fontSize:9,color:C.gr}}>ZMW {price}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {sel.length>0 && (
+        <div style={CARD}>
+          <div style={{background:C.gp,borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:13,color:C.gr}}>{sel.length} subject{sel.length!==1?"s":""} × {months} month{months!==1?"s":""}</span>
+            <span style={{fontSize:20,fontWeight:800,color:C.gd,fontFamily:"'Playfair Display',serif"}}>ZMW {sel.length*price*months}</span>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Months</label>
+            <select style={INP} value={months} onChange={e=>setMonths(Number(e.target.value))}>
+              {[1,2,3,6].map(m=><option key={m} value={m}>{m} month{m>1?"s":""} — ZMW {sel.length*price*m}</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={LBL}>Payment Method</label>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {[{id:"mtn",lb:"📱 MTN MoMo",nm:"0761468402"},{id:"airtel",lb:"📱 Airtel",nm:"0570109056"},{id:"bank",lb:"🏦 Bank",nm:"Absa"},{id:"cash",lb:"💵 Cash",nm:"Office"}].map(pm=>(
+                <div key={pm.id} onClick={()=>setMethod(pm.id)} style={{borderRadius:9,padding:"9px 11px",border:`2px solid ${method===pm.id?C.g:C.grl}`,cursor:"pointer",background:method===pm.id?C.gp:"#fff"}}>
+                  <div style={{fontSize:12,fontWeight:700}}>{pm.lb}</div>
+                  <div style={{fontSize:10,color:C.gr}}>{pm.nm}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:12}}><label style={LBL}>Transaction / Reference ID *</label><input style={INP} placeholder="e.g. MTN-REF-123456789" value={txn} onChange={e=>setTxn(e.target.value)}/></div>
+          <div style={{marginBottom:12}}><label style={LBL}>Upload Receipt (photo of payment)</label><input type="file" accept="image/*" onChange={e=>setReceipt(e.target.files[0])} style={{fontSize:12,padding:4}}/></div>
+          <div style={{marginBottom:16}}><label style={LBL}>Additional Notes</label><textarea style={{...INP,height:60,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Any extra information..."/></div>
+          <button style={{...Btn(),width:"100%",justifyContent:"center",fontSize:15}} onClick={submit} disabled={busy}>{busy?"⏳ Submitting...":"💳 Submit Payment Request"}</button>
+        </div>
+      )}
+      {pays.length>0 && (
+        <div style={CARD}>
+          <h3 style={{color:C.gd,margin:"0 0 12px",fontSize:14}}>📋 My Payment History</h3>
+          {pays.map(p => (
+            <div key={p._id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.grl}`,gap:10}}>
+              <div>
+                <div style={{fontWeight:600,fontSize:13}}>{si(p.subject_id)} {sn(p.subject_id)}</div>
+                <div style={{fontSize:11,color:C.gr}}>ZMW {p.amount} · {p.method?.toUpperCase()} · {fd(p.createdAt)}</div>
+                {p.admin_note && <div style={{fontSize:11,color:p.status==="rejected"?C.d:C.ok,marginTop:2}}>💬 {p.admin_note}</div>}
+              </div>
+              <span style={{background:p.status==="approved"?C.okl:p.status==="rejected"?C.dl:C.wal,color:p.status==="approved"?C.ok:p.status==="rejected"?C.d:C.wa,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600,flexShrink:0}}>{p.status==="approved"?"✅ Approved":p.status==="rejected"?"❌ Rejected":"⏳ Pending"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnnouncementsPage() {
+  const {data:anns, loading} = useApi("/announcements");
+  if (loading) return <Spin/>;
+  return (
+    <div>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:18}}>📢 Announcements</h2>
+      {anns.length===0 && <div style={{textAlign:"center",padding:40,color:C.gr}}>No announcements yet</div>}
+      {anns.map(a => (
+        <div key={a._id} style={{...CARD,borderLeft:`4px solid ${a.important?C.d:C.g}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+            <h3 style={{margin:0,fontSize:15,color:C.dk}}>{a.important&&"🔴 "}{a.title}</h3>
+            <span style={{fontSize:11,color:C.gr}}>{fd(a.createdAt)}</span>
+          </div>
+          <p style={{margin:0,fontSize:13,color:C.grd,lineHeight:1.6}}>{a.content}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── SIMPLE TUTOR + ADMIN (redirects to say use phone/Termux for management) ──
+function TutorApp() {
+  const [activeNav, setActiveNav] = useState("home");
+  const nav = [
+    {id:"home",icon:"🏠",label:"Dashboard"},
+    {id:"live",icon:"🎥",label:"Live Classes"},
+    {id:"anns",icon:"📢",label:"Announcements"},
+    {id:"profile",icon:"👤",label:"Profile"},
+  ];
+  const content = () => {
+    switch(activeNav) {
+      case"live": return <LivePage/>;
+      case"anns": return <AnnouncementsPage/>;
+      case"profile": return <ProfilePage/>;
+      default: return <TutorDash/>;
+    }
+  };
+  return <Layout nav={nav} active={activeNav} setActive={setActiveNav}>{content()}</Layout>;
+}
+
+function TutorDash() {
+  const {profile} = useAuth();
+  const {data:mats} = useApi("/materials");
+  const {data:tests} = useApi("/tests");
+  const {data:live} = useApi("/live-classes");
+  const my = arr => arr.filter(x => x.tutor_id===profile?._id);
+  return (
+    <div>
+      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:20,padding:"24px 22px",marginBottom:18,color:"#fff"}}>
+        <div style={{fontSize:36,marginBottom:8}}>📚</div>
+        <h2 style={{margin:"0 0 4px",fontSize:20}}>Welcome, {profile?.name?.split(" ")[0]}!</h2>
+        <p style={{margin:0,opacity:.85,fontSize:12}}>Tutor Dashboard — Peace Mindset Private School 🇿🇲</p>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:18}}>
+        {[["📄","Materials",my(mats).length,C.g],["✏️","Tests",my(tests).length,C.gold],["🎥","Classes",my(live).length,"#0891b2"]].map(([ic,lb,vl,co])=>(
+          <div key={lb} style={{background:"#fff",borderRadius:12,padding:"16px 10px",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.06)"}}>
+            <div style={{fontSize:24}}>{ic}</div>
+            <div style={{fontSize:24,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div>
+            <div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{...CARD,background:"#fffbeb",border:"1px solid #fde68a"}}>
+        <h3 style={{color:"#92400e",margin:"0 0 10px",fontSize:14}}>📱 To upload materials, create tests & manage classes:</h3>
+        <p style={{fontSize:13,color:"#92400e",lineHeight:1.6}}>Use the Termux app on your phone where the server runs. The full tutor admin tools work there via the profile_tool.py script.</p>
+        <p style={{fontSize:13,color:"#92400e",marginTop:8,fontWeight:600}}>📞 WhatsApp admin: <strong>0772799672</strong></p>
+      </div>
+    </div>
+  );
+}
+
+function AdminApp() {
+  const [activeNav, setActiveNav] = useState("home");
+  const nav = [
+    {id:"home",icon:"🏠",label:"Dashboard"},
+    {id:"profile",icon:"👤",label:"Profile"},
+  ];
+  const content = () => {
+    switch(activeNav) {
+      case"profile": return <ProfilePage/>;
+      default: return <AdminDash/>;
+    }
+  };
+  return <Layout nav={nav} active={activeNav} setActive={setActiveNav}>{content()}</Layout>;
+}
+
+function AdminDash() {
+  const {data:users} = useApi("/users");
+  const {data:pays} = useApi("/subscriptions/payments/all");
+  const pending = pays.filter(p=>p.status==="pending");
+  const rev = pays.filter(p=>p.status==="approved").reduce((a,b)=>a+(b.amount||0),0);
+  return (
+    <div>
+      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:20,padding:"24px 22px",marginBottom:18,color:"#fff"}}>
+        <div style={{fontSize:36,marginBottom:8}}>🏫</div>
+        <h2 style={{margin:"0 0 4px",fontSize:20}}>Admin Dashboard</h2>
+        <p style={{margin:0,opacity:.85,fontSize:12}}>Peace Mindset Private School · KEN MEDIA CREATIVE 🇿🇲</p>
+        {pending.length>0 && <div style={{marginTop:12,background:"rgba(220,38,38,0.3)",borderRadius:9,padding:"9px 12px",fontSize:13,fontWeight:700}}>🔴 {pending.length} payment{pending.length!==1?"s":""} awaiting approval!</div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10,marginBottom:16}}>
+        {[["🎓","Students",users.filter(u=>u.role==="student").length,C.g],["📚","Tutors",users.filter(u=>u.role==="tutor").length,C.gold],["💳","Pending",pending.length,pending.length>0?C.d:C.ok],["💰","Revenue",`ZMW ${rev}`,C.ok]].map(([ic,lb,vl,co])=>(
+          <div key={lb} style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.06)"}}>
+            <div style={{fontSize:22}}>{ic}</div>
+            <div style={{fontSize:18,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div>
+            <div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{...CARD,background:"#fffbeb",border:"1px solid #fde68a"}}>
+        <h3 style={{color:"#92400e",margin:"0 0 10px",fontSize:14}}>📱 Full Admin Control in Termux</h3>
+        <p style={{fontSize:13,color:"#92400e",lineHeight:1.6}}>To approve payments, manage users, and approve tutors — use the server running in Termux on your phone. The full admin panel is available there.</p>
+        <p style={{fontSize:12,color:"#92400e",marginTop:8}}>Admin email: <strong>kenwestzm@gmail.com</strong></p>
+      </div>
+      {pending.length>0 && (
+        <div style={CARD}>
+          <h3 style={{color:C.d,margin:"0 0 14px",fontSize:14}}>🔴 Pending Payments (approve in Termux)</h3>
+          {pending.slice(0,5).map(p => (
+            <div key={p._id} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${C.grl}`,gap:8}}>
+              <div>
+                <div style={{fontWeight:600,fontSize:13}}>{p.student_id?.name||"Student"}</div>
+                <div style={{fontSize:11,color:C.gr}}>{sn(p.subject_id)} · ZMW {p.amount} · {p.method}</div>
+              </div>
+              <span style={{background:C.wal,color:C.wa,borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:600}}>⏳ Pending</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MAIN APP ─────────────────────────────────────────
+function AppInner() {
+  const {profile, loading} = useAuth();
+  if (loading) return (
+    <div style={{height:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:`linear-gradient(150deg,${C.gd},#085e35,${C.gl})`}}>
+      <div style={{width:80,height:80,borderRadius:22,background:`linear-gradient(135deg,#a07010,${C.gold},#f0b429)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:20,animation:"breathe 2s ease-in-out infinite"}}>🎓</div>
+      <div style={{color:"#fff",fontSize:18,fontWeight:800,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>PEACE MINDSET</div>
+      <div style={{color:"rgba(255,255,255,0.6)",fontSize:11,letterSpacing:"2px",textTransform:"uppercase",marginBottom:28}}>Private School · GCE Online · Zambia 🇿🇲</div>
+      <div style={{width:36,height:36,border:"3px solid rgba(255,255,255,0.2)",borderTop:"3px solid #fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <div style={{position:"absolute",bottom:20,fontSize:12,color:"rgba(255,255,255,0.5)"}}>Connecting to server...</div>
+    </div>
+  );
+  if (!profile) return <AuthScreen/>;
+  if (profile.role==="admin") return <AdminApp/>;
+  if (profile.role==="tutor") {
+    if (!profile.approved) return (
+      <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(150deg,${C.gd},${C.g})`,padding:16}}>
+        <div style={{background:"#fff",borderRadius:22,padding:"40px 32px",textAlign:"center",maxWidth:360}}>
+          <div style={{fontSize:64,marginBottom:16}}>⏳</div>
+          <h2 style={{color:C.gd,marginBottom:10}}>Awaiting Admin Approval</h2>
+          <p style={{color:C.gr,fontSize:14,lineHeight:1.6}}>Your tutor account needs admin approval before you can access the platform.</p>
+          <p style={{color:C.gr,fontSize:13,marginTop:12}}>📱 WhatsApp admin: <strong style={{color:C.g}}>0772799672</strong></p>
+          <p style={{color:C.gr,fontSize:12,marginTop:6}}>Tell them your name and email address!</p>
+        </div>
+      </div>
+    );
+    return <TutorApp/>;
+  }
+  return <StudentApp/>;
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <AppInner/>
+      </ToastProvider>
+    </AuthProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
