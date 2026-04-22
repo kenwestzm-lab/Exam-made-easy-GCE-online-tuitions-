@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0"/>
 <meta name="theme-color" content="#064d2c"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -13,39 +13,33 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-:root{
-  --g:#0a6e3f;--gd:#064d2c;--gl:#12a05c;--gp:#edf7f2;
-  --gold:#c9930a;--goldl:#f0b429;--goldp:#fef9e7;
-  --d:#dc2626;--ok:#16a34a;--gr:#6b7280;--grl:#dde8e3;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#f3f7f5;font-family:'DM Sans',sans-serif;color:#111827}
-#root{height:100vh;overflow:hidden}
+/* ── RESET ─────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/* Auth screen: FULL scroll */
+html{font-family:'DM Sans',sans-serif;background:#064d2c}
+body{min-height:100%;background:#064d2c}
+/* App (after login): FIXED height */
+body.app-mode{overflow:hidden;height:100vh}
+#root{min-height:100vh}
 h1,h2,h3,h4{font-family:'Playfair Display',serif}
+input,textarea,select,button{font-family:'DM Sans',sans-serif}
+input:focus,textarea:focus,select:focus{outline:2px solid #12a05c;border-color:#12a05c!important}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#12a05c;border-radius:2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
-@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-thumb{background:#12a05c;border-radius:2px}
-input,textarea,select,button{font-family:'DM Sans',sans-serif;-webkit-tap-highlight-color:transparent}
-/* Fix keyboard jump on mobile */
-input:focus,textarea:focus,select:focus{outline:2px solid #12a05c;border-color:#12a05c!important}
-.page{height:100vh;overflow:hidden;display:flex;flex-direction:column}
-.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react,env">
-const {useState,useEffect,useRef,useCallback,createContext,useContext,memo} = React;
+const {useState,useEffect,useRef,useCallback,createContext,useContext} = React;
 
-// ── BACKEND URL ────────────────────────────────────────
 const BACKEND = "https://exam-made-easy-gce-online-tuitions.onrender.com";
 
-// ── API ────────────────────────────────────────────────
-const api = async (method, path, body, token, fd) => {
+const apiFetch = async (method, path, body, token, fd) => {
   try {
     const o = {method, headers:{}};
     if (token) o.headers['Authorization'] = `Bearer ${token}`;
@@ -56,89 +50,103 @@ const api = async (method, path, body, token, fd) => {
     if (!r.ok) throw new Error(d.error || `Server error ${r.status}`);
     return d;
   } catch(e) {
-    if (e.message.includes('fetch')) throw new Error('Cannot connect to server. Make sure Render backend is running.');
+    if (e.message.includes('fetch') || e.message.includes('Failed')) {
+      throw new Error('Cannot connect to server. The server may be waking up (takes ~30s on first use). Please wait and try again.');
+    }
     throw e;
   }
 };
-
 const tok = () => localStorage.getItem("pms_t");
 
-// ── DATA ───────────────────────────────────────────────
+/* ── DATA ─────────────────────────────────────────── */
 const SUBJECTS = [
-  {id:1,n:"Mathematics",i:"📐",c:"#0a6e3f"},{id:2,n:"English",i:"📖",c:"#1d4ed8"},
-  {id:3,n:"Biology",i:"🌿",c:"#16a34a"},{id:4,n:"Chemistry",i:"⚗️",c:"#7c3aed"},
-  {id:5,n:"Physics",i:"⚡",c:"#d97706"},{id:6,n:"Civic Education",i:"🏛️",c:"#dc2626"},
-  {id:7,n:"Geography",i:"🌍",c:"#0891b2"},{id:8,n:"Commerce",i:"💼",c:"#9333ea"},
-  {id:9,n:"Accounts",i:"📊",c:"#c9930a"},{id:10,n:"History",i:"📜",c:"#b45309"},
-  {id:11,n:"Religious Ed",i:"✝️",c:"#4f46e5"},{id:12,n:"Add. Maths",i:"🔢",c:"#0f766e"},
-  {id:13,n:"Home Economics",i:"🏠",c:"#be185d"},{id:14,n:"Computer Studies",i:"💻",c:"#1e40af"},
+  {id:1,n:"Mathematics",i:"📐"},{id:2,n:"English",i:"📖"},
+  {id:3,n:"Biology",i:"🌿"},{id:4,n:"Chemistry",i:"⚗️"},
+  {id:5,n:"Physics",i:"⚡"},{id:6,n:"Civic Education",i:"🏛️"},
+  {id:7,n:"Geography",i:"🌍"},{id:8,n:"Commerce",i:"💼"},
+  {id:9,n:"Accounts",i:"📊"},{id:10,n:"History",i:"📜"},
+  {id:11,n:"Religious Ed",i:"✝️"},{id:12,n:"Add. Maths",i:"🔢"},
+  {id:13,n:"Home Economics",i:"🏠"},{id:14,n:"Computer Studies",i:"💻"},
 ];
 const PROVINCES = ["Central","Copperbelt","Eastern","Luapula","Lusaka","Muchinga","Northern","North-Western","Southern","Western"];
 const sn = id => SUBJECTS.find(s=>s.id===Number(id))?.n||"Unknown";
 const si = id => SUBJECTS.find(s=>s.id===Number(id))?.i||"📚";
 const fd = d => d ? new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "";
 const isSub = (subs,pays,sid) =>
-  (subs||[]).some(x=>Number(x.subject_id)===Number(sid)&&x.payment_status==="approved"&&x.status==="active") ||
+  (subs||[]).some(x=>Number(x.subject_id)===Number(sid)&&x.payment_status==="approved"&&x.status==="active")||
   (pays||[]).some(x=>Number(x.subject_id)===Number(sid)&&x.status==="approved");
 
-// ── STYLES ─────────────────────────────────────────────
+/* ── STYLES ───────────────────────────────────────── */
 const C = {g:"#0a6e3f",gd:"#064d2c",gl:"#12a05c",gp:"#edf7f2",gold:"#c9930a",goldp:"#fef9e7",w:"#fff",gr:"#6b7280",grl:"#dde8e3",grd:"#374151",dk:"#111827",d:"#dc2626",dl:"#fee2e2",ok:"#16a34a",okl:"#dcfce7",wa:"#d97706",wal:"#fef3c7"};
-const Btn = (v="p",sm=false)=>({display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer",border:"none",borderRadius:12,padding:sm?"9px 16px":"14px 24px",fontSize:sm?13:15,fontWeight:700,fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",WebkitTapHighlightColor:"transparent",
-  ...(v==="p"?{background:`linear-gradient(135deg,${C.gd},${C.g})`,color:"#fff",boxShadow:"0 4px 16px rgba(10,110,63,0.35)"}
-    :v==="gold"?{background:`linear-gradient(135deg,#a07010,${C.gold})`,color:"#fff",boxShadow:"0 4px 14px rgba(201,147,10,0.35)"}
-    :v==="d"?{background:C.d,color:"#fff"}:v==="gh"?{background:C.gp,color:C.g,border:`1.5px solid ${C.gl}`}
-    :v==="w"?{background:"#fff",color:C.gd,boxShadow:"0 2px 12px rgba(0,0,0,0.1)"}
+const BT = (v="p",sm=false) => ({display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer",border:"none",borderRadius:12,padding:sm?"10px 16px":"14px 22px",fontSize:sm?13:15,fontWeight:700,fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s",
+  ...(v==="p"?{background:`linear-gradient(135deg,${C.gd},${C.g})`,color:"#fff",boxShadow:"0 4px 18px rgba(10,110,63,0.35)"}
+    :v==="gold"?{background:`linear-gradient(135deg,#8a6200,${C.gold})`,color:"#fff"}
+    :v==="d"?{background:C.d,color:"#fff"}
+    :v==="gh"?{background:C.gp,color:C.g,border:`1.5px solid ${C.gl}`}
     :{background:C.grl,color:C.grd})});
-const INP = {width:"100%",padding:"14px 16px",borderRadius:12,border:"2px solid #e5e7eb",fontSize:15,fontFamily:"'DM Sans',sans-serif",outline:"none",background:"#fff",boxSizing:"border-box",transition:"border-color 0.2s"};
-const CARD = {background:"#fff",borderRadius:18,boxShadow:"0 4px 24px rgba(6,77,44,0.10)",padding:20,marginBottom:14,border:"1px solid #eef3f1"};
-const LBL = {fontSize:13,fontWeight:600,color:C.grd,marginBottom:7,display:"block"};
+const IN = {width:"100%",padding:"15px 16px",borderRadius:14,border:"2px solid #e5e7eb",fontSize:15,fontFamily:"'DM Sans',sans-serif",outline:"none",background:"#fff",boxSizing:"border-box",transition:"border-color 0.2s",color:"#111827"};
+const CD = {background:"#fff",borderRadius:18,boxShadow:"0 4px 24px rgba(6,77,44,0.10)",padding:20,marginBottom:14,border:"1px solid #eef3f1"};
+const LB = {fontSize:13,fontWeight:600,color:C.grd,marginBottom:7,display:"block",marginTop:4};
 
-// ── AUTH CONTEXT ───────────────────────────────────────
+/* ── AUTH CONTEXT ─────────────────────────────────── */
 const AuthCtx = createContext(null);
 function AuthProvider({children}) {
   const [profile,setProfile] = useState(null);
   const [loading,setLoading] = useState(true);
+
   useEffect(()=>{
     const t = tok();
     if (!t) { setLoading(false); return; }
-    api("GET","/auth/me",null,t)
-      .then(u => setProfile(u))
+    apiFetch("GET","/auth/me",null,t)
+      .then(u => { setProfile(u); document.body.classList.add('app-mode'); })
       .catch(()=>localStorage.removeItem("pms_t"))
       .finally(()=>setLoading(false));
   },[]);
+
   const signIn = async(email,pw) => {
-    const d = await api("POST","/auth/login",{email,password:pw});
-    localStorage.setItem("pms_t",d.token); setProfile(d.user); return d.user;
+    const d = await apiFetch("POST","/auth/login",{email,password:pw});
+    localStorage.setItem("pms_t",d.token);
+    setProfile(d.user);
+    document.body.classList.add('app-mode');
+    return d.user;
   };
   const signUp = async(form) => {
-    const d = await api("POST","/auth/register",form);
-    localStorage.setItem("pms_t",d.token); setProfile(d.user); return d.user;
+    const d = await apiFetch("POST","/auth/register",form);
+    localStorage.setItem("pms_t",d.token);
+    setProfile(d.user);
+    if (form.role !== 'tutor') document.body.classList.add('app-mode');
+    return d.user;
   };
-  const signOut = () => { localStorage.removeItem("pms_t"); setProfile(null); };
+  const signOut = () => {
+    localStorage.removeItem("pms_t");
+    setProfile(null);
+    document.body.classList.remove('app-mode');
+  };
   const updateProfile = async(u) => {
-    const d = await api("PUT","/auth/profile",u,tok()); setProfile(d); return d;
+    const d = await apiFetch("PUT","/auth/profile",u,tok());
+    setProfile(d); return d;
   };
   return <AuthCtx.Provider value={{profile,loading,signIn,signUp,signOut,updateProfile,setProfile}}>{children}</AuthCtx.Provider>;
 }
-const useAuth = ()=>useContext(AuthCtx);
+const useAuth = () => useContext(AuthCtx);
 
-// ── TOAST ──────────────────────────────────────────────
+/* ── TOAST ────────────────────────────────────────── */
 const ToastCtx = createContext(null);
 function ToastProvider({children}) {
   const [ts,setTs] = useState([]);
   const add = useCallback(({title,body,icon="🔔",type="i"})=>{
     const id = Date.now()+Math.random();
     setTs(p=>[...p.slice(-3),{id,title,body,icon,type}]);
-    setTimeout(()=>setTs(p=>p.filter(t=>t.id!==id)),5000);
+    setTimeout(()=>setTs(p=>p.filter(t=>t.id!==id)),5500);
   },[]);
   const bg = t=>({m:`linear-gradient(135deg,${C.gd},${C.g})`,w:`linear-gradient(135deg,#92400e,${C.gold})`,i:"linear-gradient(135deg,#1e3a8a,#3b82f6)",d:`linear-gradient(135deg,#7f1d1d,${C.d})`})[t]||`linear-gradient(135deg,${C.gd},${C.g})`;
   return (
     <ToastCtx.Provider value={{add}}>
       {children}
-      <div style={{position:"fixed",top:16,right:14,zIndex:99999,display:"flex",flexDirection:"column",gap:8,maxWidth:320,width:"calc(100vw - 28px)",pointerEvents:"none"}}>
+      <div style={{position:"fixed",top:16,right:14,zIndex:99999,display:"flex",flexDirection:"column",gap:8,maxWidth:320,width:"calc(100vw - 28px)"}}>
         {ts.map(t=>(
           <div key={t.id} onClick={()=>setTs(p=>p.filter(x=>x.id!==t.id))}
-            style={{background:bg(t.type),color:"#fff",borderRadius:16,padding:"13px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.25)",display:"flex",gap:10,alignItems:"flex-start",animation:"fadeUp 0.3s ease",pointerEvents:"auto",cursor:"pointer"}}>
+            style={{background:bg(t.type),color:"#fff",borderRadius:16,padding:"13px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.25)",display:"flex",gap:10,alignItems:"flex-start",animation:"fadeUp 0.3s ease",cursor:"pointer"}}>
             <span style={{fontSize:20,flexShrink:0}}>{t.icon}</span>
             <div><div style={{fontWeight:700,fontSize:13,lineHeight:1.3}}>{t.title}</div>{t.body&&<div style={{fontSize:11,opacity:.9,marginTop:2,lineHeight:1.4}}>{t.body}</div>}</div>
           </div>
@@ -147,15 +155,20 @@ function ToastProvider({children}) {
     </ToastCtx.Provider>
   );
 }
-const useToast = ()=>useContext(ToastCtx);
-const Spin = ({s=36})=><div style={{display:"flex",justifyContent:"center",padding:32}}><div style={{width:s,height:s,border:"3px solid #edf7f2",borderTop:`3px solid ${C.g}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>;
+const useToast = () => useContext(ToastCtx);
+
+const Spin = ({s=36})=>(
+  <div style={{display:"flex",justifyContent:"center",padding:40}}>
+    <div style={{width:s,height:s,border:"3px solid #edf7f2",borderTop:`3px solid ${C.g}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+  </div>
+);
 
 function useApiData(path,deps=[]) {
   const [data,setData] = useState([]);
   const [loading,setLoading] = useState(true);
   const load = useCallback(async()=>{
     const t = tok(); if(!t) return;
-    try{const d=await api("GET",path,null,t); setData(Array.isArray(d)?d:d);}
+    try{const d=await apiFetch("GET",path,null,t); setData(Array.isArray(d)?d:d);}
     catch(e){console.warn(path,e.message);}
     finally{setLoading(false);}
   },[path,...deps]);
@@ -163,90 +176,111 @@ function useApiData(path,deps=[]) {
   return {data,setData,loading,refetch:load};
 }
 
-// ── BEAUTIFUL AUTH SCREEN ──────────────────────────────
+/* ══════════════════════════════════════════════════
+   AUTH SCREEN — Fully scrollable on Android
+══════════════════════════════════════════════════ */
 function AuthScreen() {
   const {signIn,signUp} = useAuth();
   const {add} = useToast();
-  const [tab,setTab] = useState("login"); // login | register
+  const [tab,setTab] = useState("login");
   const [busy,setBusy] = useState(false);
   const [err,setErr] = useState("");
 
-  // ✅ FIX: Use refs instead of state for inputs (prevents keyboard closing)
+  /* Use refs so keyboard NEVER closes while typing */
   const emailRef = useRef();
-  const passRef = useRef();
-  const nameRef = useRef();
+  const passRef  = useRef();
+  const nameRef  = useRef();
   const phoneRef = useRef();
   const gradeRef = useRef();
-  const [role,setRole] = useState("student");
-  const [province,setProv] = useState("Lusaka");
+  const [role,setRole]   = useState("student");
+  const [prov,setProv]   = useState("Lusaka");
 
-  const doLogin = async(e) => {
+  const doLogin = async e => {
     e.preventDefault();
     const email = emailRef.current?.value?.trim();
     const password = passRef.current?.value;
-    if (!email||!password) { setErr("Please enter email and password"); return; }
+    if (!email||!password){setErr("Enter your email and password");return;}
     setBusy(true); setErr("");
     try { await signIn(email,password); }
-    catch(e) { setErr(e.message); add({title:"Login failed",body:e.message,icon:"❌",type:"d"}); }
-    finally { setBusy(false); }
+    catch(e){ setErr(e.message); }
+    finally{ setBusy(false); }
   };
 
-  const doRegister = async(e) => {
+  const doRegister = async e => {
     e.preventDefault();
-    const name = nameRef.current?.value?.trim();
+    const name  = nameRef.current?.value?.trim();
     const email = emailRef.current?.value?.trim();
-    const password = passRef.current?.value;
+    const pass  = passRef.current?.value;
     const phone = phoneRef.current?.value?.trim();
     const grade = gradeRef.current?.value;
-    if (!name||!email||!password) { setErr("Please fill all required fields"); return; }
-    if (password.length < 6) { setErr("Password must be at least 6 characters"); return; }
+    if (!name||!email||!pass){setErr("Fill in all required fields (*) ");return;}
+    if (pass.length<6){setErr("Password must be at least 6 characters");return;}
     setBusy(true); setErr("");
     try {
-      await signUp({name,email,password,role,phone,grade,province});
-      if (role==="tutor") add({title:"Account created! ⏳",body:"Wait for admin approval. WhatsApp: 0772799672",icon:"⏳",type:"w"});
+      await signUp({name,email,password:pass,role,phone,grade,province:prov});
+      if(role==="tutor") add({title:"Registered! ⏳",body:"Wait for admin approval. WhatsApp: 0772799672",icon:"⏳",type:"w"});
     }
-    catch(e) { setErr(e.message); }
-    finally { setBusy(false); }
+    catch(e){ setErr(e.message); }
+    finally{ setBusy(false); }
   };
 
-  return (
-    <div style={{minHeight:"100vh",overflow:"auto",background:`linear-gradient(160deg,${C.gd} 0%,#085e35 40%,#0d7a48 70%,#1aa85f 100%)`}}>
-      {/* Header with floating subjects */}
-      <div style={{padding:"40px 20px 0",textAlign:"center",animation:"fadeUp 0.6s ease"}}>
-        {/* Logo */}
-        <div style={{width:90,height:90,borderRadius:28,background:`linear-gradient(135deg,#8a6200,${C.gold},${C.goldl})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,margin:"0 auto 16px",boxShadow:"0 12px 40px rgba(201,147,10,0.5)",animation:"float 3s ease-in-out infinite"}}>🎓</div>
-        <h1 style={{color:"#fff",fontSize:28,letterSpacing:"1px",marginBottom:6,fontFamily:"'Playfair Display',serif"}}>PEACE MINDSET</h1>
-        <h2 style={{color:"#fff",fontSize:16,fontWeight:400,marginBottom:4}}>PRIVATE SCHOOL</h2>
-        <p style={{color:"rgba(255,255,255,0.75)",fontSize:13,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:24}}>GCE Online Lessons · Zambia 🇿🇲</p>
+  /* Top 4 subjects for the landing */
+  const top4 = SUBJECTS.slice(0,4);
 
-        {/* Subject chips */}
-        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:8,marginBottom:32,padding:"0 10px"}}>
-          {SUBJECTS.slice(0,8).map(s=>(
-            <div key={s.id} style={{background:"rgba(255,255,255,0.15)",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:50,padding:"6px 14px",display:"flex",alignItems:"center",gap:6,animation:"slideIn 0.5s ease"}}>
-              <span style={{fontSize:16}}>{s.i}</span>
-              <span style={{color:"#fff",fontSize:12,fontWeight:600}}>{s.n}</span>
-            </div>
-          ))}
-          <div style={{background:"rgba(255,255,255,0.15)",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:50,padding:"6px 14px"}}>
-            <span style={{color:"#fff",fontSize:12,fontWeight:600}}>+6 more</span>
-          </div>
+  return (
+    /* The whole page scrolls — no overflow:hidden here */
+    <div style={{minHeight:"100vh",background:`linear-gradient(180deg,${C.gd} 0%,#085e35 55%,#0d7a48 100%)`}}>
+
+      {/* ── HERO SECTION ─────────────────────────────── */}
+      <div style={{padding:"44px 24px 0",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
+        {/* Logo */}
+        <div style={{width:100,height:100,borderRadius:30,background:`linear-gradient(135deg,#6b4a00,${C.gold},#f0b429)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:52,margin:"0 auto 20px",boxShadow:"0 14px 48px rgba(201,147,10,0.55)",animation:"float 3s ease-in-out infinite"}}>
+          🎓
         </div>
 
-        {/* Price tag */}
-        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:50,padding:"8px 20px",marginBottom:28}}>
-          <span style={{fontSize:20}}>💰</span>
-          <span style={{color:"#fff",fontSize:13,fontWeight:700}}>ZMW 85/subject/month</span>
-          <span style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>· MTN: 0761468402 · Airtel: 0570109056</span>
+        <h1 style={{color:"#fff",fontSize:32,letterSpacing:"1.5px",marginBottom:6,lineHeight:1.2}}>
+          PEACE MINDSET
+        </h1>
+        <h2 style={{color:"rgba(255,255,255,0.9)",fontSize:16,fontWeight:600,marginBottom:5}}>
+          PRIVATE SCHOOL
+        </h2>
+        <p style={{color:"rgba(255,255,255,0.7)",fontSize:12,letterSpacing:"2px",textTransform:"uppercase",marginBottom:32}}>
+          GCE ONLINE LESSONS · ZAMBIA 🇿🇲
+        </p>
+
+        {/* 4 Subject chips in 2x2 grid */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:360,margin:"0 auto 14px"}}>
+          {top4.map(s=>(
+            <div key={s.id} style={{background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.3)",borderRadius:50,padding:"11px 18px",display:"flex",alignItems:"center",gap:9}}>
+              <span style={{fontSize:22}}>{s.i}</span>
+              <span style={{color:"#fff",fontSize:14,fontWeight:700}}>{s.n}</span>
+            </div>
+          ))}
+        </div>
+        {/* +more chip */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",border:"1.5px solid rgba(255,255,255,0.25)",borderRadius:50,padding:"9px 22px",marginBottom:24}}>
+          <span style={{color:"rgba(255,255,255,0.8)",fontSize:13,fontWeight:600}}>+10 more subjects available</span>
+        </div>
+
+        {/* Price bar */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"rgba(255,255,255,0.12)",border:"1.5px solid rgba(255,255,255,0.25)",borderRadius:16,padding:"13px 20px",marginBottom:0,maxWidth:400,margin:"0 auto 0"}}>
+          <span style={{fontSize:26}}>💰</span>
+          <div style={{textAlign:"left"}}>
+            <div style={{color:"#fff",fontSize:16,fontWeight:800}}>ZMW 85/subject/month</div>
+            <div style={{color:"rgba(255,255,255,0.75)",fontSize:12}}>MTN: 0761468402 · Airtel: 0570109056</div>
+          </div>
         </div>
       </div>
 
-      {/* Login Card */}
-      <div style={{background:"#fff",borderRadius:"28px 28px 0 0",padding:"28px 24px 40px",minHeight:"55vh",boxShadow:"0 -8px 40px rgba(0,0,0,0.2)"}}>
-        {/* Tabs */}
-        <div style={{display:"flex",background:"#f3f7f5",borderRadius:14,padding:4,marginBottom:24,gap:4}}>
+      {/* ── LOGIN CARD — slides up from bottom ────────── */}
+      {/* This div scrolls with the page naturally on Android */}
+      <div style={{background:"#fff",borderRadius:"28px 28px 0 0",padding:"30px 22px 60px",marginTop:28,minHeight:"60vh"}}>
+
+        {/* Tab switcher */}
+        <div style={{display:"flex",background:"#f3f7f5",borderRadius:16,padding:5,marginBottom:26,gap:4}}>
           {[["login","🔑 Sign In"],["register","✨ Create Account"]].map(([m,l])=>(
             <button key={m} type="button" onClick={()=>{setTab(m);setErr("");}}
-              style={{flex:1,padding:"11px 0",border:"none",borderRadius:11,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,transition:"all 0.2s",WebkitTapHighlightColor:"transparent",
+              style={{flex:1,padding:"13px 0",border:"none",borderRadius:12,cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:700,transition:"all 0.2s",
                 background:tab===m?`linear-gradient(135deg,${C.gd},${C.g})`:"transparent",
                 color:tab===m?"#fff":C.gr}}>
               {l}
@@ -254,129 +288,141 @@ function AuthScreen() {
           ))}
         </div>
 
+        {/* Error message */}
         {err && (
-          <div style={{background:C.dl,color:C.d,borderRadius:10,padding:"11px 14px",marginBottom:16,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
-            <span>⚠️</span>{err}
+          <div style={{background:C.dl,color:C.d,borderRadius:12,padding:"13px 16px",marginBottom:18,fontSize:13,fontWeight:600,display:"flex",alignItems:"flex-start",gap:9,lineHeight:1.5}}>
+            <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+            <span>{err}</span>
           </div>
         )}
 
-        {tab==="login" ? (
+        {/* ── SIGN IN FORM ─── */}
+        {tab==="login" && (
           <form onSubmit={doLogin} autoComplete="on">
-            <div style={{marginBottom:16}}>
-              <label style={LBL}>📧 Email Address</label>
-              <input ref={emailRef} type="email" placeholder="your@email.com" defaultValue="kenwestzm@gmail.com"
-                style={INP} autoComplete="email" autoCapitalize="none"/>
-            </div>
-            <div style={{marginBottom:22}}>
-              <label style={LBL}>🔑 Password</label>
-              <input ref={passRef} type="password" placeholder="••••••••"
-                style={INP} autoComplete="current-password"/>
-            </div>
+            <label style={LB}>📧 Email Address</label>
+            <input ref={emailRef} type="email" placeholder="your@email.com"
+              style={{...IN,marginBottom:16}} autoComplete="email" autoCapitalize="none" inputMode="email"/>
+            <label style={LB}>🔑 Password</label>
+            <input ref={passRef} type="password" placeholder="Enter your password"
+              style={{...IN,marginBottom:24}} autoComplete="current-password"/>
             <button type="submit" disabled={busy}
-              style={{...Btn(),width:"100%",fontSize:16,padding:"16px",opacity:busy?.7:1}}>
-              {busy ? "⏳ Signing in..." : "🎓 Sign In to Learn"}
+              style={{...BT(),width:"100%",fontSize:16,padding:"17px",opacity:busy?.7:1,marginBottom:18}}>
+              {busy ? "⏳ Signing in... (wait ~30s first time)" : "🎓 Sign In to Learn"}
             </button>
-            <div style={{textAlign:"center",marginTop:18,fontSize:13,color:C.gr}}>
-              📱 WhatsApp support: <strong style={{color:C.g}}>0772799672</strong>
+            <div style={{textAlign:"center",padding:"14px",background:"#f8faff",borderRadius:14,border:"1px solid #e8f0fe"}}>
+              <div style={{fontSize:13,color:C.gr,lineHeight:1.8}}>
+                📱 WhatsApp support: <strong style={{color:C.g}}>0772799672</strong><br/>
+                🏫 Peace Mindset Private School · Lusaka, Zambia
+              </div>
             </div>
           </form>
-        ) : (
-          <form onSubmit={doRegister} autoComplete="on" style={{paddingBottom:20}}>
-            <div style={{marginBottom:14}}>
-              <label style={LBL}>👤 Full Name *</label>
-              <input ref={nameRef} type="text" placeholder="Your full name"
-                style={INP} autoComplete="name"/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={LBL}>📧 Email Address *</label>
-              <input ref={emailRef} type="email" placeholder="your@email.com"
-                style={INP} autoComplete="email" autoCapitalize="none"/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={LBL}>🔑 Password * (min 6 characters)</label>
-              <input ref={passRef} type="password" placeholder="Create a strong password"
-                style={INP} autoComplete="new-password"/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={LBL}>📱 Phone / WhatsApp</label>
-              <input ref={phoneRef} type="tel" placeholder="e.g. 0977123456"
-                style={INP} autoComplete="tel"/>
-            </div>
+        )}
+
+        {/* ── CREATE ACCOUNT FORM ─── */}
+        {tab==="register" && (
+          <form onSubmit={doRegister} autoComplete="on">
+            <label style={LB}>👤 Full Name *</label>
+            <input ref={nameRef} type="text" placeholder="Your full name"
+              style={{...IN,marginBottom:14}} autoComplete="name"/>
+
+            <label style={LB}>📧 Email Address *</label>
+            <input ref={emailRef} type="email" placeholder="your@email.com"
+              style={{...IN,marginBottom:14}} autoComplete="email" autoCapitalize="none" inputMode="email"/>
+
+            <label style={LB}>🔑 Password * (minimum 6 characters)</label>
+            <input ref={passRef} type="password" placeholder="Create a strong password"
+              style={{...IN,marginBottom:14}} autoComplete="new-password"/>
+
+            <label style={LB}>📱 Phone / WhatsApp Number</label>
+            <input ref={phoneRef} type="tel" placeholder="e.g. 0977123456"
+              style={{...IN,marginBottom:14}} autoComplete="tel" inputMode="tel"/>
+
+            {/* Role + Province in 2 columns */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
               <div>
-                <label style={LBL}>Register as *</label>
-                <select style={{...INP,appearance:"none"}} value={role} onChange={e=>setRole(e.target.value)}>
+                <label style={LB}>Register as *</label>
+                <select style={{...IN,appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center",paddingRight:36}}
+                  value={role} onChange={e=>setRole(e.target.value)}>
                   <option value="student">👤 Student</option>
                   <option value="tutor">📚 Tutor</option>
                 </select>
               </div>
               <div>
-                <label style={LBL}>🗺️ Province *</label>
-                <select style={{...INP,appearance:"none"}} value={province} onChange={e=>setProv(e.target.value)}>
+                <label style={LB}>🗺️ Province *</label>
+                <select style={{...IN,appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center",paddingRight:36}}
+                  value={prov} onChange={e=>setProv(e.target.value)}>
                   {PROVINCES.map(p=><option key={p}>{p}</option>)}
                 </select>
               </div>
             </div>
+
+            {/* Grade (students only) */}
             {role==="student" && (
               <div style={{marginBottom:14}}>
-                <label style={LBL}>🏫 Grade / Form</label>
-                <select ref={gradeRef} style={{...INP,appearance:"none"}}>
+                <label style={LB}>🏫 Grade / Form</label>
+                <select ref={gradeRef} style={{...IN,appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center",paddingRight:36}}>
                   <option value="">Select your grade...</option>
                   {["Form 1","Form 2","Form 3","Form 4","Form 5 (Grade 11)","Grade 12","Repeater"].map(g=><option key={g}>{g}</option>)}
                 </select>
               </div>
             )}
+
+            {/* Tutor notice */}
             {role==="tutor" && (
-              <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-                <div style={{fontSize:13,color:"#92400e",fontWeight:600}}>⏳ Tutor accounts need admin approval before access.</div>
-                <div style={{fontSize:12,color:"#92400e",marginTop:4}}>After registering, WhatsApp 0772799672 for faster approval!</div>
+              <div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+                <div style={{fontSize:14,color:"#92400e",fontWeight:700,marginBottom:4}}>⏳ Tutor Account Approval</div>
+                <div style={{fontSize:13,color:"#92400e",lineHeight:1.6}}>After registering, your account needs admin approval. WhatsApp <strong>0772799672</strong> to speed up approval!</div>
               </div>
             )}
+
             <button type="submit" disabled={busy}
-              style={{...Btn(),width:"100%",fontSize:16,padding:"16px",opacity:busy?.7:1}}>
+              style={{...BT(),width:"100%",fontSize:16,padding:"17px",opacity:busy?.7:1,marginBottom:16}}>
               {busy ? "⏳ Creating account..." : "✨ Create My Account"}
             </button>
-            <div style={{textAlign:"center",marginTop:16,fontSize:13,color:C.gr}}>
-              📱 WhatsApp: <strong style={{color:C.g}}>0772799672</strong>
+
+            {/* Footer */}
+            <div style={{background:"#f8faff",borderRadius:14,border:"1px solid #e8f0fe",padding:"16px"}}>
+              <div style={{fontSize:13,color:C.gr,textAlign:"center",lineHeight:1.8}}>
+                💳 <strong>MTN MoMo:</strong> 0761468402<br/>
+                💳 <strong>Airtel Money:</strong> 0570109056<br/>
+                📱 WhatsApp: <strong style={{color:C.g}}>0772799672</strong><br/>
+                🏫 Peace Mindset Private School · Zambia
+              </div>
             </div>
           </form>
         )}
-
-        {/* Footer info */}
-        <div style={{marginTop:24,padding:"16px",background:"#f8faff",borderRadius:14,border:"1px solid #e8f0fe"}}>
-          <div style={{fontSize:12,color:C.gr,textAlign:"center",lineHeight:1.7}}>
-            💳 <strong>MTN MoMo:</strong> 0761468402 &nbsp;|&nbsp; <strong>Airtel:</strong> 0570109056<br/>
-            🏫 Peace Mindset Private School · Lusaka, Zambia
-          </div>
-        </div>
       </div>
     </div>
   );
 }
 
-// ── LAYOUT ─────────────────────────────────────────────
+/* ══════════════════════════════════════════════════
+   APP LAYOUT (after login — fixed height, internal scroll)
+══════════════════════════════════════════════════ */
 function Layout({nav,active,setActive,children}) {
   const {profile,signOut} = useAuth();
   const [menuOpen,setMenuOpen] = useState(false);
+
   const NavItem = ({item}) => {
     const on = active===item.id;
     return (
       <div onClick={()=>{setActive(item.id);setMenuOpen(false);}}
-        style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",borderRadius:14,cursor:"pointer",marginBottom:3,position:"relative",transition:"all 0.15s",WebkitTapHighlightColor:"transparent",
+        style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:14,cursor:"pointer",marginBottom:3,position:"relative",transition:"all 0.15s",
           background:on?`linear-gradient(135deg,${C.gd},${C.g})`:"transparent",color:on?"#fff":C.grd}}>
-        <span style={{fontSize:18,minWidth:22,textAlign:"center"}}>{item.icon}</span>
-        <span style={{fontSize:13,fontWeight:on?700:500}}>{item.label}</span>
-        {item.badge>0&&<span style={{position:"absolute",right:12,background:C.d,color:"#fff",borderRadius:20,padding:"2px 7px",fontSize:10,fontWeight:700}}>{item.badge}</span>}
+        <span style={{fontSize:19,minWidth:24,textAlign:"center"}}>{item.icon}</span>
+        <span style={{fontSize:14,fontWeight:on?700:500}}>{item.label}</span>
+        {item.badge>0&&<span style={{position:"absolute",right:12,background:C.d,color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>{item.badge}</span>}
       </div>
     );
   };
+
   const Sidebar = () => (
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:"#fff",borderRight:`1px solid ${C.grl}`}}>
-      <div style={{padding:"20px 16px 16px",background:`linear-gradient(160deg,${C.gd},${C.g})`}}>
+      <div style={{padding:"22px 16px 16px",background:`linear-gradient(160deg,${C.gd},${C.g})`}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-          <div style={{width:44,height:44,borderRadius:14,background:`linear-gradient(135deg,#8a6200,${C.gold})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>🎓</div>
+          <div style={{width:44,height:44,borderRadius:14,background:`linear-gradient(135deg,#6b4a00,${C.gold})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>🎓</div>
           <div>
-            <div style={{color:"#fff",fontWeight:800,fontSize:12,fontFamily:"'Playfair Display',serif",letterSpacing:"0.5px"}}>PEACE MINDSET</div>
+            <div style={{color:"#fff",fontWeight:800,fontSize:12,fontFamily:"'Playfair Display',serif"}}>PEACE MINDSET</div>
             <div style={{color:"rgba(255,255,255,0.65)",fontSize:9,letterSpacing:"1.5px",textTransform:"uppercase"}}>GCE Online · Zambia 🇿🇲</div>
           </div>
         </div>
@@ -394,46 +440,61 @@ function Layout({nav,active,setActive,children}) {
         {nav.map(item=><NavItem key={item.id} item={item}/>)}
       </div>
       <div style={{padding:"12px 10px",borderTop:`1px solid ${C.grl}`}}>
-        <div onClick={signOut} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",cursor:"pointer",color:C.d,fontWeight:600,fontSize:13,borderRadius:12,WebkitTapHighlightColor:"transparent"}}>
-          <span style={{fontSize:18}}>🚪</span> Sign Out
+        <div onClick={signOut} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",color:C.d,fontWeight:600,fontSize:14,borderRadius:12}}>
+          <span style={{fontSize:20}}>🚪</span> Sign Out
         </div>
       </div>
     </div>
   );
 
   return (
-    <div style={{height:"100vh",display:"flex",overflow:"hidden"}}>
-      <div style={{width:230,flexShrink:0,display:"none"}} id="sidebar"><Sidebar/></div>
-      {menuOpen&&(
-        <div style={{position:"fixed",inset:0,zIndex:500,display:"flex"}}>
-          <div style={{width:260,height:"100%"}}><Sidebar/></div>
-          <div onClick={()=>setMenuOpen(false)} style={{flex:1,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(2px)"}}/>
-        </div>
-      )}
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{padding:"10px 14px",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",gap:10,flexShrink:0,minHeight:54}}>
-          <button type="button" onClick={()=>setMenuOpen(true)} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:10,width:38,height:38,cursor:"pointer",color:"#fff",fontSize:18,WebkitTapHighlightColor:"transparent",flexShrink:0}}>☰</button>
-          <div style={{flex:1,color:"#fff",fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:6}}>
-            <span>{nav.find(n=>n.id===active)?.icon}</span>
-            <span>{nav.find(n=>n.id===active)?.label}</span>
+    <div style={{height:"100vh",display:"flex",overflow:"hidden",flexDirection:"column"}}>
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        {/* Desktop sidebar */}
+        <div style={{width:230,flexShrink:0,display:"none"}} id="sidebar"><Sidebar/></div>
+
+        {/* Mobile overlay */}
+        {menuOpen&&(
+          <div style={{position:"fixed",inset:0,zIndex:500,display:"flex"}}>
+            <div style={{width:270,height:"100%"}}><Sidebar/></div>
+            <div onClick={()=>setMenuOpen(false)} style={{flex:1,background:"rgba(0,0,0,0.6)"}}/>
           </div>
-          <div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:15,overflow:"hidden",flexShrink:0}}>
-            {profile?.avatarUrl?<img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/>:(profile?.avatar||profile?.name?.[0]||"?")}
+        )}
+
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          {/* Top bar */}
+          <div style={{padding:"11px 14px",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",gap:10,flexShrink:0,minHeight:56}}>
+            <button type="button" onClick={()=>setMenuOpen(true)}
+              style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:10,width:40,height:40,cursor:"pointer",color:"#fff",fontSize:19,flexShrink:0}}>
+              ☰
+            </button>
+            <div style={{flex:1,color:"#fff",fontWeight:700,fontSize:15,display:"flex",alignItems:"center",gap:7}}>
+              {nav.find(n=>n.id===active)?.icon} {nav.find(n=>n.id===active)?.label}
+            </div>
+            <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:15,overflow:"hidden",flexShrink:0}}>
+              {profile?.avatarUrl?<img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/>:(profile?.avatar||profile?.name?.[0]||"?")}
+            </div>
           </div>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 14px",WebkitOverflowScrolling:"touch"}}>{children}</div>
-        <div style={{background:"#fff",borderTop:`1px solid ${C.grl}`,display:"flex",flexShrink:0}}>
-          {nav.slice(0,5).map(item=>{
-            const on=active===item.id;
-            return (
-              <div key={item.id} onClick={()=>setActive(item.id)}
-                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 2px 10px",cursor:"pointer",color:on?C.g:C.gr,position:"relative",WebkitTapHighlightColor:"transparent",transition:"color 0.15s"}}>
-                <span style={{fontSize:21}}>{item.icon}</span>
-                <span style={{fontSize:9,fontWeight:on?700:400,marginTop:2}}>{item.label.split(" ")[0]}</span>
-                {item.badge>0&&<span style={{position:"absolute",top:5,right:"50%",transform:"translateX(8px)",background:C.d,color:"#fff",borderRadius:10,padding:"1px 5px",fontSize:9}}>{item.badge}</span>}
-              </div>
-            );
-          })}
+
+          {/* Page content — scrolls internally */}
+          <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 14px"}}>
+            {children}
+          </div>
+
+          {/* Bottom nav */}
+          <div style={{background:"#fff",borderTop:`1px solid ${C.grl}`,display:"flex",flexShrink:0}}>
+            {nav.slice(0,5).map(item=>{
+              const on=active===item.id;
+              return (
+                <div key={item.id} onClick={()=>setActive(item.id)}
+                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 2px 10px",cursor:"pointer",color:on?C.g:C.gr,position:"relative",transition:"color 0.15s"}}>
+                  <span style={{fontSize:22}}>{item.icon}</span>
+                  <span style={{fontSize:9,fontWeight:on?700:400,marginTop:2}}>{item.label.split(" ")[0]}</span>
+                  {item.badge>0&&<span style={{position:"absolute",top:5,right:"50%",transform:"translateX(8px)",background:C.d,color:"#fff",borderRadius:10,padding:"1px 5px",fontSize:9}}>{item.badge}</span>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
       <style>{`@media(min-width:768px){#sidebar{display:block!important}}`}</style>
@@ -441,24 +502,28 @@ function Layout({nav,active,setActive,children}) {
   );
 }
 
-// ── PROFILE PAGE ───────────────────────────────────────
+/* ── PROFILE PAGE ─────────────────────────────────── */
 function ProfilePage() {
   const {profile,updateProfile,setProfile} = useAuth();
   const {add} = useToast();
-  const nameRef = useRef(); const phoneRef = useRef(); const gradeRef = useRef(); const provRef = useRef(); const bioRef = useRef();
-  const [saving,setSaving] = useState(false);
-  const [avFile,setAvFile] = useState(null);
+  const nameRef  = useRef();
+  const phoneRef = useRef();
+  const gradeRef = useRef();
+  const provRef  = useRef();
+  const bioRef   = useRef();
+  const [saving,setSaving]   = useState(false);
+  const [avFile,setAvFile]   = useState(null);
   const [uploading,setUploading] = useState(false);
 
   const save = async() => {
     setSaving(true);
     try {
       await updateProfile({
-        name:nameRef.current?.value?.trim(),
+        name:nameRef.current?.value?.trim()||profile?.name,
         phone:phoneRef.current?.value?.trim(),
         grade:gradeRef.current?.value,
         province:provRef.current?.value,
-        bio:bioRef.current?.value?.trim()
+        bio:bioRef.current?.value?.trim(),
       });
       add({title:"✅ Profile saved!",icon:"👤",type:"i"});
     }catch(e){add({title:"Error",body:e.message,icon:"❌",type:"d"});}
@@ -470,9 +535,9 @@ function ProfilePage() {
     setUploading(true);
     try {
       const fd = new FormData(); fd.append("avatar",avFile);
-      const d = await api("POST","/auth/avatar",null,tok(),fd);
+      const d = await apiFetch("POST","/auth/avatar",null,tok(),fd);
       setProfile(d.user);
-      add({title:"✅ Picture uploaded!",icon:"🖼️",type:"i"});
+      add({title:"✅ Picture uploaded to Cloudinary!",icon:"🖼️",type:"i"});
       setAvFile(null);
     }catch(e){add({title:"Upload failed",body:e.message,icon:"❌",type:"d"});}
     finally{setUploading(false);}
@@ -481,44 +546,47 @@ function ProfilePage() {
   return (
     <div style={{maxWidth:500,margin:"0 auto",paddingBottom:30}}>
       <h2 style={{color:C.gd,marginBottom:16,fontSize:20}}>👤 My Profile</h2>
-      <div style={CARD}>
-        <div style={{textAlign:"center",marginBottom:22}}>
-          <div style={{width:84,height:84,borderRadius:"50%",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:34,margin:"0 auto 12px",overflow:"hidden",boxShadow:"0 6px 24px rgba(6,77,44,0.3)"}}>
+      <div style={CD}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:88,height:88,borderRadius:"50%",background:`linear-gradient(135deg,${C.gd},${C.g})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:36,margin:"0 auto 12px",overflow:"hidden",boxShadow:"0 6px 24px rgba(6,77,44,0.3)"}}>
             {profile?.avatarUrl?<img src={profile.avatarUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:(profile?.avatar||profile?.name?.[0]||"?")}
           </div>
-          <div style={{marginBottom:8}}><input type="file" accept="image/*" onChange={e=>setAvFile(e.target.files[0])} style={{fontSize:12,color:C.gr}}/></div>
-          {avFile&&<button type="button" style={{...Btn("p",true),fontSize:12}} onClick={uploadPic} disabled={uploading}>{uploading?"⏳ Uploading...":"📤 Upload to Cloudinary"}</button>}
+          <div style={{marginBottom:8}}>
+            <input type="file" accept="image/*" onChange={e=>setAvFile(e.target.files[0])} style={{fontSize:13,color:C.gr}}/>
+          </div>
+          {avFile&&<button type="button" style={{...BT("p",true),fontSize:13}} onClick={uploadPic} disabled={uploading}>{uploading?"⏳ Uploading...":"📤 Upload Picture"}</button>}
         </div>
-        {[["name","👤 Full Name",profile?.name||""],["phone","📱 Phone / WhatsApp",profile?.phone||""],["grade","🏫 Grade / Form",profile?.grade||""],["province","🗺️ Province",profile?.province||""]].map(([k,label,def])=>(
-          <div key={k} style={{marginBottom:14}}>
-            <label style={LBL}>{label}</label>
-            <input ref={k==="name"?nameRef:k==="phone"?phoneRef:k==="grade"?gradeRef:provRef}
-              style={INP} defaultValue={def}/>
+        {[["Full Name 👤",nameRef,profile?.name||"","text"],["Phone / WhatsApp 📱",phoneRef,profile?.phone||"","tel"],["Grade / Form 🏫",gradeRef,profile?.grade||"","text"],["Province 🗺️",provRef,profile?.province||"","text"]].map(([label,ref,def,type])=>(
+          <div key={label} style={{marginBottom:14}}>
+            <label style={LB}>{label}</label>
+            <input ref={ref} type={type} style={IN} defaultValue={def}/>
           </div>
         ))}
-        <div style={{marginBottom:18}}>
-          <label style={LBL}>📝 Bio</label>
-          <textarea ref={bioRef} style={{...INP,height:80,resize:"vertical"}} defaultValue={profile?.bio||""} placeholder="About yourself..."/>
+        <div style={{marginBottom:20}}>
+          <label style={LB}>Bio 📝</label>
+          <textarea ref={bioRef} style={{...IN,height:80,resize:"vertical"}} defaultValue={profile?.bio||""} placeholder="Tell us about yourself..."/>
         </div>
-        <div style={{background:C.gp,borderRadius:12,padding:"12px 14px",marginBottom:18}}>
-          <div style={{fontSize:12,color:C.gd,fontWeight:600,marginBottom:5}}>📋 Account Details</div>
-          <div style={{fontSize:12,color:C.gr}}>📧 Email: <strong>{profile?.email}</strong></div>
-          <div style={{fontSize:12,color:C.gr,marginTop:3}}>🎭 Role: <strong style={{textTransform:"capitalize"}}>{profile?.role}</strong></div>
-          {profile?.role==="tutor"&&<div style={{fontSize:12,marginTop:3}}>✔️ Status: <strong style={{color:profile?.approved?C.ok:C.wa}}>{profile?.approved?"✅ Approved":"⏳ Pending Approval"}</strong></div>}
+        <div style={{background:C.gp,borderRadius:12,padding:"13px 15px",marginBottom:18}}>
+          <div style={{fontSize:13,color:C.gd,fontWeight:600,marginBottom:6}}>📋 Account Details</div>
+          <div style={{fontSize:13,color:C.gr}}>📧 Email: <strong>{profile?.email}</strong></div>
+          <div style={{fontSize:13,color:C.gr,marginTop:4}}>🎭 Role: <strong style={{textTransform:"capitalize"}}>{profile?.role}</strong></div>
+          {profile?.role==="tutor"&&<div style={{fontSize:13,marginTop:4}}>✔️ Status: <strong style={{color:profile?.approved?C.ok:C.wa}}>{profile?.approved?"✅ Approved":"⏳ Pending Approval"}</strong></div>}
         </div>
-        <button type="button" style={{...Btn(),width:"100%",fontSize:15}} onClick={save} disabled={saving}>{saving?"⏳ Saving...":"💾 Save Changes"}</button>
+        <button type="button" style={{...BT(),width:"100%",fontSize:15}} onClick={save} disabled={saving}>
+          {saving?"⏳ Saving...":"💾 Save Changes"}
+        </button>
       </div>
     </div>
   );
 }
 
-// ── STUDENT APP ────────────────────────────────────────
+/* ── STUDENT APP ──────────────────────────────────── */
 function StudentApp() {
   const {profile} = useAuth();
-  const [activeNav,setActiveNav] = useState("home");
-  const {data:subs} = useApiData("/subscriptions/mine",[profile?._id]);
-  const {data:payments} = useApiData("/subscriptions/payments/mine",[profile?._id]);
-  const pending = payments.filter(p=>p.status==="pending").length;
+  const [an,setAn] = useState("home");
+  const {data:subs}  = useApiData("/subscriptions/mine",[profile?._id]);
+  const {data:pays}  = useApiData("/subscriptions/payments/mine",[profile?._id]);
+  const pnd = pays.filter(p=>p.status==="pending").length;
   const nav = [
     {id:"home",icon:"🏠",label:"Dashboard"},
     {id:"subjects",icon:"📚",label:"Subjects"},
@@ -526,22 +594,22 @@ function StudentApp() {
     {id:"assignments",icon:"📝",label:"Assignments"},
     {id:"tests",icon:"✏️",label:"Tests"},
     {id:"live",icon:"🎥",label:"Live Classes"},
-    {id:"pay",icon:"💳",label:"Subscribe",badge:pending||null},
+    {id:"pay",icon:"💳",label:"Subscribe",badge:pnd||null},
     {id:"anns",icon:"📢",label:"Announcements"},
     {id:"profile",icon:"👤",label:"Profile"},
   ];
-  const pages = {
-    home:<StudentDash subs={subs} pays={payments} setNav={setActiveNav}/>,
-    subjects:<SubjectsPage subs={subs} pays={payments}/>,
-    materials:<MaterialsPage subs={subs} pays={payments}/>,
-    assignments:<AssignmentsPage subs={subs} pays={payments}/>,
-    tests:<TestsPage subs={subs} pays={payments}/>,
+  const page = {
+    home:<StudentDash subs={subs} pays={pays} setNav={setAn}/>,
+    subjects:<SubjectsPage subs={subs} pays={pays}/>,
+    materials:<MaterialsPage subs={subs} pays={pays}/>,
+    assignments:<AssignmentsPage subs={subs} pays={pays}/>,
+    tests:<TestsPage subs={subs} pays={pays}/>,
     live:<LivePage/>,
     pay:<SubscribePage/>,
     anns:<AnnsPage/>,
     profile:<ProfilePage/>,
   };
-  return <Layout nav={nav} active={activeNav} setActive={setActiveNav}>{pages[activeNav]||pages.home}</Layout>;
+  return <Layout nav={nav} active={an} setActive={setAn}>{page[an]||page.home}</Layout>;
 }
 
 function StudentDash({subs,pays,setNav}) {
@@ -552,21 +620,21 @@ function StudentDash({subs,pays,setNav}) {
   const {data:asns} = useApiData("/assignments");
   const {data:tests} = useApiData("/tests");
   const h = new Date().getHours();
-  const greet = h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+  const gr = h<12?"Good morning":h<17?"Good afternoon":"Good evening";
   const actIds = [...new Set([...subs.filter(s=>s.payment_status==="approved"&&s.status==="active").map(s=>Number(s.subject_id)),...pays.filter(p=>p.status==="approved").map(p=>Number(p.subject_id))])];
   return (
-    <div style={{animation:"fadeUp 0.4s ease",paddingBottom:20}}>
+    <div style={{paddingBottom:20,animation:"fadeUp 0.4s ease"}}>
       <div style={{background:`linear-gradient(135deg,${C.gd},${C.g},#1ab866)`,borderRadius:22,padding:"24px 22px",marginBottom:18,color:"#fff",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"rgba(255,255,255,0.06)"}}/>
-        <p style={{margin:"0 0 4px",fontSize:12,opacity:.85}}>{greet} 👋</p>
-        <h2 style={{margin:"0 0 6px",fontSize:22,fontFamily:"'Playfair Display',serif"}}>{profile?.name?.split(" ")[0]}!</h2>
-        <p style={{margin:0,fontSize:12,opacity:.8}}>{actIds.length>0?`${actIds.length} active subject${actIds.length!==1?"s":""} · Keep going! 💪`:"Subscribe to unlock your subjects."}</p>
-        {actIds.length===0&&<button type="button" onClick={()=>setNav("pay")} style={{marginTop:12,background:`linear-gradient(135deg,#8a6200,${C.gold})`,border:"none",borderRadius:10,padding:"9px 20px",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:12,WebkitTapHighlightColor:"transparent"}}>💳 Subscribe Now →</button>}
-        {actIds.length>0&&<div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>{actIds.slice(0,4).map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:"rgba(255,255,255,0.2)",borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600}}>{s.i} {s.n}</span>:null;})}</div>}
+        <p style={{margin:"0 0 4px",fontSize:13,opacity:.85}}>{gr} 👋</p>
+        <h2 style={{margin:"0 0 6px",fontSize:22}}>{profile?.name?.split(" ")[0]}!</h2>
+        <p style={{margin:0,fontSize:13,opacity:.8}}>{actIds.length>0?`${actIds.length} active subject${actIds.length!==1?"s":""} · Keep going! 💪`:"Subscribe to unlock your subjects."}</p>
+        {actIds.length===0&&<button type="button" onClick={()=>setNav("pay")} style={{marginTop:12,background:`linear-gradient(135deg,#6b4a00,${C.gold})`,border:"none",borderRadius:10,padding:"10px 22px",color:"#fff",cursor:"pointer",fontWeight:700,fontSize:13}}>💳 Subscribe Now →</button>}
+        {actIds.length>0&&<div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>{actIds.slice(0,4).map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:"rgba(255,255,255,0.2)",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>{s.i} {s.n}</span>:null;})}</div>}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(105px,1fr))",gap:10,marginBottom:18}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(106px,1fr))",gap:10,marginBottom:18}}>
         {[["📚","Subjects",actIds.length,"subjects",C.g],["📝","Assignments",asns.length,"assignments","#7c3aed"],["✏️","Tests",tests.length,"tests","#d97706"],["🎥","Live",live.filter(l=>l.status==="upcoming").length,"live","#0891b2"],["📄","Materials",mats.length,"materials",C.g]].map(([ic,lb,vl,nv,co])=>(
-          <div key={lb} onClick={()=>setNav(nv)} style={{background:"#fff",borderRadius:14,padding:"14px 10px",textAlign:"center",cursor:"pointer",boxShadow:"0 2px 14px rgba(6,77,44,0.08)",border:"1px solid #eef3f1",WebkitTapHighlightColor:"transparent"}}>
+          <div key={lb} onClick={()=>setNav(nv)} style={{background:"#fff",borderRadius:14,padding:"14px 10px",textAlign:"center",cursor:"pointer",boxShadow:"0 2px 14px rgba(6,77,44,0.08)",border:"1px solid #eef3f1"}}>
             <div style={{fontSize:22}}>{ic}</div>
             <div style={{fontSize:22,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div>
             <div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
@@ -574,18 +642,18 @@ function StudentDash({subs,pays,setNav}) {
         ))}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        <div style={CARD}>
-          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:13}}>📢 Announcements</h3>
-          {anns.length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center",padding:"8px 0"}}>None yet</p>:anns.slice(0,3).map(a=>(
-            <div key={a._id} style={{borderLeft:`3px solid ${a.important?C.d:C.g}`,paddingLeft:10,marginBottom:10,paddingBottom:10,borderBottom:`1px solid #f5f7f6`}}>
+        <div style={CD}>
+          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:14}}>📢 Announcements</h3>
+          {anns.length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center"}}>None yet</p>:anns.slice(0,3).map(a=>(
+            <div key={a._id} style={{borderLeft:`3px solid ${a.important?C.d:C.g}`,paddingLeft:10,marginBottom:10,paddingBottom:10}}>
               <div style={{fontWeight:600,fontSize:12,color:C.dk}}>{a.important&&"🔴 "}{a.title}</div>
               <div style={{fontSize:10,color:C.gr,marginTop:2}}>{fd(a.createdAt)}</div>
             </div>
           ))}
         </div>
-        <div style={CARD}>
-          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:13}}>🎥 Upcoming</h3>
-          {live.filter(l=>l.status==="upcoming").length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center",padding:"8px 0"}}>None yet</p>:live.filter(l=>l.status==="upcoming").slice(0,2).map(lc=>(
+        <div style={CD}>
+          <h3 style={{margin:"0 0 12px",color:C.gd,fontSize:14}}>🎥 Upcoming</h3>
+          {live.filter(l=>l.status==="upcoming").length===0?<p style={{fontSize:12,color:C.gr,textAlign:"center"}}>None yet</p>:live.filter(l=>l.status==="upcoming").slice(0,2).map(lc=>(
             <div key={lc._id} style={{background:C.gp,borderRadius:10,padding:"9px 10px",marginBottom:8}}>
               <div style={{fontWeight:600,fontSize:11,color:C.gd}}>{lc.title}</div>
               <div style={{fontSize:10,color:C.gr,margin:"2px 0 5px"}}>{sn(lc.subject_id)} · {lc.scheduled_date}</div>
@@ -601,13 +669,13 @@ function StudentDash({subs,pays,setNav}) {
 function SubjectsPage({subs,pays}) {
   return (
     <div style={{paddingBottom:20}}>
-      <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>📚 My Subjects</h2>
+      <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>📚 All Subjects</h2>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))",gap:12}}>
         {SUBJECTS.map(s=>{
           const ok=isSub(subs,pays,s.id);
           return (
-            <div key={s.id} style={{background:"#fff",borderRadius:16,padding:"20px 14px",textAlign:"center",border:`2px solid ${ok?C.g:"#eef3f1"}`,boxShadow:"0 2px 14px rgba(6,77,44,0.08)",position:"relative",transition:"transform 0.15s",WebkitTapHighlightColor:"transparent"}}>
-              {ok&&<div style={{position:"absolute",top:8,right:8,width:9,height:9,borderRadius:"50%",background:C.ok,boxShadow:"0 0 0 2px #dcfce7"}}/>}
+            <div key={s.id} style={{background:"#fff",borderRadius:16,padding:"20px 14px",textAlign:"center",border:`2px solid ${ok?C.g:"#eef3f1"}`,boxShadow:"0 2px 14px rgba(6,77,44,0.08)",position:"relative"}}>
+              {ok&&<div style={{position:"absolute",top:9,right:9,width:9,height:9,borderRadius:"50%",background:C.ok,boxShadow:"0 0 0 2px #dcfce7"}}/>}
               <div style={{fontSize:36,marginBottom:8}}>{s.i}</div>
               <div style={{fontWeight:700,fontSize:13,color:C.dk,marginBottom:6}}>{s.n}</div>
               {ok?<span style={{background:C.okl,color:C.ok,borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:600}}>✓ Active</span>
@@ -630,15 +698,15 @@ function MaterialsPage({subs,pays}) {
     <div style={{paddingBottom:20}}>
       <h2 style={{color:C.gd,marginBottom:12,fontSize:20}}>📄 Study Materials</h2>
       <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-        <button type="button" onClick={()=>setFilter(0)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,WebkitTapHighlightColor:"transparent",background:filter===0?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===0?"#fff":C.gr}}>All ({mats.length})</button>
-        {SUBJECTS.map(s=><button type="button" key={s.id} onClick={()=>setFilter(s.id)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,WebkitTapHighlightColor:"transparent",background:filter===s.id?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===s.id?"#fff":C.gr}}>{s.i} {s.n}</button>)}
+        <button type="button" onClick={()=>setFilter(0)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,background:filter===0?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===0?"#fff":C.gr}}>All ({mats.length})</button>
+        {SUBJECTS.map(s=><button type="button" key={s.id} onClick={()=>setFilter(s.id)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,background:filter===s.id?`linear-gradient(135deg,${C.gd},${C.g})`:"#f0f4f2",color:filter===s.id?"#fff":C.gr}}>{s.i} {s.n}</button>)}
       </div>
       {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:C.gr}}>No materials found</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>
         {filtered.map(m=>{
           const ok=!m.premium||isSub(subs,pays,m.subject_id);
           return (
-            <div key={m._id} style={{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 14px rgba(6,77,44,0.07)",border:"1px solid #eef3f1",opacity:ok?1:.85}}>
+            <div key={m._id} style={{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 14px rgba(6,77,44,0.07)",border:"1px solid #eef3f1"}}>
               <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
                 <div style={{width:46,height:46,borderRadius:13,background:"#f3f7f5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{tIcon(m.type)}</div>
                 <div style={{flex:1,minWidth:0}}>
@@ -647,7 +715,7 @@ function MaterialsPage({subs,pays}) {
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                     <span style={{background:C.grl,color:C.grd,borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:600}}>{m.type?.toUpperCase()}</span>
                     {m.premium&&<span style={{background:"#fef9e7",color:C.gold,borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:600}}>Premium</span>}
-                    {ok?m.file_url?<a href={m.file_url} target="_blank" rel="noreferrer" style={{...Btn("p",true),textDecoration:"none",fontSize:11,padding:"5px 12px"}}>⬇ Download</a>:<span style={{fontSize:10,color:C.gr}}>No file</span>
+                    {ok?m.file_url?<a href={m.file_url} target="_blank" rel="noreferrer" style={{...BT("p",true),textDecoration:"none",fontSize:11,padding:"5px 12px"}}>⬇ Download</a>:<span style={{fontSize:10,color:C.gr}}>No file yet</span>
                       :<span style={{fontSize:11,color:C.d,fontWeight:600}}>🔒 Subscribe to unlock</span>}
                   </div>
                 </div>
@@ -661,31 +729,23 @@ function MaterialsPage({subs,pays}) {
 }
 
 function AssignmentsPage({subs,pays}) {
-  const {profile} = useAuth();
-  const {add} = useToast();
+  const {profile} = useAuth(); const {add} = useToast();
   const {data:asns,loading} = useApiData("/assignments");
   const {data:mysubs,refetch} = useApiData("/assignments/my-submissions",[profile?._id]);
   const [sub,setSub] = useState(null);
-  const txtRef = useRef();
-  const [fi,setFi] = useState(null);
-  const [busy,setBusy] = useState(false);
-
+  const txtRef = useRef(); const [fi,setFi] = useState(null); const [busy,setBusy] = useState(false);
   const doSub = async(a) => {
-    const txt = txtRef.current?.value?.trim();
-    if (!txt&&!fi) return;
+    const txt=txtRef.current?.value?.trim();
+    if (!txt&&!fi)return;
     setBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append("content",txt||"");
-      if(fi) fd.append("file",fi);
-      await api("POST",`/assignments/${a._id}/submit`,null,tok(),fd);
-      setSub(null); setFi(null); refetch();
-      add({title:"✅ Submitted!",icon:"📝",type:"i"});
+    try{
+      const fd=new FormData(); fd.append("content",txt||""); if(fi)fd.append("file",fi);
+      await apiFetch("POST",`/assignments/${a._id}/submit`,null,tok(),fd);
+      setSub(null); setFi(null); refetch(); add({title:"✅ Submitted!",icon:"📝",type:"i"});
     }catch(e){add({title:"Failed",body:e.message,icon:"❌",type:"d"});}
     finally{setBusy(false);}
   };
-
-  if (loading) return <Spin/>;
+  if(loading) return <Spin/>;
   return (
     <div style={{paddingBottom:20}}>
       <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>📝 Assignments</h2>
@@ -693,29 +753,26 @@ function AssignmentsPage({subs,pays}) {
       {asns.map(a=>{
         const s=mysubs.find?mysubs.find(x=>x.assignment_id===a._id):null;
         const ok=isSub(subs,pays,a.subject_id);
-        return (
-          <div key={a._id} style={{...CARD,borderLeft:`4px solid ${s?s.status==="graded"?C.ok:C.wa:C.g}`}}>
+        return(
+          <div key={a._id} style={{...CD,borderLeft:`4px solid ${s?s.status==="graded"?C.ok:C.wa:C.g}`}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:15}}>{a.title}</div>
-                <div style={{fontSize:12,color:C.gr,marginTop:2}}>{si(a.subject_id)} {sn(a.subject_id)}{a.due_date&&` · Due: ${a.due_date}`}{a.max_marks&&` · ${a.max_marks} marks`}</div>
-              </div>
-              {s&&<span style={{background:s.status==="graded"?C.okl:C.wal,color:s.status==="graded"?C.ok:C.wa,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600,height:"fit-content"}}>{s.status==="graded"?`✓ Grade: ${s.grade||s.marks}`:"⏳ Submitted"}</span>}
+              <div><div style={{fontWeight:700,fontSize:15}}>{a.title}</div><div style={{fontSize:12,color:C.gr,marginTop:2}}>{si(a.subject_id)} {sn(a.subject_id)}{a.due_date&&` · Due: ${a.due_date}`}</div></div>
+              {s&&<span style={{background:s.status==="graded"?C.okl:C.wal,color:s.status==="graded"?C.ok:C.wa,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600}}>{s.status==="graded"?`✓ ${s.grade||s.marks}`:"⏳ Submitted"}</span>}
             </div>
             {a.description&&<p style={{fontSize:13,color:C.grd,marginBottom:10,lineHeight:1.6}}>{a.description}</p>}
-            {a.file_url&&<a href={a.file_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.g,fontWeight:600,display:"block",marginBottom:8}}>📎 View assignment file</a>}
-            {s?.feedback&&<div style={{background:C.gp,borderRadius:10,padding:"9px 13px",fontSize:12,color:C.gd,marginBottom:10}}>💬 Tutor feedback: {s.feedback}</div>}
+            {a.file_url&&<a href={a.file_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.g,fontWeight:600,display:"block",marginBottom:8}}>📎 View file</a>}
+            {s?.feedback&&<div style={{background:C.gp,borderRadius:10,padding:"9px 13px",fontSize:12,color:C.gd,marginBottom:10}}>💬 {s.feedback}</div>}
             {!s&&ok&&(sub===a._id?(
               <div style={{marginTop:12}}>
-                <textarea ref={txtRef} placeholder="Type your answer here..." style={{...INP,height:80,resize:"vertical",marginBottom:10}}/>
+                <textarea ref={txtRef} placeholder="Type your answer..." style={{...IN,height:80,resize:"vertical",marginBottom:10}}/>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                   <input type="file" onChange={e=>setFi(e.target.files[0])} style={{fontSize:12}}/>
-                  <button type="button" style={{...Btn("p",true),fontSize:12}} onClick={()=>doSub(a)} disabled={busy}>{busy?"⏳...":"📤 Submit"}</button>
-                  <button type="button" style={{...Btn("gh",true),fontSize:12}} onClick={()=>{setSub(null);setFi(null);}}>Cancel</button>
+                  <button type="button" style={{...BT("p",true),fontSize:12}} onClick={()=>doSub(a)} disabled={busy}>{busy?"⏳...":"📤 Submit"}</button>
+                  <button type="button" style={{...BT("gh",true),fontSize:12}} onClick={()=>{setSub(null);setFi(null);}}>Cancel</button>
                 </div>
               </div>
-            ):<button type="button" style={Btn("p",true)} onClick={()=>setSub(a._id)}>📤 Submit Assignment</button>)}
-            {!ok&&<span style={{fontSize:12,color:C.d,fontWeight:600}}>🔒 Subscribe to access this assignment</span>}
+            ):<button type="button" style={BT("p",true)} onClick={()=>setSub(a._id)}>📤 Submit</button>)}
+            {!ok&&<span style={{fontSize:12,color:C.d,fontWeight:600}}>🔒 Subscribe to access</span>}
           </div>
         );
       })}
@@ -724,75 +781,54 @@ function AssignmentsPage({subs,pays}) {
 }
 
 function TestsPage({subs,pays}) {
-  const {profile} = useAuth();
-  const {add} = useToast();
-  const {data:tests,loading} = useApiData("/tests");
-  const {data:questions} = useApiData("/tests/questions");
-  const {data:results,refetch} = useApiData("/tests/results",[profile?._id]);
-  const [active,setActive] = useState(null);
-  const [answers,setAnswers] = useState({});
-  const [timeLeft,setTimeLeft] = useState(0);
-  const [done,setDone] = useState(false);
-  const timer = useRef(null);
-  const ansRefs = useRef({});
-
-  const start = test => { setActive(test); setAnswers({}); ansRefs.current={}; setDone(false); setTimeLeft(test.duration*60); };
-
-  useEffect(()=>{
-    if (!active||done) return;
-    timer.current = setInterval(()=>setTimeLeft(t=>{if(t<=1){clearInterval(timer.current);submit();return 0;}return t-1;}),1000);
-    return ()=>clearInterval(timer.current);
-  },[active,done]);
-
-  const submit = async() => {
-    if (!active||done) return;
-    clearInterval(timer.current); setDone(true);
-    // Collect short answer values from refs
-    const finalAnswers = {...answers};
-    Object.keys(ansRefs.current).forEach(k=>{ if(ansRefs.current[k]) finalAnswers[k]=ansRefs.current[k].value||""; });
-    try {
-      await api("POST",`/tests/${active._id}/submit`,{answers:finalAnswers},tok());
-      refetch(); add({title:"✅ Test Submitted!",body:"Results calculated",icon:"🎯",type:"i"});
-      setTimeout(()=>{setActive(null);setDone(false);},2000);
-    }catch(e){ add({title:"Error",body:e.message,icon:"⚠️",type:"w"}); setTimeout(()=>setActive(null),2000); }
+  const {profile}=useAuth(); const {add}=useToast();
+  const {data:tests,loading}=useApiData("/tests");
+  const {data:questions}=useApiData("/tests/questions");
+  const {data:results,refetch}=useApiData("/tests/results",[profile?._id]);
+  const [active,setActive]=useState(null); const [answers,setAnswers]=useState({}); const [timeLeft,setTimeLeft]=useState(0); const [done,setDone]=useState(false);
+  const timer=useRef(null); const ansRefs=useRef({});
+  const start=test=>{setActive(test);setAnswers({});ansRefs.current={};setDone(false);setTimeLeft(test.duration*60);};
+  useEffect(()=>{if(!active||done)return;timer.current=setInterval(()=>setTimeLeft(t=>{if(t<=1){clearInterval(timer.current);doSubmit();return 0;}return t-1;}),1000);return()=>clearInterval(timer.current);},[active,done]);
+  const doSubmit=async()=>{
+    if(!active||done)return; clearInterval(timer.current); setDone(true);
+    const fa={...answers};
+    Object.keys(ansRefs.current).forEach(k=>{if(ansRefs.current[k])fa[k]=ansRefs.current[k].value||"";});
+    try{await apiFetch("POST",`/tests/${active._id}/submit`,{answers:fa},tok());refetch();add({title:"✅ Submitted!",icon:"🎯",type:"i"});setTimeout(()=>{setActive(null);setDone(false);},2000);}
+    catch(e){add({title:"Error",body:e.message,icon:"⚠️",type:"w"});setTimeout(()=>setActive(null),2000);}
   };
-
-  if (active) {
-    const qs = questions.filter(q=>q.test_id===active._id);
-    const m = Math.floor(timeLeft/60).toString().padStart(2,"0");
-    const s = (timeLeft%60).toString().padStart(2,"0");
-    return (
+  if(active){
+    const qs=questions.filter(q=>q.test_id===active._id);
+    const m=Math.floor(timeLeft/60).toString().padStart(2,"0");
+    const s=(timeLeft%60).toString().padStart(2,"0");
+    return(
       <div style={{maxWidth:640,paddingBottom:30}}>
         <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:16,padding:"14px 18px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",color:"#fff",position:"sticky",top:0,zIndex:10}}>
           <div><div style={{fontWeight:700,fontSize:15}}>{active.title}</div><div style={{fontSize:11,opacity:.8}}>{qs.length} questions</div></div>
           <div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:800,color:timeLeft<60?"#fca5a5":"#fff"}}>{m}:{s}</div><div style={{fontSize:10,opacity:.7}}>Time Left</div></div>
-          <button type="button" style={{...Btn("d",true),fontSize:12}} onClick={submit} disabled={done}>{done?"⏳":"📤 Submit"}</button>
+          <button type="button" style={{...BT("d",true),fontSize:12}} onClick={doSubmit} disabled={done}>{done?"⏳":"📤 Submit"}</button>
         </div>
         {qs.map((q,i)=>(
-          <div key={q._id} style={CARD}>
+          <div key={q._id} style={CD}>
             <div style={{fontWeight:600,fontSize:14,marginBottom:13,color:C.dk}}>Q{i+1}. {q.question}</div>
             {q.type==="mcq"&&q.options?.map(o=>(
-              <label key={o} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 14px",borderRadius:11,marginBottom:8,cursor:"pointer",border:`2px solid ${answers[q._id]===o?C.g:C.grl}`,background:answers[q._id]===o?C.gp:"#fff",transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-                <input type="radio" name={q._id} checked={answers[q._id]===o} onChange={()=>setAnswers(p=>({...p,[q._id]:o}))} style={{accentColor:C.g,width:18,height:18}}/>
-                <span style={{fontSize:14}}>{o}</span>
+              <label key={o} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",borderRadius:12,marginBottom:8,cursor:"pointer",border:`2px solid ${answers[q._id]===o?C.g:C.grl}`,background:answers[q._id]===o?C.gp:"#fff",transition:"all 0.15s"}}>
+                <input type="radio" name={q._id} checked={answers[q._id]===o} onChange={()=>setAnswers(p=>({...p,[q._id]:o}))} style={{accentColor:C.g,width:18,height:18}}/><span style={{fontSize:14}}>{o}</span>
               </label>
             ))}
             {q.type==="truefalse"&&["True","False"].map(o=>(
-              <label key={o} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 14px",borderRadius:11,marginBottom:8,cursor:"pointer",border:`2px solid ${answers[q._id]===o.toLowerCase()?C.g:C.grl}`,background:answers[q._id]===o.toLowerCase()?C.gp:"#fff",WebkitTapHighlightColor:"transparent"}}>
-                <input type="radio" name={q._id} checked={answers[q._id]===o.toLowerCase()} onChange={()=>setAnswers(p=>({...p,[q._id]:o.toLowerCase()}))} style={{accentColor:C.g,width:18,height:18}}/>
-                <span style={{fontSize:14,fontWeight:600}}>{o}</span>
+              <label key={o} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",borderRadius:12,marginBottom:8,cursor:"pointer",border:`2px solid ${answers[q._id]===o.toLowerCase()?C.g:C.grl}`,background:answers[q._id]===o.toLowerCase()?C.gp:"#fff"}}>
+                <input type="radio" name={q._id} checked={answers[q._id]===o.toLowerCase()} onChange={()=>setAnswers(p=>({...p,[q._id]:o.toLowerCase()}))} style={{accentColor:C.g,width:18,height:18}}/><span style={{fontSize:14,fontWeight:600}}>{o}</span>
               </label>
             ))}
-            {q.type==="short"&&<input ref={el=>ansRefs.current[q._id]=el} style={INP} placeholder="Type your answer here..." defaultValue=""/>}
+            {q.type==="short"&&<input ref={el=>ansRefs.current[q._id]=el} style={IN} placeholder="Type your answer..." defaultValue=""/>}
           </div>
         ))}
-        <button type="button" style={{...Btn(),width:"100%",justifyContent:"center",fontSize:16,padding:"16px"}} onClick={submit} disabled={done}>{done?"⏳ Submitting...":"📤 Submit Test"}</button>
+        <button type="button" style={{...BT(),width:"100%",justifyContent:"center",fontSize:16,padding:"16px"}} onClick={doSubmit} disabled={done}>{done?"⏳ Submitting...":"📤 Submit Test"}</button>
       </div>
     );
   }
-
-  if (loading) return <Spin/>;
-  return (
+  if(loading)return <Spin/>;
+  return(
     <div style={{paddingBottom:20}}>
       <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>✏️ Tests & Quizzes</h2>
       {tests.length===0&&<div style={{textAlign:"center",padding:40,color:C.gr}}>No tests yet</div>}
@@ -802,15 +838,15 @@ function TestsPage({subs,pays}) {
           const ok=isSub(subs,pays,t.subject_id);
           const res=results.find?results.find(r=>r.test_id===t._id):null;
           const pct=res?.percent??null;
-          return (
+          return(
             <div key={t._id} style={{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 14px rgba(6,77,44,0.08)",border:`2px solid ${res?pct>=70?"#bbf7d0":pct>=50?"#fde68a":"#fecaca":"#eef3f1"}`,position:"relative"}}>
               {res&&<div style={{position:"absolute",top:12,right:12,background:pct>=70?C.okl:pct>=50?"#fef9e7":C.dl,color:pct>=70?C.ok:pct>=50?C.gold:C.d,borderRadius:10,padding:"6px 12px",fontWeight:800,fontSize:16}}>{pct}%</div>}
               <div style={{fontSize:34,marginBottom:8}}>{si(t.subject_id)}</div>
               <h3 style={{margin:"0 0 5px",color:C.gd,fontSize:14,paddingRight:res?60:0}}>{t.title}</h3>
-              <div style={{fontSize:11,color:C.gr,marginBottom:13}}>{sn(t.subject_id)} · {qs.length} questions · {t.duration}min</div>
+              <div style={{fontSize:11,color:C.gr,marginBottom:13}}>{sn(t.subject_id)} · {qs.length} Q · {t.duration}min</div>
               {!ok?<span style={{fontSize:12,color:C.d,fontWeight:600}}>🔒 Subscribe to unlock</span>
-                :res?<div style={{fontSize:13,color:pct>=50?C.ok:C.d,fontWeight:700}}>{res.score}/{res.total} correct · {pct>=50?"✅ Passed":"❌ Failed"}</div>
-                :<button type="button" style={{...Btn("p",true),width:"100%",justifyContent:"center",fontSize:14}} onClick={()=>start(t)}>▶ Start Test</button>}
+                :res?<div style={{fontSize:13,color:pct>=50?C.ok:C.d,fontWeight:700}}>{res.score}/{res.total} · {pct>=50?"✅ Passed":"❌ Failed"}</div>
+                :<button type="button" style={{...BT("p",true),width:"100%",justifyContent:"center",fontSize:14}} onClick={()=>start(t)}>▶ Start Test</button>}
             </div>
           );
         })}
@@ -819,15 +855,15 @@ function TestsPage({subs,pays}) {
   );
 }
 
-function LivePage() {
-  const {data:live,loading} = useApiData("/live-classes");
-  if (loading) return <Spin/>;
-  return (
+function LivePage(){
+  const{data:live,loading}=useApiData("/live-classes");
+  if(loading)return <Spin/>;
+  return(
     <div style={{paddingBottom:20}}>
       <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>🎥 Live Classes</h2>
       {live.length===0&&<div style={{textAlign:"center",padding:40,color:C.gr}}>No classes scheduled yet</div>}
       {live.map(lc=>(
-        <div key={lc._id} style={{...CARD,borderLeft:`4px solid ${lc.status==="live"?C.d:lc.status==="upcoming"?C.g:C.gr}`}}>
+        <div key={lc._id} style={{...CD,borderLeft:`4px solid ${lc.status==="live"?C.d:lc.status==="upcoming"?C.g:C.gr}`}}>
           <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
             <div>
               <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{lc.title}</div>
@@ -836,8 +872,8 @@ function LivePage() {
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{background:lc.status==="live"?C.dl:lc.status==="upcoming"?C.okl:C.grl,color:lc.status==="live"?C.d:lc.status==="upcoming"?C.ok:C.gr,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600}}>{lc.status==="live"?"🔴 LIVE":lc.status==="upcoming"?"📅 Upcoming":"✓ Ended"}</span>
-              {lc.meet_link&&lc.status!=="ended"&&<a href={lc.meet_link} target="_blank" rel="noreferrer" style={{...Btn("p",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>📹 Join Meet</a>}
-              {lc.recording_url&&<a href={lc.recording_url} target="_blank" rel="noreferrer" style={{...Btn("gh",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>▶ Recording</a>}
+              {lc.meet_link&&lc.status!=="ended"&&<a href={lc.meet_link} target="_blank" rel="noreferrer" style={{...BT("p",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>📹 Join Meet</a>}
+              {lc.recording_url&&<a href={lc.recording_url} target="_blank" rel="noreferrer" style={{...BT("gh",true),textDecoration:"none",display:"inline-flex",fontSize:12}}>▶ Recording</a>}
             </div>
           </div>
         </div>
@@ -846,126 +882,101 @@ function LivePage() {
   );
 }
 
-function SubscribePage() {
-  const {profile} = useAuth(); const {add} = useToast();
-  const {data:subs} = useApiData("/subscriptions/mine",[profile?._id]);
-  const {data:pays,refetch} = useApiData("/subscriptions/payments/mine",[profile?._id]);
-  const [sel,setSel] = useState([]);
-  const [method,setMethod] = useState("mtn");
-  const [months,setMonths] = useState(1);
-  const [busy,setBusy] = useState(false);
-  const txnRef = useRef();
-  const notesRef = useRef();
-  const [receipt,setReceipt] = useState(null);
-  const actIds = new Set([...subs.filter(s=>s.payment_status==="approved"&&s.status==="active").map(s=>Number(s.subject_id)),...pays.filter(p=>p.status==="approved").map(p=>Number(p.subject_id))]);
-  const pendIds = new Set(pays.filter(p=>p.status==="pending").map(p=>Number(p.subject_id)));
-  const toggle = id => setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const price = 85;
-
-  const submit = async() => {
-    const txn = txnRef.current?.value?.trim();
-    if (!sel.length||!txn) { add({title:"Missing info",body:"Select subjects and enter transaction ID",icon:"⚠️",type:"w"}); return; }
+function SubscribePage(){
+  const{profile}=useAuth();const{add}=useToast();
+  const{data:subs}=useApiData("/subscriptions/mine",[profile?._id]);
+  const{data:pays,refetch}=useApiData("/subscriptions/payments/mine",[profile?._id]);
+  const[sel,setSel]=useState([]);const[method,setMethod]=useState("mtn");const[months,setMonths]=useState(1);const[busy,setBusy]=useState(false);const[receipt,setReceipt]=useState(null);
+  const txnRef=useRef();const notesRef=useRef();
+  const actIds=new Set([...subs.filter(s=>s.payment_status==="approved"&&s.status==="active").map(s=>Number(s.subject_id)),...pays.filter(p=>p.status==="approved").map(p=>Number(p.subject_id))]);
+  const pendIds=new Set(pays.filter(p=>p.status==="pending").map(p=>Number(p.subject_id)));
+  const toggle=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const price=85;
+  const submit=async()=>{
+    const txn=txnRef.current?.value?.trim();
+    if(!sel.length||!txn){add({title:"Missing info",body:"Select subjects and enter transaction ID",icon:"⚠️",type:"w"});return;}
     setBusy(true);
-    try {
-      for (const sid of sel) {
-        const fd = new FormData();
-        fd.append("subject_id",sid); fd.append("amount",price*months);
-        fd.append("months",months); fd.append("method",method);
-        fd.append("transaction_id",txn);
-        const notes = notesRef.current?.value?.trim();
-        if (notes) fd.append("notes",notes);
-        if (receipt) fd.append("receipt",receipt);
-        await api("POST","/subscriptions/payment",null,tok(),fd);
-      }
+    try{
+      for(const sid of sel){const fd=new FormData();fd.append("subject_id",sid);fd.append("amount",price*months);fd.append("months",months);fd.append("method",method);fd.append("transaction_id",txn);const nt=notesRef.current?.value?.trim();if(nt)fd.append("notes",nt);if(receipt)fd.append("receipt",receipt);await apiFetch("POST","/subscriptions/payment",null,tok(),fd);}
       add({title:"✅ Payment submitted!",body:"Admin will verify. WhatsApp 0772799672 to speed up!",icon:"💳",type:"i"});
-      setSel([]); setReceipt(null); refetch();
+      setSel([]);setReceipt(null);refetch();
     }catch(e){add({title:"Error",body:e.message,icon:"❌",type:"d"});}
     finally{setBusy(false);}
   };
-
-  return (
+  return(
     <div style={{maxWidth:640,paddingBottom:30}}>
-      <h2 style={{color:C.gd,marginBottom:4,fontSize:20}}>💳 Subscribe to Subjects</h2>
+      <h2 style={{color:C.gd,marginBottom:4,fontSize:20}}>💳 Subscribe</h2>
       <p style={{color:C.gr,fontSize:13,marginBottom:16}}>ZMW 85 per subject per month</p>
-      <div style={{...CARD,background:C.gp,border:"1px solid #c8e8d8",marginBottom:16}}>
-        <h3 style={{color:C.gd,margin:"0 0 12px",fontSize:15}}>💳 How to Pay (Zambia)</h3>
-        {[{lb:"📱 MTN Mobile Money",num:"0761468402",hint:"Send to this number"},{lb:"📱 Airtel Money",num:"0570109056",hint:"Send to this number"},{lb:"🏦 Bank Transfer",num:"Absa Bank",hint:"Visit school for details"},{lb:"💵 Cash",num:"School office",hint:"Visit during school hours"}].map(p=>(
-          <div key={p.lb} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #c8e8d8"}}>
-            <div><div style={{fontSize:13,fontWeight:700,color:C.gd}}>{p.lb}</div><div style={{fontSize:11,color:C.gr}}>{p.hint}</div></div>
-            <div style={{fontWeight:700,fontSize:14,color:C.g}}>{p.num}</div>
+      <div style={{...CD,background:C.gp,border:"1px solid #c8e8d8",marginBottom:14}}>
+        <h3 style={{color:C.gd,margin:"0 0 12px",fontSize:15}}>💳 Payment Numbers</h3>
+        {[{lb:"📱 MTN Mobile Money",num:"0761468402"},{lb:"📱 Airtel Money",num:"0570109056"},{lb:"🏦 Bank (Absa)",num:"Visit school"},{lb:"💵 Cash",num:"School office"}].map(p=>(
+          <div key={p.lb} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #c8e8d8"}}>
+            <span style={{fontSize:13,fontWeight:600,color:C.gd}}>{p.lb}</span>
+            <span style={{fontSize:13,fontWeight:700,color:C.g}}>{p.num}</span>
           </div>
         ))}
-        <div style={{marginTop:10,fontSize:12,color:C.gd,fontWeight:600}}>After paying → come back here → submit your transaction ID below ↓</div>
+        <div style={{marginTop:10,fontSize:12,color:C.gd,fontWeight:600}}>Pay first → come back here → submit your transaction ID below ↓</div>
       </div>
-      {actIds.size>0&&<div style={{...CARD,marginBottom:14}}><h3 style={{color:C.gd,margin:"0 0 10px",fontSize:14}}>✅ Your Active Subscriptions</h3><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{[...actIds].map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:C.okl,color:C.ok,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>{s.i} {s.n}</span>:null;})}</div></div>}
-      <div style={CARD}>
-        <h3 style={{color:C.gd,margin:"0 0 14px",fontSize:15}}>📚 Select Subjects to Subscribe</h3>
+      {actIds.size>0&&<div style={{...CD,marginBottom:14}}><h3 style={{color:C.gd,margin:"0 0 10px",fontSize:14}}>✅ Your Active Subscriptions</h3><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{[...actIds].map(id=>{const s=SUBJECTS.find(x=>x.id===id);return s?<span key={id} style={{background:C.okl,color:C.ok,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>{s.i} {s.n}</span>:null;})}</div></div>}
+      <div style={CD}>
+        <h3 style={{color:C.gd,margin:"0 0 14px",fontSize:15}}>📚 Select Subjects</h3>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(125px,1fr))",gap:8}}>
-          {SUBJECTS.map(s=>{
-            const act=actIds.has(s.id),pend=pendIds.has(s.id),picked=sel.includes(s.id);
-            return (
-              <div key={s.id} onClick={()=>!act&&!pend&&toggle(s.id)}
-                style={{borderRadius:12,padding:"12px 10px",border:`2px solid ${act?C.ok:pend?C.gold:picked?C.g:C.grl}`,cursor:act||pend?"not-allowed":"pointer",background:act?C.okl:pend?"#fef9e7":picked?C.gp:"#fff",textAlign:"center",transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-                <div style={{fontSize:26,marginBottom:5}}>{s.i}</div>
-                <div style={{fontSize:11,fontWeight:700,marginBottom:4,color:C.dk}}>{s.n}</div>
-                {act?<span style={{fontSize:9,color:C.ok,fontWeight:700}}>✓ Active</span>:pend?<span style={{fontSize:9,color:C.gold,fontWeight:700}}>⏳ Pending</span>:picked?<span style={{fontSize:9,color:C.g,fontWeight:700}}>✓ Selected</span>:<span style={{fontSize:9,color:C.gr}}>ZMW {price}/mo</span>}
-              </div>
-            );
-          })}
+          {SUBJECTS.map(s=>{const ac=actIds.has(s.id),pn=pendIds.has(s.id),pk=sel.includes(s.id);return(
+            <div key={s.id} onClick={()=>!ac&&!pn&&toggle(s.id)}
+              style={{borderRadius:12,padding:"12px 10px",border:`2px solid ${ac?C.ok:pn?C.gold:pk?C.g:C.grl}`,cursor:ac||pn?"not-allowed":"pointer",background:ac?C.okl:pn?"#fef9e7":pk?C.gp:"#fff",textAlign:"center",transition:"all 0.15s"}}>
+              <div style={{fontSize:26,marginBottom:5}}>{s.i}</div>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:4,color:C.dk}}>{s.n}</div>
+              {ac?<span style={{fontSize:9,color:C.ok,fontWeight:700}}>✓ Active</span>:pn?<span style={{fontSize:9,color:C.gold,fontWeight:700}}>⏳ Pending</span>:pk?<span style={{fontSize:9,color:C.g,fontWeight:700}}>✓ Selected</span>:<span style={{fontSize:9,color:C.gr}}>ZMW {price}/mo</span>}
+            </div>
+          );})}
         </div>
       </div>
       {sel.length>0&&(
-        <div style={CARD}>
-          <div style={{background:C.gp,borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><div style={{fontSize:13,color:C.gr}}>{sel.length} subject{sel.length!==1?"s":""} × {months} month{months!==1?"s":""}</div><div style={{fontSize:11,color:C.gr,marginTop:2}}>ZMW {price} × {sel.length} × {months}</div></div>
+        <div style={CD}>
+          <div style={{background:C.gp,borderRadius:12,padding:"14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><div style={{fontSize:13,color:C.gr}}>{sel.length} subj × {months} mo</div></div>
             <span style={{fontSize:22,fontWeight:800,color:C.gd,fontFamily:"'Playfair Display',serif"}}>ZMW {sel.length*price*months}</span>
           </div>
-          <div style={{marginBottom:14}}>
-            <label style={LBL}>📅 How many months?</label>
-            <select style={{...INP,appearance:"none"}} value={months} onChange={e=>setMonths(Number(e.target.value))}>
+          <div style={{marginBottom:12}}>
+            <label style={LB}>📅 Months</label>
+            <select style={{...IN,appearance:"none"}} value={months} onChange={e=>setMonths(Number(e.target.value))}>
               {[1,2,3,6].map(m=><option key={m} value={m}>{m} month{m>1?"s":""} — ZMW {sel.length*price*m}</option>)}
             </select>
           </div>
-          <div style={{marginBottom:14}}>
-            <label style={LBL}>💳 Payment Method</label>
+          <div style={{marginBottom:12}}>
+            <label style={LB}>💳 Payment Method</label>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {[{id:"mtn",lb:"📱 MTN MoMo",nm:"0761468402"},{id:"airtel",lb:"📱 Airtel Money",nm:"0570109056"},{id:"bank",lb:"🏦 Bank Transfer",nm:"Absa Bank"},{id:"cash",lb:"💵 Cash",nm:"School office"}].map(pm=>(
-                <div key={pm.id} onClick={()=>setMethod(pm.id)}
-                  style={{borderRadius:12,padding:"11px 13px",border:`2px solid ${method===pm.id?C.g:C.grl}`,cursor:"pointer",background:method===pm.id?C.gp:"#fff",transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{pm.lb}</div>
-                  <div style={{fontSize:11,color:C.gr}}>{pm.nm}</div>
+              {[{id:"mtn",lb:"📱 MTN MoMo",nm:"0761468402"},{id:"airtel",lb:"📱 Airtel",nm:"0570109056"},{id:"bank",lb:"🏦 Bank",nm:"Absa"},{id:"cash",lb:"💵 Cash",nm:"Office"}].map(pm=>(
+                <div key={pm.id} onClick={()=>setMethod(pm.id)} style={{borderRadius:12,padding:"11px 13px",border:`2px solid ${method===pm.id?C.g:C.grl}`,cursor:"pointer",background:method===pm.id?C.gp:"#fff",transition:"all 0.15s"}}>
+                  <div style={{fontSize:13,fontWeight:700}}>{pm.lb}</div><div style={{fontSize:11,color:C.gr}}>{pm.nm}</div>
                 </div>
               ))}
             </div>
           </div>
-          <div style={{marginBottom:14}}>
-            <label style={LBL}>🔖 Transaction / Reference ID *</label>
-            <input ref={txnRef} style={INP} placeholder="e.g. MTN-REF-123456789" type="text"/>
+          <div style={{marginBottom:12}}>
+            <label style={LB}>🔖 Transaction / Reference ID *</label>
+            <input ref={txnRef} style={IN} placeholder="e.g. MTN-REF-123456" type="text"/>
           </div>
-          <div style={{marginBottom:14}}>
-            <label style={LBL}>🧾 Upload Receipt Photo (recommended)</label>
+          <div style={{marginBottom:12}}>
+            <label style={LB}>🧾 Receipt Photo (recommended)</label>
             <input type="file" accept="image/*" onChange={e=>setReceipt(e.target.files[0])} style={{fontSize:13,padding:"8px 0"}}/>
-            {receipt&&<div style={{fontSize:11,color:C.ok,marginTop:4}}>✓ {receipt.name} selected</div>}
+            {receipt&&<div style={{fontSize:11,color:C.ok,marginTop:4}}>✓ {receipt.name}</div>}
           </div>
           <div style={{marginBottom:18}}>
-            <label style={LBL}>📝 Notes (optional)</label>
-            <textarea ref={notesRef} style={{...INP,height:65,resize:"vertical"}} placeholder="Any extra information..."/>
+            <label style={LB}>📝 Notes (optional)</label>
+            <textarea ref={notesRef} style={{...IN,height:65,resize:"vertical"}} placeholder="Any extra info..."/>
           </div>
-          <button type="button" style={{...Btn(),width:"100%",fontSize:15,padding:"16px"}} onClick={submit} disabled={busy}>{busy?"⏳ Submitting...":"💳 Submit Payment Request"}</button>
-          <div style={{textAlign:"center",marginTop:12,fontSize:12,color:C.gr}}>Admin will verify and activate within minutes. WhatsApp <strong style={{color:C.g}}>0772799672</strong> for faster approval!</div>
+          <button type="button" style={{...BT(),width:"100%",fontSize:15,padding:"16px"}} onClick={submit} disabled={busy}>{busy?"⏳ Submitting...":"💳 Submit Payment"}</button>
+          <div style={{textAlign:"center",marginTop:12,fontSize:12,color:C.gr}}>WhatsApp <strong style={{color:C.g}}>0772799672</strong> for faster approval!</div>
         </div>
       )}
       {pays.length>0&&(
-        <div style={CARD}>
-          <h3 style={{color:C.gd,margin:"0 0 14px",fontSize:14}}>📋 My Payment History</h3>
+        <div style={CD}>
+          <h3 style={{color:C.gd,margin:"0 0 14px",fontSize:14}}>📋 Payment History</h3>
           {pays.map(p=>(
             <div key={p._id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.grl}`,gap:10}}>
-              <div>
-                <div style={{fontWeight:600,fontSize:13}}>{si(p.subject_id)} {sn(p.subject_id)}</div>
-                <div style={{fontSize:11,color:C.gr,marginTop:2}}>ZMW {p.amount} · {p.method?.toUpperCase()} · {fd(p.createdAt)}</div>
-                {p.admin_note&&<div style={{fontSize:11,color:p.status==="rejected"?C.d:C.ok,marginTop:2,fontWeight:600}}>💬 {p.admin_note}</div>}
-              </div>
-              <span style={{background:p.status==="approved"?C.okl:p.status==="rejected"?C.dl:C.wal,color:p.status==="approved"?C.ok:p.status==="rejected"?C.d:C.wa,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>{p.status==="approved"?"✅ Approved":p.status==="rejected"?"❌ Rejected":"⏳ Pending"}</span>
+              <div><div style={{fontWeight:600,fontSize:13}}>{si(p.subject_id)} {sn(p.subject_id)}</div><div style={{fontSize:11,color:C.gr}}>ZMW {p.amount} · {p.method} · {fd(p.createdAt)}</div>{p.admin_note&&<div style={{fontSize:11,color:p.status==="rejected"?C.d:C.ok,fontWeight:600}}>{p.admin_note}</div>}</div>
+              <span style={{background:p.status==="approved"?C.okl:p.status==="rejected"?C.dl:C.wal,color:p.status==="approved"?C.ok:p.status==="rejected"?C.d:C.wa,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:600,flexShrink:0}}>{p.status==="approved"?"✅":p.status==="rejected"?"❌":"⏳"} {p.status}</span>
             </div>
           ))}
         </div>
@@ -974,18 +985,18 @@ function SubscribePage() {
   );
 }
 
-function AnnsPage() {
-  const {data:anns,loading} = useApiData("/announcements");
-  if (loading) return <Spin/>;
-  return (
+function AnnsPage(){
+  const{data:anns,loading}=useApiData("/announcements");
+  if(loading)return <Spin/>;
+  return(
     <div style={{paddingBottom:20}}>
       <h2 style={{color:C.gd,marginBottom:14,fontSize:20}}>📢 Announcements</h2>
       {anns.length===0&&<div style={{textAlign:"center",padding:40,color:C.gr}}>No announcements yet</div>}
       {anns.map(a=>(
-        <div key={a._id} style={{...CARD,borderLeft:`4px solid ${a.important?C.d:C.g}`}}>
+        <div key={a._id} style={{...CD,borderLeft:`4px solid ${a.important?C.d:C.g}`}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
-            <h3 style={{margin:0,fontSize:15,color:C.dk,fontFamily:"'Playfair Display',serif"}}>{a.important&&"🔴 "}{a.title}</h3>
-            <span style={{fontSize:11,color:C.gr,flexShrink:0}}>{fd(a.createdAt)}</span>
+            <h3 style={{margin:0,fontSize:15,color:C.dk}}>{a.important&&"🔴 "}{a.title}</h3>
+            <span style={{fontSize:11,color:C.gr}}>{fd(a.createdAt)}</span>
           </div>
           <p style={{margin:0,fontSize:14,color:C.grd,lineHeight:1.7}}>{a.content}</p>
         </div>
@@ -994,105 +1005,97 @@ function AnnsPage() {
   );
 }
 
-// ── TUTOR + ADMIN simplified ───────────────────────────
-function TutorApp() {
-  const [an,setAn] = useState("home");
+/* ── TUTOR ────────────────────────────────────────── */
+function TutorApp(){
+  const [an,setAn]=useState("home");
   const nav=[{id:"home",icon:"🏠",label:"Dashboard"},{id:"live",icon:"🎥",label:"Live Classes"},{id:"anns",icon:"📢",label:"Announcements"},{id:"profile",icon:"👤",label:"Profile"}];
-  const pages={home:<TutorDash/>,live:<LivePage/>,anns:<AnnsPage/>,profile:<ProfilePage/>};
-  return <Layout nav={nav} active={an} setActive={setAn}>{pages[an]||pages.home}</Layout>;
+  const page={home:<TutorDash/>,live:<LivePage/>,anns:<AnnsPage/>,profile:<ProfilePage/>};
+  return <Layout nav={nav} active={an} setActive={setAn}>{page[an]||page.home}</Layout>;
 }
-function TutorDash() {
-  const {profile} = useAuth();
-  const {data:mats} = useApiData("/materials");
-  const {data:tests} = useApiData("/tests");
-  return (
+function TutorDash(){
+  const{profile}=useAuth();
+  return(
     <div style={{paddingBottom:20}}>
-      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:22,padding:"24px",marginBottom:18,color:"#fff"}}>
-        <div style={{fontSize:36,marginBottom:10}}>📚</div>
-        <h2 style={{margin:"0 0 4px",fontSize:22,fontFamily:"'Playfair Display',serif"}}>Welcome, {profile?.name?.split(" ")[0]}!</h2>
+      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:22,padding:"28px 24px",marginBottom:18,color:"#fff"}}>
+        <div style={{fontSize:40,marginBottom:12}}>📚</div>
+        <h2 style={{margin:"0 0 4px",fontSize:22}}>Welcome, {profile?.name?.split(" ")[0]}!</h2>
         <p style={{margin:0,opacity:.85,fontSize:13}}>Tutor Dashboard · Peace Mindset Private School 🇿🇲</p>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:18}}>
-        {[["📄","Materials",mats.filter(m=>m.tutor_id===profile?._id).length,C.g],["✏️","Tests",tests.filter(t=>t.tutor_id===profile?._id).length,C.gold]].map(([ic,lb,vl,co])=>(
-          <div key={lb} style={{background:"#fff",borderRadius:14,padding:"16px 10px",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.06)"}}>
-            <div style={{fontSize:24}}>{ic}</div><div style={{fontSize:24,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div><div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{...CARD,background:"#fffbeb",border:"1px solid #fde68a"}}>
-        <h3 style={{color:"#92400e",margin:"0 0 8px",fontSize:15}}>📱 Full Tutor Control in Termux</h3>
-        <p style={{fontSize:13,color:"#92400e",lineHeight:1.7}}>Upload materials, create tests, schedule classes → use the server running in Termux on your phone.</p>
-        <p style={{fontSize:12,color:"#92400e",marginTop:8,fontWeight:600}}>📱 WhatsApp: <strong>0772799672</strong></p>
+      <div style={{...CD,background:"#fffbeb",border:"1.5px solid #fde68a"}}>
+        <h3 style={{color:"#92400e",margin:"0 0 8px",fontSize:15}}>📱 Full Tutor Tools in Termux</h3>
+        <p style={{fontSize:13,color:"#92400e",lineHeight:1.7}}>To upload materials, create tests, and schedule live classes — use the server running in Termux on your phone.</p>
+        <p style={{fontSize:13,color:"#92400e",marginTop:8,fontWeight:700}}>📱 WhatsApp: <strong>0772799672</strong></p>
       </div>
     </div>
   );
 }
 
-function AdminApp() {
-  const [an,setAn] = useState("home");
+/* ── ADMIN ────────────────────────────────────────── */
+function AdminApp(){
+  const [an,setAn]=useState("home");
   const nav=[{id:"home",icon:"🏠",label:"Dashboard"},{id:"profile",icon:"👤",label:"Profile"}];
   return <Layout nav={nav} active={an} setActive={setAn}>{an==="profile"?<ProfilePage/>:<AdminDash/>}</Layout>;
 }
-function AdminDash() {
-  const {data:users} = useApiData("/users");
-  const {data:pays} = useApiData("/subscriptions/payments/all");
-  const pending = pays.filter(p=>p.status==="pending");
-  const rev = pays.filter(p=>p.status==="approved").reduce((a,b)=>a+(b.amount||0),0);
-  return (
+function AdminDash(){
+  const{data:users}=useApiData("/users");
+  const{data:pays}=useApiData("/subscriptions/payments/all");
+  const pnd=pays.filter(p=>p.status==="pending");
+  const rev=pays.filter(p=>p.status==="approved").reduce((a,b)=>a+(b.amount||0),0);
+  return(
     <div style={{paddingBottom:20}}>
-      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:22,padding:"24px",marginBottom:18,color:"#fff"}}>
-        <div style={{fontSize:36,marginBottom:10}}>🏫</div>
-        <h2 style={{margin:"0 0 4px",fontSize:22,fontFamily:"'Playfair Display',serif"}}>Admin Dashboard</h2>
+      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:22,padding:"28px 24px",marginBottom:18,color:"#fff"}}>
+        <div style={{fontSize:40,marginBottom:12}}>🏫</div>
+        <h2 style={{margin:"0 0 4px",fontSize:22}}>Admin Dashboard</h2>
         <p style={{margin:0,opacity:.85,fontSize:13}}>Peace Mindset Private School · KEN MEDIA CREATIVE 🇿🇲</p>
-        {pending.length>0&&<div style={{marginTop:12,background:"rgba(220,38,38,0.3)",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700}}>🔴 {pending.length} payment{pending.length!==1?"s":""} awaiting approval!</div>}
+        {pnd.length>0&&<div style={{marginTop:14,background:"rgba(220,38,38,0.3)",borderRadius:10,padding:"11px 14px",fontSize:14,fontWeight:700}}>🔴 {pnd.length} payment{pnd.length!==1?"s":""} awaiting approval!</div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10,marginBottom:18}}>
-        {[["🎓","Students",users.filter(u=>u.role==="student").length,C.g],["📚","Tutors",users.filter(u=>u.role==="tutor").length,C.gold],["💳","Pending",pending.length,pending.length>0?C.d:C.ok],["💰","Revenue",`ZMW ${rev}`,C.ok]].map(([ic,lb,vl,co])=>(
+        {[["🎓","Students",users.filter(u=>u.role==="student").length,C.g],["📚","Tutors",users.filter(u=>u.role==="tutor").length,C.gold],["💳","Pending",pnd.length,pnd.length>0?C.d:C.ok],["💰","Revenue",`ZMW ${rev}`,C.ok]].map(([ic,lb,vl,co])=>(
           <div key={lb} style={{background:"#fff",borderRadius:14,padding:"14px 10px",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.06)"}}>
             <div style={{fontSize:22}}>{ic}</div><div style={{fontSize:18,fontWeight:700,color:co,marginTop:4,fontFamily:"'Playfair Display',serif"}}>{vl}</div><div style={{fontSize:10,color:C.gr,marginTop:2}}>{lb}</div>
           </div>
         ))}
       </div>
-      {pending.length>0&&(
-        <div style={CARD}>
+      {pnd.length>0&&(
+        <div style={CD}>
           <h3 style={{color:C.d,margin:"0 0 14px",fontSize:15}}>🔴 Pending Payments</h3>
-          {pending.slice(0,5).map(p=>(
+          {pnd.slice(0,5).map(p=>(
             <div key={p._id} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${C.grl}`,gap:8}}>
               <div><div style={{fontWeight:600,fontSize:14}}>{p.student_id?.name||"Student"}</div><div style={{fontSize:11,color:C.gr}}>{sn(p.subject_id)} · ZMW {p.amount} · {p.method}</div></div>
-              <span style={{background:C.wal,color:C.wa,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600,flexShrink:0}}>⏳ Pending</span>
+              <span style={{background:C.wal,color:C.wa,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>⏳</span>
             </div>
           ))}
-          <div style={{marginTop:12,fontSize:13,color:C.grd,fontWeight:600}}>→ To approve payments, use the Termux server running on your phone. WhatsApp 0772799672</div>
+          <div style={{marginTop:12,fontSize:13,color:C.grd,fontWeight:600}}>→ Approve payments in Termux. WhatsApp 0772799672</div>
         </div>
       )}
     </div>
   );
 }
 
-// ── MAIN APP ───────────────────────────────────────────
-function AppInner() {
-  const {profile,loading} = useAuth();
-  if (loading) return (
-    <div style={{height:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:`linear-gradient(160deg,${C.gd},#085e35,${C.gl})`}}>
-      <div style={{width:88,height:88,borderRadius:26,background:`linear-gradient(135deg,#8a6200,${C.gold},#f0b429)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:22,boxShadow:"0 12px 40px rgba(201,147,10,0.5)",animation:"breathe 2s ease-in-out infinite"}}>🎓</div>
-      <div style={{color:"#fff",fontSize:20,fontWeight:800,marginBottom:5,fontFamily:"'Playfair Display',serif",letterSpacing:"1px"}}>PEACE MINDSET</div>
-      <div style={{color:"rgba(255,255,255,0.7)",fontSize:12,letterSpacing:"2px",textTransform:"uppercase",marginBottom:30}}>Private School · GCE Online · Zambia 🇿🇲</div>
-      <div style={{width:40,height:40,border:"3px solid rgba(255,255,255,0.2)",borderTop:"3px solid #fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-      <div style={{color:"rgba(255,255,255,0.5)",fontSize:12,marginTop:20}}>Connecting to server...</div>
+/* ── MAIN ─────────────────────────────────────────── */
+function AppInner(){
+  const{profile,loading}=useAuth();
+  if(loading)return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:`linear-gradient(160deg,${C.gd},#085e35,${C.gl})`}}>
+      <div style={{width:92,height:92,borderRadius:28,background:`linear-gradient(135deg,#6b4a00,${C.gold},#f0b429)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,marginBottom:24,boxShadow:"0 14px 48px rgba(201,147,10,0.5)",animation:"breathe 2s ease-in-out infinite"}}>🎓</div>
+      <div style={{color:"#fff",fontSize:22,fontWeight:800,marginBottom:6,fontFamily:"'Playfair Display',serif",letterSpacing:"1px"}}>PEACE MINDSET</div>
+      <div style={{color:"rgba(255,255,255,0.7)",fontSize:12,letterSpacing:"2.5px",textTransform:"uppercase",marginBottom:32}}>PRIVATE SCHOOL · GCE ONLINE · ZAMBIA</div>
+      <div style={{width:42,height:42,border:"3px solid rgba(255,255,255,0.25)",borderTop:"3px solid #fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <div style={{color:"rgba(255,255,255,0.5)",fontSize:12,marginTop:22}}>Connecting... (first load may take ~30 seconds)</div>
     </div>
   );
-  if (!profile) return <AuthScreen/>;
-  if (profile.role==="admin") return <AdminApp/>;
-  if (profile.role==="tutor") {
-    if (!profile.approved) return (
-      <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(160deg,${C.gd},${C.g})`,padding:16}}>
-        <div style={{background:"#fff",borderRadius:24,padding:"44px 36px",textAlign:"center",maxWidth:380,boxShadow:"0 24px 80px rgba(0,0,0,0.3)"}}>
-          <div style={{fontSize:68,marginBottom:16}}>⏳</div>
-          <h2 style={{color:C.gd,marginBottom:12,fontSize:22}}>Awaiting Admin Approval</h2>
-          <p style={{color:C.gr,fontSize:14,lineHeight:1.7}}>Your tutor account is being reviewed. You'll be notified once approved.</p>
-          <div style={{background:C.gp,borderRadius:12,padding:"14px 16px",marginTop:20}}>
-            <p style={{color:C.gd,fontSize:14,margin:0,fontWeight:600}}>📱 WhatsApp admin now:</p>
-            <p style={{color:C.g,fontSize:18,margin:"6px 0 0",fontWeight:800}}>0772799672</p>
+  if(!profile)return <AuthScreen/>;
+  if(profile.role==="admin")return <AdminApp/>;
+  if(profile.role==="tutor"){
+    if(!profile.approved)return(
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(160deg,${C.gd},${C.g})`,padding:16}}>
+        <div style={{background:"#fff",borderRadius:24,padding:"44px 32px",textAlign:"center",maxWidth:380,boxShadow:"0 24px 80px rgba(0,0,0,0.3)"}}>
+          <div style={{fontSize:72,marginBottom:18}}>⏳</div>
+          <h2 style={{color:C.gd,marginBottom:12,fontSize:22}}>Awaiting Approval</h2>
+          <p style={{color:C.gr,fontSize:14,lineHeight:1.7}}>Your tutor account is being reviewed by the admin.</p>
+          <div style={{background:C.gp,borderRadius:14,padding:"16px",marginTop:20}}>
+            <p style={{color:C.gd,fontSize:14,margin:0,fontWeight:700}}>📱 WhatsApp admin for fast approval:</p>
+            <p style={{color:C.g,fontSize:22,margin:"8px 0 0",fontWeight:800}}>0772799672</p>
             <p style={{color:C.gr,fontSize:12,margin:"4px 0 0"}}>Tell them your name and email!</p>
           </div>
         </div>
@@ -1103,8 +1106,8 @@ function AppInner() {
   return <StudentApp/>;
 }
 
-function App() {
-  return (
+function App(){
+  return(
     <AuthProvider>
       <ToastProvider>
         <AppInner/>
