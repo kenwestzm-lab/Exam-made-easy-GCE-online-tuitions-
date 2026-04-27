@@ -1,8 +1,7 @@
 {
   "name": "peace-mindset-school",
-  "version": "1.0.0",
-  "description": "Peace Mindset Private School GCE Online - Zambia",
-  "scripts": {
-    "start": "node server/server.js"
-  }
+  "version": "2.0.0",
+  "description": "Peace Mindset Private School GCE Online Zambia",
+  "engines": { "node": ">=18.0.0" },
+  "scripts": { "start": "node server/server.js" }
 }

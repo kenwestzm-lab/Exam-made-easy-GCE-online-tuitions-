@@ -1,15 +1,25 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const auth = async (req,res,next) => {
+const { User } = require('../models');
+const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ','');
-    if (!token) return res.status(401).json({error:'No token'});
-    const d = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(d.id).select('-password');
-    if (!user) return res.status(401).json({error:'Not found'});
+    const h = req.headers.authorization;
+    if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'Please login to continue' });
+    const decoded = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET || 'peacemindset_secret');
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).json({ error: 'User not found. Please login again.' });
     req.user = user; next();
-  } catch { res.status(401).json({error:'Invalid token'}); }
+  } catch(e) {
+    if (e.name === 'TokenExpiredError') return res.status(401).json({ error: 'Session expired. Please login again.' });
+    return res.status(401).json({ error: 'Invalid session. Please login again.' });
+  }
 };
-const adminOnly = (req,res,next) => req.user?.role==='admin'?next():res.status(403).json({error:'Admin only'});
-const tutorOrAdmin = (req,res,next) => ['admin','tutor'].includes(req.user?.role)?next():res.status(403).json({error:'Tutor/Admin only'});
-module.exports = {auth, adminOnly, tutorOrAdmin};
+const adminOnly = (req, res, next) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+};
+const tutorOrAdmin = (req, res, next) => {
+  if (!['tutor','admin'].includes(req.user.role)) return res.status(403).json({ error: 'Tutor or Admin access required' });
+  if (req.user.role === 'tutor' && !req.user.approved) return res.status(403).json({ error: 'Your tutor account is pending admin approval. WhatsApp 0772799672' });
+  next();
+};
+module.exports = { auth, adminOnly, tutorOrAdmin };
