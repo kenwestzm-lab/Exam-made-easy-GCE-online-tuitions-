@@ -1,7 +1,12 @@
 {
   "name": "peace-mindset-server",
-  "version": "1.0.0",
-  "scripts": {"start": "node server.js"},
+  "version": "2.0.0",
+  "description": "Peace Mindset Private School API",
+  "main": "server.js",
+  "engines": { "node": ">=18.0.0" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
