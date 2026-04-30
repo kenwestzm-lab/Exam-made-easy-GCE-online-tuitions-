@@ -141,12 +141,7 @@ const speak = (text, charKey='ken', customRate, onEnd) => {
   window.speechSynthesis.cancel();
   const ch = AI_CHARS[charKey];
   
-  // Add natural pauses — insert SSML-like pauses via punctuation
-  // This makes speech sound more natural and human-like
-  let naturalText = text
-    .replace(/([.!?])\s+/g, '$1  ')   // pause after sentences
-    .replace(/([,;:])\s+/g, '$1 ')     // slight pause after commas
-    .replace(/(Now|Next|First|Then|Finally|Also|Remember|class|students)/g, '$1');
+  let naturalText = text;
   
   const utt = new SpeechSynthesisUtterance(naturalText);
   
