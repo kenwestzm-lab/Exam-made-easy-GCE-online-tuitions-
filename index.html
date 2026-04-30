@@ -97,23 +97,83 @@ const IN={width:'100%',padding:'14px 16px',borderRadius:12,border:'2px solid #e5
 const CD={background:'#fff',borderRadius:18,boxShadow:'0 4px 24px rgba(6,77,44,0.09)',padding:20,marginBottom:14,border:'1px solid #eef3f1'};
 const LB={fontSize:13,fontWeight:600,color:C.grd,marginBottom:7,display:'block'};
 
-// TTS helper
+// ── NATURAL ZAMBIAN VOICE TTS ─────────────────────────────────
+// Loads voices and picks best natural human-sounding voice
+let _voicesLoaded = false;
+let _voices = [];
+const loadVoices = () => {
+  _voices = window.speechSynthesis.getVoices();
+  if (_voices.length > 0) _voicesLoaded = true;
+};
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+const getBestVoice = (charKey) => {
+  if (!_voicesLoaded) loadVoices();
+  const vv = _voices;
+  const isKen = charKey !== 'msimbi';
+  
+  // Priority 1: Natural sounding African/Southern African voices
+  const africanVoices = vv.filter(v =>
+    v.lang.includes('en-ZA') || v.lang.includes('en-GB') ||
+    v.name.toLowerCase().includes('south africa') ||
+    v.name.toLowerCase().includes('zambia')
+  );
+  
+  // Priority 2: Natural male/female voices
+  const genderedVoices = vv.filter(v => {
+    const n = v.name.toLowerCase();
+    return isKen
+      ? (n.includes('male') || n.includes('david') || n.includes('mark') || n.includes('james') || n.includes('george') || n.includes('daniel') || n.includes('oliver'))
+      : (n.includes('female') || n.includes('zira') || n.includes('hazel') || n.includes('susan') || n.includes('kate') || n.includes('victoria') || n.includes('samantha') || n.includes('karen'));
+  });
+  
+  // Priority 3: English voices
+  const englishVoices = vv.filter(v => v.lang.startsWith('en'));
+  
+  return africanVoices[0] || genderedVoices[0] || englishVoices[0] || vv[0] || null;
+};
+
 const speak = (text, charKey='ken', customRate, onEnd) => {
-  if (!window.speechSynthesis) return;
+  if (!window.speechSynthesis || !text) return;
   window.speechSynthesis.cancel();
   const ch = AI_CHARS[charKey];
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate = customRate || ch.rate;
-  utt.pitch = ch.pitch;
-  utt.lang = 'en-GB';
-  const voices = window.speechSynthesis.getVoices();
-  const v = voices.find(v=>v.lang.startsWith('en')&&(charKey==='msimbi'?v.name.toLowerCase().includes('female')||v.name.includes('Zira')||v.name.includes('Hazel'):v.name.includes('David')||v.name.includes('Mark')||v.name.includes('George')))
-    || voices.find(v=>v.lang.startsWith('en')) || voices[0];
-  if (v) utt.voice = v;
+  
+  // Add natural pauses — insert SSML-like pauses via punctuation
+  // This makes speech sound more natural and human-like
+  let naturalText = text
+    .replace(/([.!?])\s+/g, '$1  ')   // pause after sentences
+    .replace(/([,;:])\s+/g, '$1 ')     // slight pause after commas
+    .replace(/(Now|Next|First|Then|Finally|Also|Remember|class|students)/g, '$1');
+  
+  const utt = new SpeechSynthesisUtterance(naturalText);
+  
+  // Natural Zambian English settings:
+  // Slightly slower than normal, warm pitch, clear pronunciation
+  utt.rate = customRate || (charKey === 'msimbi' ? 0.78 : 0.80); // natural teaching pace
+  utt.pitch = charKey === 'msimbi' ? 1.08 : 0.92;                // warm, natural pitch
+  utt.volume = 1.0;
+  utt.lang = 'en-GB'; // closest to Southern African English
+  
+  const voice = getBestVoice(charKey);
+  if (voice) utt.voice = voice;
+  
+  // Natural delivery: slight variation
+  utt.onstart = () => {};
   if (onEnd) utt.onend = onEnd;
-  window.speechSynthesis.speak(utt);
+  utt.onerror = (e) => { if (onEnd && e.error !== 'interrupted') onEnd(); };
+  
+  // Small delay before speaking — feels more natural
+  setTimeout(() => {
+    try { window.speechSynthesis.speak(utt); } catch(e) { if(onEnd) onEnd(); }
+  }, 150);
 };
-const stopSpeaking = () => { try { window.speechSynthesis?.cancel(); } catch(e){} };
+
+const stopSpeaking = () => { 
+  try { window.speechSynthesis?.cancel(); } catch(e){} 
+};
 
 // ── AUTH CONTEXT ───────────────────────────────────────────────
 const AuthCtx = createContext(null);
@@ -270,7 +330,7 @@ function AuthScreen() {
             <label style={LB}>🔑 Password</label>
             <input ref={passRef} type="password" placeholder="Enter your password" style={{...IN,marginBottom:24}} autoComplete="current-password"/>
             <button type="submit" disabled={busy} style={{...BT(),width:'100%',fontSize:16,padding:'17px',opacity:busy?.7:1,marginBottom:18}}>
-              {busy?'⏳ Signing in... (wait ~30s first time)':'🎓 Sign In to Learn'}
+              {busy?'⏳ Signing in...':'🎓 Sign In to Learn'}
             </button>
             <div style={{textAlign:'center',padding:'14px',background:'#f8faff',borderRadius:14,border:'1px solid #e8f0fe'}}>
               <div style={{fontSize:13,color:C.gr,lineHeight:1.8}}>
@@ -370,6 +430,9 @@ function Layout({nav,active,setActive,children}) {
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div style={{padding:'10px 14px',background:`linear-gradient(135deg,${C.gd},${C.g})`,display:'flex',alignItems:'center',gap:10,flexShrink:0,minHeight:54}}>
           <button type="button" onClick={()=>setMo(true)} style={{background:'rgba(255,255,255,0.2)',border:'none',borderRadius:10,width:38,height:38,cursor:'pointer',color:'#fff',fontSize:19,flexShrink:0}}>☰</button>
+          {active!==nav[0]?.id&&(
+            <button type="button" onClick={()=>setActive(nav[0].id)} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:10,width:34,height:34,cursor:'pointer',color:'#fff',fontSize:16,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          )}
           <div style={{flex:1,color:'#fff',fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:6}}>
             {nav.find(n=>n.id===active)?.icon} {nav.find(n=>n.id===active)?.label}
           </div>
@@ -407,7 +470,14 @@ function ProfilePage() {
   const uploadPic=async()=>{
     if(!avFile)return; setUpling(true);
     try{const fd=new FormData();fd.append('avatar',avFile);const d=await apiFetch('POST','/auth/avatar',null,tok(),fd);setProfile(d.user);add({title:'✅ Picture uploaded!',icon:'🖼️',type:'i'});setAvFile(null);}
-    catch(e){add({title:'Upload failed',body:e.message,icon:'❌',type:'d'});}
+    catch(e){add({
+        title:'Upload failed', 
+        body: e.message.includes('cloud_name') 
+          ? 'Photo upload not yet configured. Please add Cloudinary keys in Render settings. Your other changes are saved!' 
+          : e.message,
+        icon:'⚠️',
+        type:'w'
+      });}
     finally{setUpling(false);}
   };
   return(
@@ -615,29 +685,63 @@ function AIClassRoom({classData,socket,onEnd}) {
     });
   };
 
-  // Start class
+  // ── AUTO-START CLASS ─────────────────────────────────────────
   useEffect(()=>{
     if(!classData)return;
-    const intro=`Good day class! ${classData?.lesson_topic?`Today we are going to learn about ${classData.lesson_topic}.`:''} Please pay attention. Let us begin.`;
-    setTimeout(()=>aiSpeak(intro),1000);
-    // Auto-read lesson script in chunks
-    if(classData?.lesson_script&&classData?.presenter_type==='ai'){
-      const chunks=classData.lesson_script.split('\n').filter(l=>l.trim());
-      let delay=3000;
-      chunks.forEach(chunk=>{
-        setTimeout(()=>{
-          if(!classEnded&&chunk.trim()){ aiSpeak(chunk.trim()); }
-        },delay);
-        delay+=Math.max(3000,chunk.split(' ').length*800);
-      });
-      // End class after script
-      setTimeout(()=>{
-        if(!classEnded){
-          aiSpeak('That is all for today class. Well done everyone. Class is now over.');
-          setTimeout(()=>endClass(),5000);
+    
+    // Get lesson intro from AI if ANTHROPIC_API_KEY configured, else use default
+    const startLesson = async () => {
+      let intro = classData?.lesson_topic
+        ? `Good day class! Today we are going to learn about ${classData.lesson_topic}. Please pay attention and follow along.`
+        : `Good day everyone! Welcome to today's lesson. Let us begin.`;
+      
+      // Try to get AI-generated intro
+      try {
+        const t = localStorage.getItem('pms_t');
+        if (t) {
+          const r = await apiFetch('POST', '/ai/lesson-intro', {
+            subject: sn(classData.subject_id),
+            topic: classData.lesson_topic || '',
+            character: classData.ai_character || 'ken',
+            lesson_script: classData.lesson_script || ''
+          }, t);
+          if (r.intro) intro = r.intro;
         }
-      },delay+2000);
-    }
+      } catch(e) { console.log('Using default intro'); }
+      
+      aiSpeak(intro);
+      
+      // Auto-read lesson script in chunks after intro
+      if(classData?.lesson_script && classData?.presenter_type==='ai'){
+        const chunks = classData.lesson_script
+          .split(/[.!?\n]/)
+          .map(c => c.trim())
+          .filter(c => c.length > 10);
+        
+        let delay = 4000 + intro.split(' ').length * 600;
+        chunks.forEach((chunk, i) => {
+          setTimeout(()=>{
+            if(!classEnded && chunk.trim()){
+              aiSpeak(chunk.trim() + '.');
+            }
+          }, delay);
+          // Time per chunk based on word count - natural pace
+          delay += Math.max(4000, chunk.split(' ').length * 700);
+        });
+        
+        // End class gracefully after all chunks
+        setTimeout(()=>{
+          if(!classEnded){
+            aiSpeak('That is all for today class. You have done very well. Class is now over. Well done everyone!');
+            setTimeout(()=>endClass(), 6000);
+          }
+        }, delay + 3000);
+      }
+    };
+    
+    // Small delay before starting - feels natural
+    const timer = setTimeout(startLesson, 1500);
+    return () => clearTimeout(timer);
   },[classData?._id]);
 
   // Listen for socket events
@@ -987,7 +1091,7 @@ function SubscribePage() {
       <p style={{color:C.gr,fontSize:13,marginBottom:16}}>ZMW 85 per subject per month</p>
       <div style={{...CD,background:C.gp,border:'1px solid #c8e8d8',marginBottom:14}}>
         <h3 style={{color:C.gd,margin:'0 0 10px',fontSize:14}}>💳 Payment Numbers</h3>
-        {[{lb:'📱 MTN Mobile Money',num:'0761468402'},{lb:'📱 Airtel Money',num:'0570109056'},{lb:'🏦 Bank (Absa)',num:'Visit school'},{lb:'💵 Cash',num:'School office'}].map(p=>(
+        {[{lb:'📱 MTN Mobile Money',num:'0761468402'},{lb:'📱 Airtel Money',num:'0570109056'},{lb:'🏦 Access Bank',num:'0136496126029'},{lb:'💵 Cash',num:'School office'}].map(p=>(
           <div key={p.lb} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #c8e8d8'}}>
             <span style={{fontSize:13,fontWeight:600,color:C.gd}}>{p.lb}</span>
             <span style={{fontSize:13,fontWeight:700,color:C.g}}>{p.num}</span>
@@ -1021,7 +1125,7 @@ function SubscribePage() {
           </div>
           <div style={{marginBottom:12}}><label style={LB}>💳 Payment Method</label>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              {[{id:'mtn',lb:'📱 MTN MoMo',nm:'0761468402'},{id:'airtel',lb:'📱 Airtel',nm:'0570109056'},{id:'bank',lb:'🏦 Bank',nm:'Absa'},{id:'cash',lb:'💵 Cash',nm:'Office'}].map(pm=>(
+              {[{id:'mtn',lb:'📱 MTN MoMo',nm:'0761468402'},{id:'airtel',lb:'📱 Airtel',nm:'0570109056'},{id:'bank',lb:'🏦 Access Bank',nm:'0136496126029'},{id:'cash',lb:'💵 Cash',nm:'Office'}].map(pm=>(
                 <div key={pm.id} onClick={()=>setMethod(pm.id)} style={{borderRadius:12,padding:'10px 12px',border:`2px solid ${method===pm.id?C.g:C.grl}`,cursor:'pointer',background:method===pm.id?C.gp:'#fff',transition:'all 0.15s'}}>
                   <div style={{fontSize:13,fontWeight:700}}>{pm.lb}</div><div style={{fontSize:11,color:C.gr}}>{pm.nm}</div>
                 </div>
@@ -1630,7 +1734,7 @@ function AppInner() {
       <div style={{color:'#fff',fontSize:20,fontWeight:800,marginBottom:5,fontFamily:"'Playfair Display',serif",letterSpacing:'1px'}}>PEACE MINDSET</div>
       <div style={{color:'rgba(255,255,255,0.7)',fontSize:11,letterSpacing:'2.5px',textTransform:'uppercase',marginBottom:30}}>PRIVATE SCHOOL · GCE ONLINE · ZAMBIA</div>
       <div style={{width:40,height:40,border:'3px solid rgba(255,255,255,0.25)',borderTop:'3px solid #fff',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
-      <div style={{color:'rgba(255,255,255,0.5)',fontSize:12,marginTop:22}}>Connecting to server... (first load may take 30 seconds)</div>
+      <div style={{color:'rgba(255,255,255,0.5)',fontSize:12,marginTop:22}}>Connecting to server... </div>
     </div>
   );
   if(!profile)return <AuthScreen/>;
