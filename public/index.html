@@ -1223,7 +1223,7 @@ function Layout({
       display: 'flex',
       flexShrink: 0
     }
-  }, nav.slice(0, 5).map(item => {
+  }, nav.slice(0, 4).map(item => {
     const on = active === item.id;
     return /*#__PURE__*/React.createElement("div", {
       key: item.id,
@@ -1262,7 +1262,40 @@ function Layout({
         fontSize: 9
       }
     }, item.badge));
-  }))), /*#__PURE__*/React.createElement("style", null, '@media(min-width:768px){#sidebar{display:block!important}}'));
+  }), /*#__PURE__*/React.createElement("div", {
+    onClick: () => setMo(true),
+    style: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '7px 2px 9px',
+      cursor: 'pointer',
+      color: C.gr
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 21
+    }
+  }, "\u2022\u2022\u2022"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 9,
+      fontWeight: 400,
+      marginTop: 2
+    }
+  }, "More"), nav.slice(4).some(n => n.badge > 0) && /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: 'absolute',
+      top: 4,
+      right: '50%',
+      transform: 'translateX(9px)',
+      background: C.d,
+      color: '#fff',
+      borderRadius: 10,
+      padding: '1px 5px',
+      fontSize: 9
+    }
+  }, nav.slice(4).reduce((a, n) => a + (n.badge || 0), 0))))), /*#__PURE__*/React.createElement("style", null, '@media(min-width:768px){#sidebar{display:block!important}}'));
 }
 function SpeakingWaves({
   color = '#4ade80'
@@ -2964,11 +2997,12 @@ function QuestionsPage() {
         await apiFetch('POST', '/messages/group', null, tok(), fd2);
       }
     } catch (e) {
+      const msg = e.message.includes('credit') || e.message.includes('balance') ? 'Add Anthropic credits at console.anthropic.com/settings/billing (minimum $5). Human tutors can still reply!' : e.message;
       add({
-        title: 'Error',
-        body: e.message,
-        icon: '❌',
-        type: 'd'
+        title: 'Note',
+        body: msg,
+        icon: 'ℹ️',
+        type: 'w'
       });
     } finally {
       setAsking(false);
@@ -3073,7 +3107,7 @@ function QuestionsPage() {
       color: '#92400e',
       lineHeight: 1.7
     }
-  }, "1. Type your academic question above", /*#__PURE__*/React.createElement("br", null), "2. AI tutor (Teacher Ken or Mis M'simbi) answers instantly", /*#__PURE__*/React.createElement("br", null), "3. Human tutors can also reply with detailed answers", /*#__PURE__*/React.createElement("br", null), "4. Questions visible to all students in that subject")));
+  }, "1. Type your academic question above", /*#__PURE__*/React.createElement("br", null), "2. Human tutors can reply with detailed answers", /*#__PURE__*/React.createElement("br", null), "3. Questions visible to all students in that subject")));
 }
 function ProfilePage() {
   const {
@@ -5235,7 +5269,7 @@ function TutorMaterials() {
     } catch (e) {
       add({
         title: 'Upload failed',
-        body: e.message.includes('cloud') ? 'Add Cloudinary keys in Render to enable file uploads' : e.message,
+        body: e.message.includes('cloud') || e.message.includes('disabled') ? 'File uploads need Cloudinary setup. Free at cloudinary.com → add keys to Render environment' : e.message,
         icon: '❌',
         type: 'd'
       });
