@@ -5212,6 +5212,959 @@ function ScheduleClass({
     disabled: saving
   }, saving ? '⏳ Scheduling...' : '🎥 Schedule Class')));
 }
+
+// TUTOR - Create Test
+function TutorCreateTest() {
+  const {
+    add
+  } = useToast();
+  const {
+    data: tests,
+    refetch
+  } = useApiData('/tests');
+  const {
+    data: questions,
+    setData: setQs
+  } = useApiData('/tests/questions');
+  const [form, setForm] = useState({
+    title: '',
+    subject_id: '',
+    duration: '30'
+  });
+  const [selTest, setSelTest] = useState(null);
+  const [qForm, setQForm] = useState({
+    type: 'mcq',
+    question: '',
+    options: ['A. ', 'B. ', 'C. ', 'D. '],
+    answer: '',
+    explanation: ''
+  });
+  const [busy, setBusy] = useState(false);
+  const [aiGen, setAiGen] = useState(false);
+  const set = (k, v) => setForm(p => ({
+    ...p,
+    [k]: v
+  }));
+  const createTest = async () => {
+    if (!form.title || !form.subject_id) {
+      add({
+        title: 'Fill title and subject',
+        icon: '⚠️',
+        type: 'w'
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await apiFetch('POST', '/tests', {
+        ...form,
+        subject_id: Number(form.subject_id),
+        duration: Number(form.duration)
+      }, tok());
+      refetch();
+      setSelTest(d);
+      add({
+        title: '✅ Test created!',
+        body: 'Now add questions below',
+        icon: '✏️',
+        type: 'i'
+      });
+    } catch (e) {
+      add({
+        title: 'Error',
+        body: e.message,
+        icon: '❌',
+        type: 'd'
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const addQuestion = async () => {
+    if (!qForm.question || !qForm.answer || !selTest) {
+      add({
+        title: 'Fill question and answer',
+        icon: '⚠️',
+        type: 'w'
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await apiFetch('POST', `/tests/${selTest._id}/questions`, qForm, tok());
+      setQs(p => [...p, d]);
+      setQForm({
+        type: 'mcq',
+        question: '',
+        options: ['A. ', 'B. ', 'C. ', 'D. '],
+        answer: '',
+        explanation: ''
+      });
+      add({
+        title: '✅ Question added!',
+        icon: '➕',
+        type: 'i'
+      });
+    } catch (e) {
+      add({
+        title: 'Error',
+        body: e.message,
+        icon: '❌',
+        type: 'd'
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const delTest = async id => {
+    if (!confirm('Delete test and all questions?')) return;
+    try {
+      await apiFetch('DELETE', `/tests/${id}`, null, tok());
+      refetch();
+      if (selTest?._id === id) setSelTest(null);
+      add({
+        title: 'Deleted',
+        icon: '🗑️',
+        type: 'w'
+      });
+    } catch (e) {
+      add({
+        title: 'Error',
+        body: e.message,
+        icon: '❌',
+        type: 'd'
+      });
+    }
+  };
+  const genWithAI = async () => {
+    if (!selTest) {
+      add({
+        title: 'Create a test first',
+        icon: '⚠️',
+        type: 'w'
+      });
+      return;
+    }
+    setAiGen(true);
+    try {
+      const d = await apiFetch('POST', '/ai/generate-test', {
+        subject: sn(selTest.subject_id),
+        topic: selTest.title,
+        num_questions: 5,
+        difficulty: 'medium'
+      }, tok());
+      if (d.questions) {
+        for (const q of d.questions) {
+          await apiFetch('POST', `/tests/${selTest._id}/questions`, q, tok());
+        }
+        const qs = await apiFetch('GET', '/tests/questions', null, tok());
+        setQs(Array.isArray(qs) ? qs : qs);
+        add({
+          title: `✅ ${d.questions.length} AI questions added!`,
+          icon: '🤖',
+          type: 'i'
+        });
+      }
+    } catch (e) {
+      add({
+        title: 'AI note',
+        body: e.message.includes('credit') || e.message.includes('GEMINI') ? 'Add GEMINI_API_KEY in Render to generate AI questions' : e.message,
+        icon: 'ℹ️',
+        type: 'w'
+      });
+    } finally {
+      setAiGen(false);
+    }
+  };
+  const testQs = selTest ? questions.filter(q => q.test_id === selTest._id) : [];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 680,
+      paddingBottom: 28
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      color: C.gd,
+      marginBottom: 13,
+      fontSize: 19
+    }
+  }, "\u270F\uFE0F Create Tests"), !selTest ? /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 11,
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Subject *"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...IN,
+      appearance: 'none'
+    },
+    value: form.subject_id,
+    onChange: e => set('subject_id', e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select..."), SUBJECTS.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: s.id
+  }, s.i, " ", s.n)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Duration (min)"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...IN,
+      appearance: 'none'
+    },
+    value: form.duration,
+    onChange: e => set('duration', e.target.value)
+  }, ['15', '20', '30', '45', '60', '90'].map(d => /*#__PURE__*/React.createElement("option", {
+    key: d,
+    value: d
+  }, d, " min"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Test Title *"), /*#__PURE__*/React.createElement("input", {
+    style: IN,
+    placeholder: "e.g. Biology Chapter 3 Quiz",
+    value: form.title,
+    onChange: e => set('title', e.target.value)
+  })), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT(),
+      width: '100%',
+      justifyContent: 'center'
+    },
+    onClick: createTest,
+    disabled: busy
+  }, busy ? '⏳ Creating...' : '✏️ Create Test')) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...CD,
+      background: C.gp,
+      border: `1px solid ${C.gl}`,
+      marginBottom: 13
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15,
+      color: C.gd
+    }
+  }, selTest.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.gr
+    }
+  }, sn(selTest.subject_id), " \xB7 ", testQs.length, " questions \xB7 ", selTest.duration, "min")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setSelTest(null),
+    style: {
+      ...BT('gh', true),
+      fontSize: 12
+    }
+  }, "\u2190 Back")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('p', true),
+      fontSize: 12,
+      flex: 1,
+      justifyContent: 'center'
+    },
+    onClick: genWithAI,
+    disabled: aiGen
+  }, aiGen ? '🤖 Generating...' : '🤖 AI Generate 5 Qs'))), /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.gd,
+      margin: '0 0 13px',
+      fontSize: 14
+    }
+  }, "\u2795 Add Question"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Type"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 7
+    }
+  }, ['mcq', 'truefalse', 'short'].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    type: "button",
+    onClick: () => setQForm(p => ({
+      ...p,
+      type: t
+    })),
+    style: {
+      ...BT(qForm.type === t ? 'p' : 'gh', true),
+      fontSize: 12,
+      flex: 1,
+      justifyContent: 'center'
+    }
+  }, t === 'mcq' ? '📋 MCQ' : t === 'truefalse' ? '☑️ T/F' : '✏️ Short')))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Question *"), /*#__PURE__*/React.createElement("textarea", {
+    style: {
+      ...IN,
+      height: 70,
+      resize: 'vertical'
+    },
+    value: qForm.question,
+    onChange: e => setQForm(p => ({
+      ...p,
+      question: e.target.value
+    })),
+    placeholder: "Type your question here..."
+  })), qForm.type === 'mcq' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Options"), qForm.options.map((op, i) => /*#__PURE__*/React.createElement("input", {
+    key: i,
+    style: {
+      ...IN,
+      marginBottom: 7
+    },
+    value: op,
+    onChange: e => {
+      const o = [...qForm.options];
+      o[i] = e.target.value;
+      setQForm(p => ({
+        ...p,
+        options: o
+      }));
+    },
+    placeholder: `Option ${String.fromCharCode(65 + i)}...`
+  }))), qForm.type === 'truefalse' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Correct Answer"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 7
+    }
+  }, ['true', 'false'].map(v => /*#__PURE__*/React.createElement("button", {
+    key: v,
+    type: "button",
+    onClick: () => setQForm(p => ({
+      ...p,
+      answer: v
+    })),
+    style: {
+      ...BT(qForm.answer === v ? 'p' : 'gh', true),
+      flex: 1,
+      justifyContent: 'center',
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, v === 'true' ? '✅ True' : '❌ False')))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Correct Answer *"), /*#__PURE__*/React.createElement("input", {
+    style: IN,
+    value: qForm.answer,
+    onChange: e => setQForm(p => ({
+      ...p,
+      answer: e.target.value
+    })),
+    placeholder: qForm.type === 'mcq' ? 'e.g. A. Photosynthesis' : 'e.g. true or the correct answer'
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 13
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Explanation (optional)"), /*#__PURE__*/React.createElement("input", {
+    style: IN,
+    value: qForm.explanation,
+    onChange: e => setQForm(p => ({
+      ...p,
+      explanation: e.target.value
+    })),
+    placeholder: "Why this is the correct answer..."
+  })), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT(),
+      width: '100%',
+      justifyContent: 'center'
+    },
+    onClick: addQuestion,
+    disabled: busy
+  }, busy ? '⏳ Adding...' : '➕ Add Question')), testQs.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.gd,
+      margin: '0 0 11px',
+      fontSize: 14
+    }
+  }, "Questions (", testQs.length, ")"), testQs.map((q, i) => /*#__PURE__*/React.createElement("div", {
+    key: q._id,
+    style: {
+      padding: '9px 0',
+      borderBottom: `1px solid ${C.grl}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 13
+    }
+  }, "Q", i + 1, ". ", q.question), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.gr,
+      marginTop: 3
+    }
+  }, "Answer: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: C.ok
+    }
+  }, q.answer), " \xB7 ", q.type))))), tests.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.gd,
+      margin: '0 0 12px',
+      fontSize: 14
+    }
+  }, "My Tests (", tests.length, ")"), tests.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t._id,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '9px 0',
+      borderBottom: `1px solid ${C.grl}`,
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 14
+    }
+  }, t.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.gr
+    }
+  }, sn(t.subject_id), " \xB7 ", questions.filter(q => q.test_id === t._id).length, " questions \xB7 ", t.duration, "min")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 7
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('gh', true),
+      fontSize: 12
+    },
+    onClick: () => setSelTest(t)
+  }, "Edit"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('d', true),
+      fontSize: 12
+    },
+    onClick: () => delTest(t._id)
+  }, "\uD83D\uDDD1\uFE0F"))))));
+}
+
+// TUTOR - Grade Submissions
+function TutorGrade() {
+  const {
+    add
+  } = useToast();
+  const {
+    data: subs,
+    setData
+  } = useApiData('/assignments/submissions');
+  const [sel, setSel] = useState(null);
+  const gradeRef = useRef();
+  const feedRef = useRef();
+  const [busy, setBusy] = useState(false);
+  const grade = async () => {
+    if (!sel || !gradeRef.current?.value) {
+      add({
+        title: 'Enter a grade',
+        icon: '⚠️',
+        type: 'w'
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await apiFetch('PUT', `/assignments/submissions/${sel._id}/grade`, {
+        grade: gradeRef.current.value,
+        marks: Number(gradeRef.current.value),
+        feedback: feedRef.current?.value?.trim() || ''
+      }, tok());
+      setData(p => p.map(s => s._id === sel._id ? {
+        ...s,
+        ...d
+      } : s));
+      setSel(null);
+      add({
+        title: '✅ Graded!',
+        icon: '✅',
+        type: 'i'
+      });
+    } catch (e) {
+      add({
+        title: 'Error',
+        body: e.message,
+        icon: '❌',
+        type: 'd'
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pending = subs.filter(s => s.status === 'submitted');
+  const graded = subs.filter(s => s.status === 'graded');
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 640,
+      paddingBottom: 28
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      color: C.gd,
+      marginBottom: 13,
+      fontSize: 19
+    }
+  }, "\uD83D\uDCCB Grade Submissions"), pending.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.wal,
+      border: `1px solid ${C.wa}`,
+      borderRadius: 12,
+      padding: '10px 14px',
+      marginBottom: 13,
+      fontSize: 13,
+      color: C.wa,
+      fontWeight: 600
+    }
+  }, "\u23F3 ", pending.length, " submission", pending.length !== 1 ? 's' : '', " waiting to be graded"), sel ? /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15,
+      marginBottom: 4
+    }
+  }, sel.assignment_id?.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.gr,
+      marginBottom: 10
+    }
+  }, sel.student_id?.name, " \xB7 ", fdate(sel.createdAt)), sel.content && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#f8f9fa',
+      borderRadius: 10,
+      padding: '12px',
+      marginBottom: 10,
+      fontSize: 14,
+      lineHeight: 1.7,
+      color: C.dk
+    }
+  }, sel.content), sel.file_url && /*#__PURE__*/React.createElement("a", {
+    href: sel.file_url,
+    target: "_blank",
+    rel: "noreferrer",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      background: C.gp,
+      borderRadius: 9,
+      padding: '7px 13px',
+      color: C.g,
+      fontWeight: 600,
+      textDecoration: 'none',
+      fontSize: 13,
+      marginBottom: 10
+    }
+  }, "\uD83D\uDCCE View file")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Grade / Mark (out of ", sel.assignment_id?.max_marks || 20, ") *"), /*#__PURE__*/React.createElement("input", {
+    ref: gradeRef,
+    style: IN,
+    type: "number",
+    placeholder: "e.g. 18",
+    min: "0",
+    max: sel.assignment_id?.max_marks || 20
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Feedback for student"), /*#__PURE__*/React.createElement("textarea", {
+    ref: feedRef,
+    style: {
+      ...IN,
+      height: 80,
+      resize: 'vertical'
+    },
+    placeholder: "Write helpful feedback for the student..."
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT(),
+      flex: 1,
+      justifyContent: 'center'
+    },
+    onClick: grade,
+    disabled: busy
+  }, busy ? '⏳ Saving...' : '✅ Submit Grade'), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('gh', true)
+    },
+    onClick: () => setSel(null)
+  }, "Cancel"))) : /*#__PURE__*/React.createElement("div", null, [...pending, ...graded].map(s => /*#__PURE__*/React.createElement("div", {
+    key: s._id,
+    style: {
+      ...CD,
+      marginBottom: 10,
+      borderLeft: `4px solid ${s.status === 'graded' ? C.ok : C.wa}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14
+    }
+  }, s.assignment_id?.title || 'Assignment'), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.gr,
+      marginTop: 2
+    }
+  }, "\uD83D\uDC64 ", s.student_id?.name, " \xB7 ", sn(s.assignment_id?.subject_id), " \xB7 ", fdate(s.createdAt)), s.content && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: C.grd,
+      marginTop: 7,
+      lineHeight: 1.5,
+      maxHeight: 55,
+      overflow: 'hidden'
+    }
+  }, s.content), s.grade && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.ok
+    }
+  }, "Grade: ", s.grade, "/20"), s.feedback && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.gr,
+      marginTop: 3
+    }
+  }, "\uD83D\uDCAC ", s.feedback)), /*#__PURE__*/React.createElement("div", null, s.status === 'submitted' && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('p', true),
+      fontSize: 12
+    },
+    onClick: () => setSel(s)
+  }, "Grade \u2192"), s.status === 'graded' && /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: C.okl,
+      color: C.ok,
+      borderRadius: 20,
+      padding: '4px 11px',
+      fontSize: 11,
+      fontWeight: 600
+    }
+  }, "\u2705 Graded"))))), subs.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: 38,
+      color: C.gr
+    }
+  }, "No submissions yet")));
+}
+
+// TUTOR - Create Assignment
+function TutorCreateAssignment() {
+  const {
+    add
+  } = useToast();
+  const {
+    data: asns,
+    refetch
+  } = useApiData('/assignments');
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    subject_id: '',
+    due_date: '',
+    max_marks: '20'
+  });
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setForm(p => ({
+    ...p,
+    [k]: v
+  }));
+  const create = async () => {
+    if (!form.title || !form.subject_id) {
+      add({
+        title: 'Fill title and subject',
+        icon: '⚠️',
+        type: 'w'
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      if (file) fd.append('file', file);
+      await apiFetch('POST', '/assignments', null, tok(), fd);
+      setForm({
+        title: '',
+        description: '',
+        subject_id: '',
+        due_date: '',
+        max_marks: '20'
+      });
+      setFile(null);
+      refetch();
+      add({
+        title: '✅ Assignment created!',
+        icon: '📝',
+        type: 'i'
+      });
+    } catch (e) {
+      add({
+        title: 'Error',
+        body: e.message,
+        icon: '❌',
+        type: 'd'
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const del = async id => {
+    if (!confirm('Delete?')) return;
+    try {
+      await apiFetch('DELETE', `/assignments/${id}`, null, tok());
+      refetch();
+    } catch (e) {}
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 640,
+      paddingBottom: 28
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      color: C.gd,
+      marginBottom: 13,
+      fontSize: 19
+    }
+  }, "\uD83D\uDCDD Create Assignment"), /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 11,
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Subject *"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...IN,
+      appearance: 'none'
+    },
+    value: form.subject_id,
+    onChange: e => set('subject_id', e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select..."), SUBJECTS.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: s.id
+  }, s.i, " ", s.n)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Max Marks"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...IN,
+      appearance: 'none'
+    },
+    value: form.max_marks,
+    onChange: e => set('max_marks', e.target.value)
+  }, ['10', '20', '30', '50', '100'].map(m => /*#__PURE__*/React.createElement("option", {
+    key: m,
+    value: m
+  }, m, " marks"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Title *"), /*#__PURE__*/React.createElement("input", {
+    style: IN,
+    placeholder: "e.g. Biology Lab Report \u2014 Cell Structure",
+    value: form.title,
+    onChange: e => set('title', e.target.value)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Instructions"), /*#__PURE__*/React.createElement("textarea", {
+    style: {
+      ...IN,
+      height: 90,
+      resize: 'vertical'
+    },
+    placeholder: "Write clear instructions for students...",
+    value: form.description,
+    onChange: e => set('description', e.target.value)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 11,
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Due Date (optional)"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    style: IN,
+    value: form.due_date,
+    onChange: e => set('due_date', e.target.value)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LB
+  }, "Attachment (optional)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    onChange: e => setFile(e.target.files[0]),
+    style: {
+      fontSize: 12
+    }
+  }), file && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.ok,
+      marginTop: 3
+    }
+  }, "\u2713 ", file.name)))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT(),
+      width: '100%',
+      justifyContent: 'center'
+    },
+    onClick: create,
+    disabled: busy
+  }, busy ? '⏳ Creating...' : '📝 Create Assignment')), asns.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: CD
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.gd,
+      margin: '0 0 12px',
+      fontSize: 14
+    }
+  }, "My Assignments (", asns.length, ")"), asns.map(a => /*#__PURE__*/React.createElement("div", {
+    key: a._id,
+    style: {
+      padding: '9px 0',
+      borderBottom: `1px solid ${C.grl}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 14
+    }
+  }, a.title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.gr
+    }
+  }, sn(a.subject_id), " \xB7 ", a.max_marks, " marks", a.due_date ? ' · Due: ' + a.due_date : '')), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT('d', true),
+      fontSize: 11,
+      padding: '5px 9px'
+    },
+    onClick: () => del(a._id)
+  }, "\uD83D\uDDD1\uFE0F")))));
+}
 function TutorMaterials() {
   const {
     profile
@@ -5478,6 +6431,18 @@ function TutorApp() {
     icon: '📤',
     label: 'Upload Materials'
   }, {
+    id: 'tests',
+    icon: '✏️',
+    label: 'Create Tests'
+  }, {
+    id: 'assignments',
+    icon: '📝',
+    label: 'Assignments'
+  }, {
+    id: 'grade',
+    icon: '📋',
+    label: 'Grade Work'
+  }, {
     id: 'live',
     icon: '📺',
     label: 'My Classes'
@@ -5563,34 +6528,37 @@ function TutorApp() {
   }, "Tutor Dashboard \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(3,1fr)',
-      gap: 10,
+      gridTemplateColumns: 'repeat(auto-fill,minmax(90px,1fr))',
+      gap: 9,
       marginBottom: 15
     }
-  }, [['📄', 'Materials', mats.filter(m => m.tutor_id === profile?._id).length, C.g], ['🎥', 'Classes', mine.length, '#0891b2'], ['🔴', 'Live', mine.filter(c => c.status === 'live').length, C.d]].map(([ic, lb, vl, co]) => /*#__PURE__*/React.createElement("div", {
+  }, [['📄', 'Materials', mats.filter(m => m.tutor_id === profile?._id).length, C.g, 'materials'], ['🎥', 'Classes', mine.length, '#0891b2', 'live'], ['🔴', 'Live', mine.filter(c => c.status === 'live').length, C.d, 'live'], ['📝', 'Assignments', null, '#7c3aed', 'assignments'], ['✏️', 'Tests', null, C.gold, 'tests'], ['📋', 'Grade', null, C.wa, 'grade']].map(([ic, lb, vl, co, pg]) => /*#__PURE__*/React.createElement("div", {
     key: lb,
+    onClick: () => setAn(pg),
     style: {
       background: '#fff',
       borderRadius: 13,
-      padding: '14px 8px',
+      padding: '12px 6px',
       textAlign: 'center',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+      cursor: 'pointer',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+      border: '1px solid #eef3f1'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 21
+      fontSize: 20
     }
-  }, ic), /*#__PURE__*/React.createElement("div", {
+  }, ic), vl !== null && /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 21,
+      fontSize: 18,
       fontWeight: 700,
       color: co,
-      marginTop: 3,
+      marginTop: 2,
       fontFamily: "'Playfair Display',serif"
     }
   }, vl), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
+      fontSize: 9,
       color: C.gr,
       marginTop: 2
     }
@@ -5715,6 +6683,9 @@ function TutorApp() {
       onDone: () => setAn('home')
     }),
     materials: /*#__PURE__*/React.createElement(TutorMaterials, null),
+    tests: /*#__PURE__*/React.createElement(TutorCreateTest, null),
+    assignments: /*#__PURE__*/React.createElement(TutorCreateAssignment, null),
+    grade: /*#__PURE__*/React.createElement(TutorGrade, null),
     live: /*#__PURE__*/React.createElement(LiveClassesPage, {
       subs: [],
       pays: []
