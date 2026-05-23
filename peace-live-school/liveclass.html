@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<title>
+Peace Mindset Live Class
+</title>
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f7ff;
+margin:0;
+}
+
+.topbar{
+background:#0047ff;
+color:white;
+padding:15px;
+font-size:20px;
+}
+
+#chatMessages{
+height:75vh;
+overflow-y:auto;
+padding:10px;
+}
+
+.bottom{
+display:flex;
+position:fixed;
+bottom:0;
+width:100%;
+background:white;
+padding:10px;
+}
+
+input{
+flex:1;
+padding:15px;
+}
+
+button{
+padding:15px;
+background:#0047ff;
+color:white;
+border:none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="topbar">
+🎓 Peace Mindset Live Class
+</div>
+
+<div id="chatMessages"></div>
+
+<div class="bottom">
+
+<input
+id="messageInput"
+placeholder="Type message..."
+>
+
+<button onclick="sendMessage()">
+Send
+</button>
+
+</div>
+
+<script type="module"
+src="./realtime.js"></script>
+
+</body>
+</html>

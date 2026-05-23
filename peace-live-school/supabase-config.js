@@ -1,0 +1,15 @@
+export const SUPABASE_URL =
+"https://https://ckfwokjxarnhoxrqugmi.supabase.co"
+
+export const SUPABASE_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZndva2p4YXJuaG94cnF1Z21pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzU0NDQsImV4cCI6MjA4Nzk1MTQ0NH0.Rd0_bkS6pZK-CCsvl6Mfr0NehgNX107oUQx3v1uRjPQ"
+export const SUPABASE_URL =
+"https://https://ckfwokjxarnhoxrqugmi.supabase.co";
+
+export const SUPABASE_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZndva2p4YXJuaG94cnF1Z21pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzU0NDQsImV4cCI6MjA4Nzk1MTQ0NH0.Rd0_bkS6pZK-CCsvl6Mfr0NehgNX107oUQx3v1uRjPQ";0
+export const SUPABASE_URL =
+"https://https://ckfwokjxarnhoxrqugmi.supabase.co";
+
+export const SUPABASE_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZndva2p4YXJuaG94cnF1Z21pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzU0NDQsImV4cCI6MjA4Nzk1MTQ0NH0.Rd0_bkS6pZK-CCsvl6Mfr0NehgNX107oUQx3v1uRjPQ";
