@@ -9,7 +9,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] },
-  pingTimeout: 60000, pingInterval: 25000
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 app.set('io', io);
@@ -17,15 +18,18 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Health check
-app.get('/api/health', (req,res) => res.json({
-  status: 'ok', server: 'Peace Mindset API v5',
-  gemini: !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY!=='placeholder' ? 'configured' : 'missing',
-  cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_CLOUD_NAME!=='' ? 'configured' : 'missing',
-  time: new Date().toISOString()
-}));
+// ── Health check ──────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    server: 'Peace Mindset API v5 - Live Classroom',
+    gemini: process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'placeholder' ? 'configured' : 'missing',
+    cloudinary: process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_CLOUD_NAME !== '' ? 'configured' : 'missing',
+    time: new Date().toISOString()
+  });
+});
 
-// Routes
+// ── Routes ────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
@@ -35,17 +39,14 @@ app.use('/api/tests', require('./routes/tests'));
 app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api', require('./routes/misc'));
 
-// Socket.IO
+// ── Socket.IO Real-time ───────────────────────────────
 io.on('connection', (socket) => {
-  console.log('Socket connected:', socket.id);
+  console.log('🔌 Connected:', socket.id);
 
   socket.on('join_class', ({ classId, user }) => {
     socket.join(`class_${classId}`);
-    if (user?._id) {
-      socket.join(`user_${user._id}`);
-      socket.to(`class_${classId}`).emit('student_joined', { user });
-      console.log(`${user.name} joined class ${classId}`);
-    }
+    if (user?._id) socket.join(`user_${user._id}`);
+    socket.to(`class_${classId}`).emit('student_joined', { user });
   });
 
   socket.on('leave_class', ({ classId, userId }) => {
@@ -65,12 +66,16 @@ io.on('connection', (socket) => {
     socket.to(`class_${data.classId}`).emit('hand_raise', data);
   });
 
-  socket.on('whiteboard_stroke', (data) => {
-    socket.to(`class_${data.classId}`).emit('whiteboard_stroke', data.stroke);
+  socket.on('whiteboard_stroke', ({ classId, stroke }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_stroke', stroke);
   });
 
-  socket.on('whiteboard_clear', (data) => {
-    socket.to(`class_${data.classId}`).emit('whiteboard_clear');
+  socket.on('whiteboard_clear', ({ classId }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_clear');
+  });
+
+  socket.on('whiteboard_full_sync', ({ classId, strokes }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_full_sync', { strokes });
   });
 
   socket.on('ai_speaking', (data) => {
@@ -81,47 +86,60 @@ io.on('connection', (socket) => {
     socket.to(`class_${data.classId}`).emit('ai_done_speaking', data);
   });
 
-  socket.on('class_status_change', (data) => {
-    io.to(`class_${data.classId}`).emit('class_status_change', data);
-  });
-
+  // Live Quiz
   socket.on('class_quiz', ({ classId, ...quiz }) => {
     socket.to(`class_${classId}`).emit('class_quiz', quiz);
-  });
-
-  socket.on('class_announcement', ({ classId, text, type }) => {
-    io.to(`class_${classId}`).emit('class_announcement', { text, type });
   });
 
   socket.on('student_quiz_done', ({ classId, ...data }) => {
     socket.to(`class_${classId}`).emit('student_quiz_done', data);
   });
 
+  // Announcements
+  socket.on('class_announcement', ({ classId, text, type }) => {
+    io.to(`class_${classId}`).emit('class_announcement', { text, type });
+  });
+
+  // AI correction broadcast
   socket.on('ai_correction', ({ classId, ...data }) => {
     io.to(`class_${classId}`).emit('ai_correction', data);
   });
 
+  // Class status
+  socket.on('class_status_change', (data) => {
+    io.to(`class_${data.classId}`).emit('class_status_change', data);
+  });
+
+  // Auto-start AI class at scheduled time
   socket.on('check_auto_start', async ({ classId }) => {
     try {
       const { LiveClass } = require('./models');
       const cls = await LiveClass.findById(classId);
-      if (cls?.auto_start && cls?.status === 'upcoming') {
-        const sched = new Date(cls.scheduled_date + 'T' + cls.scheduled_time + ':00');
+      if (cls?.auto_start && cls?.status === 'upcoming' && cls?.scheduled_date && cls?.scheduled_time) {
+        const sched = new Date(`${cls.scheduled_date}T${cls.scheduled_time}:00`);
         if (new Date() >= sched) {
           await LiveClass.findByIdAndUpdate(classId, { status: 'live' });
-          io.to(`class_${classId}`).emit('class_status_change', { status: 'live' });
-          console.log('Auto-started class:', cls.title);
+          io.to(`class_${classId}`).emit('class_status_change', { status: 'live', classId });
+          console.log('⏰ Auto-started:', cls.title);
         }
       }
     } catch(e) { console.error('Auto-start error:', e.message); }
   });
 
   socket.on('disconnect', () => {
-    console.log('Socket disconnected:', socket.id);
+    console.log('🔌 Disconnected:', socket.id);
   });
 });
 
+// ── Start server ──────────────────────────────────────
 const PORT = process.env.PORT || 10000;
 connectDB().then(() => {
-  server.listen(PORT, () => console.log(`✅ Peace Mindset Server v5 running on port ${PORT}`));
-}).catch(e => { console.error('DB connection failed:', e.message); process.exit(1); });
+  server.listen(PORT, () => {
+    console.log(`✅ Peace Mindset Server v5 running on port ${PORT}`);
+    console.log(`   Gemini: ${process.env.GEMINI_API_KEY ? '✅' : '❌ Missing'}`);
+    console.log(`   Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? '✅' : '❌ Missing'}`);
+  });
+}).catch(e => {
+  console.error('❌ DB connection failed:', e.message);
+  process.exit(1);
+});

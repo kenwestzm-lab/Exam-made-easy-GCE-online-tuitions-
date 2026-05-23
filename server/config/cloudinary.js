@@ -8,10 +8,14 @@ cloudinary.config({
   secure: true,
 });
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50*1024*1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
 
 const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
   if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === '') {
+    console.warn('Cloudinary not configured');
     return Promise.resolve({ secure_url: '', public_id: '' });
   }
   return new Promise((resolve, reject) => {
