@@ -4,122 +4,149 @@ const { auth, tutorOrAdmin } = require('../middleware/auth');
 const LiveClass = require('../models/LiveClass');
 
 const AI = {
-  ken: { name: 'Teacher Ken', gender: 'male' },
-  msimbi: { name: "Mis M'simbi", gender: 'female' }
+  ken:    { name: 'Teacher Ken',   gender: 'male' },
+  msimbi: { name: "Mis M'simbi",  gender: 'female' }
 };
 
 function buildPrompt(ch, subject, ctx) {
   return `You are ${ch.name}, a REAL human teacher at Peace Mindset Private School, Mufulira, Zambia.
-You teach GCE Ordinary Level and Grade 7 subjects to Zambian students.
-CRITICAL: You are a real person named ${ch.name}. NEVER say you are AI.
-${ch.gender==='male'?'You are Teacher Ken - young, energetic, professional male teacher.':'You are Mis M\'simbi - warm, professional, nurturing female teacher.'}
-LANGUAGE: Simple warm African English. Max 15 words per sentence.
-TEACHING: Step by step. Zambian examples (markets, farms, copper mines).
-PHRASES: "Very good!", "Excellent!", "Let us continue.", "Try again carefully.", "You are improving!"
-NEVER SAY: "As an AI", "I am an AI", "Artificial intelligence", "Language model"
-CORRECTION: Explain mistakes gently. Show correct answer step by step. Ask follow-up.
-${ctx?'LESSON:\n'+ctx.substring(0,600):''}
-Subject: ${subject||'General'} | Teacher: ${ch.name}`;
+Teach GCE Ordinary Level and Grade 7 to Zambian students.
+YOU ARE A REAL PERSON. Never say you are AI, robot, or computer.
+${ch.gender==='male'
+  ? 'You are Teacher Ken — energetic, confident, encouraging young male teacher.'
+  : "You are Mis M'simbi — warm, caring, professional female teacher."}
+SPEAK: Simple African English. Max 15 words per sentence.
+TEACH: Step by step. Zambian examples (markets, farms, copper mines, rivers).
+SAY: "Very good!", "Excellent!", "Let us continue.", "Try again.", "You are improving!"
+NEVER SAY: "As an AI", "I am an AI", "language model", "artificial intelligence"
+CORRECT: Gently explain mistake. Give correct answer step by step. Ask follow-up.
+${ctx ? 'LESSON:\n' + ctx.substring(0, 600) : ''}
+Subject: ${subject || 'General'} | Name: ${ch.name}`;
 }
 
-async function callAI(system, msg, history=[], maxTok=300) {
-  const gKey = process.env.GEMINI_API_KEY;
-  const aKey = process.env.ANTHROPIC_API_KEY;
+async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.GEMINI_API_KEY;
 
-  // Try Anthropic first
-  if (aKey && aKey.startsWith('sk-')) {
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':aKey,'anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTok,system,messages:[...history.slice(-6),{role:'user',content:msg}]})
-      });
-      if (r.ok) { const d=await r.json(); const t=d.content?.[0]?.text; if(t) return t; }
-    } catch(e) { console.log('Anthropic unavailable, using Gemini'); }
+  if (!key || key === '' || key === 'placeholder') {
+    console.warn('⚠️  GEMINI_API_KEY not set in Render environment variables!');
+    return "Good question! Please check your textbook and we will discuss this in our next class. Well done for asking!";
   }
 
-  // Use Gemini FREE
-  if (!gKey || gKey==='placeholder') {
-    return "That is a good question! Please check your textbook. We will cover this in our next class. Well done for asking!";
-  }
-
-  const messages = [
-    ...history.slice(-6),
-    { role:'user', parts:[{text: system+'\n\n'+msg}] }
+  // Build Gemini message history
+  const contents = [
+    ...history.slice(-6).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content || '' }]
+    })),
+    {
+      role: 'user',
+      parts: [{ text: systemPrompt + '\n\nStudent says: ' + userMessage }]
+    }
   ];
 
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gKey}`,
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
     {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        contents:messages,
-        generationConfig:{maxOutputTokens:maxTok,temperature:0.75},
-        safetySettings:[
-          {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
-          {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'}
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.75,
+          topP: 0.9
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT',  threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
         ]
       })
     }
   );
 
-  if (!r.ok) { const e=await r.text(); console.error('Gemini:',e.substring(0,150)); throw new Error('AI unavailable. Please try again.'); }
-  const d = await r.json();
-  const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('No AI response. Please try again.');
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error('Gemini API error:', errText.substring(0, 200));
+    if (errText.includes('API_KEY_INVALID')) throw new Error('Invalid Gemini API key. Please check Render environment variables.');
+    if (errText.includes('PERMISSION_DENIED')) throw new Error('Gemini API key permission denied. Try regenerating at aistudio.google.com');
+    throw new Error('AI service error. Please try again shortly.');
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Empty AI response. Please try again.');
   return text;
 }
 
-// Chat
-router.post('/chat', auth, async (req,res) => {
+// ── POST /api/ai/chat ─────────────────────────────────
+router.post('/chat', auth, async (req, res) => {
   try {
     const { message, subject, character, lesson_context, conversation_history } = req.body;
-    const ch = AI[character]||AI.ken;
-    const history = (conversation_history||[]).slice(-6).map(m=>({
-      role: m.role==='ai'?'model':'user',
-      parts:[{text:m.text||m.content||''}]
+    const ch = AI[character] || AI.ken;
+    const history = (conversation_history || []).slice(-6).map(m => ({
+      role: m.role === 'ai' ? 'assistant' : 'user',
+      content: m.text || m.content || ''
     }));
-    const reply = await callAI(buildPrompt(ch,subject,lesson_context), message, history, 300);
-    res.json({ reply, character:ch.name });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    const reply = await callGemini(buildPrompt(ch, subject, lesson_context), message, history, 300);
+    res.json({ reply, character: ch.name });
+  } catch (e) {
+    console.error('AI chat error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Lesson intro
-router.post('/lesson-intro', auth, async (req,res) => {
+// ── POST /api/ai/lesson-intro ─────────────────────────
+router.post('/lesson-intro', auth, async (req, res) => {
   try {
     const { subject, topic, character, lesson_script } = req.body;
-    const ch = AI[character]||AI.ken;
-    const system = `You are ${ch.name}, a real Zambian teacher. Write only natural teacher speech. Never mention AI.`;
-    const msg = `Write a warm class opening (60-80 words) for ${ch.name}.
-Subject: ${subject}. Topic: ${topic||"today's lesson"}.
-${lesson_script?'Lesson: '+lesson_script.substring(0,300):''}
-Style: ${ch.gender==='male'?'Energetic, encouraging':'Warm, nurturing'} Zambian teacher.
-Write ONLY the speech text.`;
-    const intro = await callAI(system, msg, [], 200);
+    const ch = AI[character] || AI.ken;
+    const system = `You are ${ch.name}, a real Zambian GCE teacher. Write ONLY the teacher speech. Never mention AI.`;
+    const msg = `Write a warm class opening speech (60-80 words) as ${ch.name}.
+Subject: ${subject}. Topic: ${topic || "today's lesson"}.
+${lesson_script ? 'Lesson overview: ' + lesson_script.substring(0, 300) : ''}
+Style: ${ch.gender === 'male' ? 'Energetic, encouraging, confident' : 'Warm, caring, professional'} Zambian teacher.
+Greet class. Tell them the topic. Make them excited. Sound natural, not robotic.
+WRITE ONLY THE SPEECH TEXT.`;
+    const intro = await callGemini(system, msg, [], 220);
     res.json({ intro });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Generate test questions
-router.post('/generate-test', auth, tutorOrAdmin, async (req,res) => {
+// ── POST /api/ai/generate-test ────────────────────────
+router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
   try {
-    const { subject, topic, num_questions=5, difficulty='medium' } = req.body;
-    const system = 'Return ONLY valid JSON. No markdown. No text outside JSON.';
-    const msg = `Create ${num_questions} GCE Zambian exam questions.
-Subject: ${subject}. Topic: ${topic||subject}. Difficulty: ${difficulty}.
-JSON format: {"title":"Quiz Title","questions":[{"type":"mcq","question":"Question?","options":["A. opt1","B. opt2","C. opt3","D. opt4"],"answer":"A. opt1","explanation":"Why correct"}]}
-Mix mcq, truefalse, short types. Use Zambian real-life examples.`;
-    const text = await callAI(system, msg, [], 1500);
-    const clean = text.replace(/```json\n?|\n?```|```/g,'').trim();
-    res.json(JSON.parse(clean));
-  } catch(e) { res.status(500).json({ error:'Could not generate questions. Try again.' }); }
+    const { subject, topic, num_questions = 5, difficulty = 'medium' } = req.body;
+    const system = 'You create GCE exam questions. Return ONLY valid JSON. No markdown. No text outside the JSON.';
+    const msg = `Create exactly ${num_questions} GCE Zambian exam questions.
+Subject: ${subject}. Topic: ${topic || subject}. Difficulty: ${difficulty}.
+Return this exact JSON (no extra text):
+{"title":"${topic || subject} Quiz","questions":[
+  {"type":"mcq","question":"Question here?","options":["A. Option1","B. Option2","C. Option3","D. Option4"],"answer":"A. Option1","explanation":"Brief reason"},
+  {"type":"truefalse","question":"Statement here?","options":["True","False"],"answer":"True","explanation":"Brief reason"},
+  {"type":"short","question":"Question here?","answer":"Correct answer","explanation":"Brief reason"}
+]}
+Use Zambian real-life examples. Keep language simple for Zambian students.`;
+    const text = await callGemini(system, msg, [], 2000);
+    const clean = text.replace(/```json\n?|\n?```|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    res.json(parsed);
+  } catch (e) {
+    console.error('Generate test error:', e.message);
+    res.status(500).json({ error: 'Could not generate questions. Please try again.' });
+  }
 });
 
-// Update class script
-router.put('/class/:id/script', auth, tutorOrAdmin, async (req,res) => {
-  try { res.json(await LiveClass.findByIdAndUpdate(req.params.id, req.body, {new:true})); }
-  catch(e) { res.status(500).json({ error:e.message }); }
+// ── PUT /api/ai/class/:id/script ──────────────────────
+router.put('/class/:id/script', auth, tutorOrAdmin, async (req, res) => {
+  try {
+    const cls = await LiveClass.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(cls);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
