@@ -4354,7 +4354,7 @@ function QuestionsPage() {
         await apiFetch('POST', '/messages/group', null, tok(), fd2);
       }
     } catch (e) {
-      const msg = e.message.includes('credit') || e.message.includes('balance') ? 'Add Anthropic credits at console.anthropic.com/settings/billing (minimum $5). Human tutors can still reply!' : e.message;
+      const msg = e.message.includes('credit') || e.message.includes('balance') ? 'AI tutor is warming up. Please try again in a moment. Human tutors can still reply!' : e.message;
       add({
         title: 'Note',
         body: msg,
