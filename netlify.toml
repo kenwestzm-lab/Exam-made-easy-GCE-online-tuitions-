@@ -1,18 +1,10 @@
 [build]
   publish = "public"
   command = ""
-
 [[headers]]
   for = "/*"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
-    Pragma = "no-cache"
-
-[[headers]]
-  for = "/index.html"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-
 [[redirects]]
   from = "/*"
   to = "/index.html"
