@@ -20,10 +20,13 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ── Health check ──────────────────────────────────────
 app.get('/api/health', (req, res) => {
+  const gKey = process.env.GEMINI_API_KEY;
+  const validGemini = gKey && gKey.startsWith('AIza') && gKey.length > 20;
+  console.log('Health check - Gemini key valid:', validGemini, gKey ? gKey.substring(0,12)+'...' : 'NOT SET');
   res.json({
     status: 'ok',
     server: 'Peace Mindset API v5 - Live Classroom',
-    gemini: process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'placeholder' ? 'configured' : 'missing',
+    gemini: (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIza')) ? 'configured' : 'MISSING - add AIzaSy... key in Render Environment',
     cloudinary: process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_CLOUD_NAME !== '' ? 'configured' : 'missing',
     time: new Date().toISOString()
   });
