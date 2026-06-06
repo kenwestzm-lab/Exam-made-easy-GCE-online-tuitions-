@@ -4369,17 +4369,26 @@ function QuestionsPage() {
     const q = input.trim();
     setInput('');
     setAsking(true);
+    setTab('chat');
 
-    // Post question to group
+    // Show question instantly
+    const tempQ = { _id: 'tq_'+Date.now(), sender_id: profile?._id, content: q, createdAt: new Date().toISOString(), subject_id: selSub, type: 'group' };
+    setMsgs(p => [...p, tempQ]);
+
+    // Post to server
     try {
       const fd = new FormData();
       fd.append('subject_id', selSub);
       fd.append('content', q);
-      await apiFetch('POST', '/messages/group', null, tok(), fd);
+      const saved = await apiFetch('POST', '/messages/group', null, tok(), fd);
+      if (saved?._id) setMsgs(p => p.map(m => m._id === tempQ._id ? saved : m));
     } catch (e) {}
 
-    // Get AI answer
+    // Show AI thinking
     setAiThinking(true);
+    const tempAI = { _id: 'tai_'+Date.now(), sender_id: 'ai', content: '\u23f3 Teacher Ken is thinking...', createdAt: new Date().toISOString(), subject_id: selSub, type: 'group' };
+    setMsgs(p => [...p, tempAI]);
+
     try {
       const charKey = SUBJECTS.find(s => s.id === selSub)?.char || 'ken';
       const r = await apiFetch('POST', '/ai/chat', {
@@ -4393,25 +4402,22 @@ function QuestionsPage() {
         lesson_context: ''
       }, tok());
       if (r.reply) {
-        const aiChar = AI_CHARS[charKey];
+        const aiReplyMsg = { _id: 'air_'+Date.now(), sender_id: 'ai', content: r.reply, createdAt: new Date().toISOString(), subject_id: selSub, type: 'group' };
+        setMsgs(p => p.map(m => m._id === tempAI._id ? aiReplyMsg : m));
         const fd2 = new FormData();
         fd2.append('subject_id', selSub);
         fd2.append('content', r.reply);
-        await apiFetch('POST', '/messages/group', null, tok(), fd2);
-        // Speak the answer
+        apiFetch('POST', '/messages/group', null, tok(), fd2).then(saved2 => {
+          if (saved2?._id) setMsgs(p => p.map(m => m._id === aiReplyMsg._id ? saved2 : m));
+        }).catch(()=>{});
         ZambianVoice.speak(r.reply, charKey === 'msimbi' ? 'female' : 'male');
       }
     } catch (e) {
-      add({
-        title: 'AI note',
-        body: 'Gemini is loading. AI is warming up, please try again in a moment.',
-        icon: 'ℹ️',
-        type: 'w'
-      });
+      setMsgs(p => p.filter(m => m._id !== tempAI._id));
+      add({ title: 'AI unavailable', body: 'Please try again in a moment.', icon: '\u2139\ufe0f', type: 'w' });
     }
     setAiThinking(false);
     setAsking(false);
-    setTab('chat');
   };
   const getUser = id => ({
     name: id?.toString() === profile?._id?.toString() ? 'You' : 'Student',

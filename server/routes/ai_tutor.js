@@ -182,7 +182,7 @@ router.post('/chat', auth, async (req, res) => {
 // ── POST /api/ai/generate-questions ──────────────────
 router.post('/generate-questions', auth, tutorOrAdmin, async (req, res) => {
   try {
-    const { subject, topic, count = 5, type = 'mcq' } = req.body;
+    const { subject, topic, count = 10, type = 'mcq' } = req.body;
     const prompt = `You are an expert GCE O-Level teacher in Zambia. Generate exactly ${count} ${type.toUpperCase()} questions about "${topic || subject}" for Zambian students.
 
 RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
@@ -236,7 +236,7 @@ module.exports = router;
 // Alias for frontend compatibility
 router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
   try {
-    const { subject, topic, count = 5, type = 'mcq' } = req.body;
+    const { subject, topic, count = 10, type = 'mcq' } = req.body;
     const prompt = `You are an expert GCE O-Level teacher in Zambia. Generate exactly ${count} ${type.toUpperCase()} questions about "${topic || subject}" for Zambian students.
 
 RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
