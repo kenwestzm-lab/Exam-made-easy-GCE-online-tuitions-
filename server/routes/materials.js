@@ -2,11 +2,23 @@ const express = require('express');
 const router = express.Router();
 const { Material } = require('../models');
 const { auth, tutorOrAdmin } = require('../middleware/auth');
-const { upload, uploadToCloudinary } = require('../config/cloudinary');
+const { upload, uploadToCloudinary, getViewUrl, getDownloadUrl } = require('../config/cloudinary');
+
+// Add view/download URLs to material object
+const withUrls = (m) => {
+  const obj = m.toObject ? m.toObject() : m;
+  return {
+    ...obj,
+    view_url: getViewUrl(obj.file_url, obj.type),
+    download_url: getDownloadUrl(obj.file_url, obj.title, obj.type),
+  };
+};
 
 router.get('/', auth, async (req, res) => {
-  try { res.json(await Material.find().sort('-createdAt')); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  try {
+    const mats = await Material.find().sort('-createdAt');
+    res.json(mats.map(withUrls));
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => {
@@ -14,19 +26,46 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
     const { title, description, subject_id, type, premium } = req.body;
     let file_url = '', size = '';
     if (req.file) {
-      const rType = ['video','audio'].includes(type) ? 'video' : ['pdf','pptx','word'].includes(type) ? 'raw' : 'image';
+      // Always upload PDFs/docs as raw to preserve them
+      const rType = ['video','audio'].includes(type) ? 'video'
+        : ['pdf','pptx','word'].includes(type) ? 'raw'
+        : 'image';
       const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/materials', rType);
       file_url = r.secure_url;
-      size = req.file.size > 1024*1024 ? Math.round(req.file.size/1024/1024)+'MB' : Math.round(req.file.size/1024)+'KB';
+      size = req.file.size > 1024*1024
+        ? Math.round(req.file.size/1024/1024)+'MB'
+        : Math.round(req.file.size/1024)+'KB';
     }
-    const m = await Material.create({ title, description, subject_id: Number(subject_id), type, premium: premium !== 'false', file_url, size, tutor_id: req.user._id });
-    res.status(201).json(m);
+    const m = await Material.create({
+      title, description,
+      subject_id: Number(subject_id),
+      type,
+      premium: premium !== 'false',
+      file_url,
+      size,
+      tutor_id: req.user._id
+    });
+    res.status(201).json(withUrls(m));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Increment download count
+router.post('/:id/download', auth, async (req, res) => {
+  try {
+    const m = await Material.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { downloads: 1 } },
+      { new: true }
+    );
+    res.json({ downloads: m.downloads });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', auth, tutorOrAdmin, async (req, res) => {
-  try { await Material.findByIdAndDelete(req.params.id); res.json({ success: true }); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  try {
+    await Material.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

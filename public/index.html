@@ -3889,21 +3889,42 @@ function ChatPage() {
   }, [msgs]);
   const send = async () => {
     if (!input.trim() || busy) return;
+    const text = input.trim();
+    setInput('');
+    // Optimistic update - show message instantly like WhatsApp
+    const tempId = 'temp_' + Date.now();
+    const tempMsg = {
+      _id: tempId,
+      sender_id: profile?._id,
+      content: text,
+      createdAt: new Date().toISOString(),
+      type: tab,
+      receiver_id: sel?._id,
+      subject_id: selG,
+      _pending: true
+    };
+    setMsgs(p => [...p, tempMsg]);
     setBusy(true);
     try {
+      let saved;
       if (tab === 'direct' && sel) {
         const fd = new FormData();
         fd.append('receiver_id', sel._id);
-        fd.append('content', input);
-        await apiFetch('POST', '/messages/direct', null, tok(), fd);
+        fd.append('content', text);
+        saved = await apiFetch('POST', '/messages/direct', null, tok(), fd);
       } else if (tab === 'group' && selG !== null) {
         const fd = new FormData();
         fd.append('subject_id', selG);
-        fd.append('content', input);
-        await apiFetch('POST', '/messages/group', null, tok(), fd);
+        fd.append('content', text);
+        saved = await apiFetch('POST', '/messages/group', null, tok(), fd);
       }
-      setInput('');
+      // Replace temp message with real one from server
+      if (saved?._id) {
+        setMsgs(p => p.map(m => m._id === tempId ? saved : m));
+      }
     } catch (e) {
+      // Remove failed message
+      setMsgs(p => p.filter(m => m._id !== tempId));
       console.warn(e);
     } finally {
       setBusy(false);
@@ -4058,7 +4079,8 @@ function ChatPage() {
           padding: '8px 12px',
           fontSize: 14,
           boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-          lineHeight: 1.45
+          lineHeight: 1.45,
+          opacity: m._pending ? 0.6 : 1
         }
       }, m.content), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -5778,17 +5800,19 @@ function MaterialsPage({
         fontSize: 10,
         fontWeight: 600
       }
-    }, "Premium"), ok ? m.file_url ? /*#__PURE__*/React.createElement("a", {
-      href: m.file_url,
-      target: "_blank",
-      rel: "noreferrer",
-      style: {
-        ...BT('p', true),
-        textDecoration: 'none',
-        fontSize: 11,
-        padding: '4px 10px'
-      }
-    }, "\u2B07 Download") : /*#__PURE__*/React.createElement("span", {
+    }, "Premium"), ok ? m.file_url ? /*#__PURE__*/React.createElement(React.Fragment, null,
+      m.type !== 'video' && m.type !== 'audio' && React.createElement("button", {
+        type: "button",
+        onClick: () => window.open(m.view_url || m.file_url, "_blank"),
+        style: { ...BT('gh', true), fontSize: 11, padding: '4px 10px', cursor: 'pointer', border: 'none' }
+      }, "\uD83D\uDC41 View"),
+      React.createElement("a", {
+        href: m.download_url || m.file_url,
+        target: "_blank",
+        rel: "noreferrer",
+        onClick: async () => { try { await apiFetch('POST', '/materials/'+m._id+'/download', null, tok()); } catch(e){} },
+        style: { ...BT('p', true), textDecoration: 'none', fontSize: 11, padding: '4px 10px' }
+      }, "\u2B07 Download")) : /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10,
         color: C.gr

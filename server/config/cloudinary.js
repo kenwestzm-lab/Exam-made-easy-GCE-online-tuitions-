@@ -14,13 +14,20 @@ const upload = multer({
 });
 
 const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
-  if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === '') {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === 'placeholder' || process.env.CLOUDINARY_CLOUD_NAME === '') {
     console.warn('Cloudinary not configured');
     return Promise.resolve({ secure_url: '', public_id: '' });
   }
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType, timeout: 60000 },
+      {
+        folder,
+        resource_type: resourceType,
+        timeout: 60000,
+        // For PDFs and docs - preserve original format
+        format: resourceType === 'raw' ? undefined : undefined,
+        flags: resourceType === 'raw' ? 'attachment' : undefined,
+      },
       (err, result) => err ? reject(new Error(err.message)) : resolve(result)
     );
     stream.write(buffer);
@@ -28,4 +35,26 @@ const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
   });
 };
 
-module.exports = { upload, uploadToCloudinary, cloudinary };
+// Get a proper viewable URL for files
+const getViewUrl = (url, type) => {
+  if (!url) return '';
+  // For PDFs uploaded as raw - convert to viewable
+  if (type === 'pdf' && url.includes('cloudinary.com')) {
+    // Use fl_attachment:false to serve inline
+    return url.replace('/upload/', '/upload/fl_inline/');
+  }
+  return url;
+};
+
+// Get download URL with proper filename
+const getDownloadUrl = (url, filename, type) => {
+  if (!url) return '';
+  if (url.includes('cloudinary.com')) {
+    const ext = type === 'pdf' ? 'pdf' : type === 'word' ? 'docx' : type === 'pptx' ? 'pptx' : '';
+    const name = filename ? filename.replace(/[^a-z0-9]/gi, '_') : 'file';
+    return url.replace('/upload/', `/upload/fl_attachment:${name}/`);
+  }
+  return url;
+};
+
+module.exports = { upload, uploadToCloudinary, cloudinary, getViewUrl, getDownloadUrl };
