@@ -28,7 +28,7 @@ async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 3
   const key = process.env.GEMINI_API_KEY;
 
   if (!key || key === '' || key === 'placeholder') {
-    console.warn('⚠️  GEMINI_API_KEY not set in Render environment variables!');
+    console.warn('⚠️  GEMINI_API_KEY not set in environment variables!');
     return "Good question! Please check your textbook and we will discuss this in our next class. Well done for asking!";
   }
 
@@ -45,7 +45,7 @@ async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 3
   ];
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

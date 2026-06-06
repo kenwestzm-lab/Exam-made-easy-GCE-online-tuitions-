@@ -8208,13 +8208,20 @@ function TutorMaterials() {
       fontSize: 11,
       color: C.gr
     }
-  }, sn(m.subject_id), " \xB7 ", m.type, " \xB7 ", m.downloads || 0, " downloads")), /*#__PURE__*/React.createElement("button", {
+  }, sn(m.subject_id), " \xB7 ", m.type, " \xB7 ", m.downloads || 0, " downloads")), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 5 }
+  }, m.file_url && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    style: {
-      ...BT('d', true),
-      fontSize: 11,
-      padding: '6px 11px'
-    },
+    style: { ...BT('gh', true), fontSize: 11, padding: '6px 11px' },
+    onClick: () => window.open(m.view_url || m.file_url, "_blank")
+  }, "\uD83D\uDC41 View"), /*#__PURE__*/React.createElement("a", {
+    href: m.download_url || m.file_url,
+    target: "_blank",
+    rel: "noreferrer",
+    style: { ...BT('p', true), fontSize: 11, padding: '6px 11px', textDecoration: 'none' }
+  }, "\u2B07"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: { ...BT('d', true), fontSize: 11, padding: '6px 11px' },
     onClick: async () => {
       if (confirm('Delete?')) await apiFetch('DELETE', `/materials/${m._id}`, null, tok()).then(() => refetch());
     }
