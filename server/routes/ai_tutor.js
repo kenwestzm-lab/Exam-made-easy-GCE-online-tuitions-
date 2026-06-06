@@ -24,76 +24,144 @@ ${ctx ? 'LESSON:\n' + ctx.substring(0, 600) : ''}
 Subject: ${subject || 'General'} | Name: ${ch.name}`;
 }
 
-async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 300) {
-  const key = process.env.GEMINI_API_KEY;
+// ── PRIMARY: Groq (fastest) ──────────────────────────
+async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error('NO_GROQ_KEY');
 
-  if (!key || key === '' || key === 'placeholder') {
-    console.warn('⚠️  GEMINI_API_KEY not set in environment variables!');
-    return "Good question! Please check your textbook and we will discuss this in our next class. Well done for asking!";
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.slice(-6).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    { role: 'user', content: userMessage }
+  ];
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.75
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('Groq error:', err.substring(0, 200));
+    throw new Error('GROQ_FAILED');
   }
 
-  // Build Gemini message history
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('GROQ_EMPTY');
+  return text;
+}
+
+// ── BACKUP 1: OpenRouter ─────────────────────────────
+async function callOpenRouter(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error('NO_OPENROUTER_KEY');
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.slice(-6).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    { role: 'user', content: userMessage }
+  ];
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+      'HTTP-Referer': 'https://peacemindsetgcezm.vercel.app',
+      'X-Title': 'Peace Mindset School'
+    },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.75
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('OpenRouter error:', err.substring(0, 200));
+    throw new Error('OPENROUTER_FAILED');
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('OPENROUTER_EMPTY');
+  return text;
+}
+
+// ── BACKUP 2: Gemini ─────────────────────────────────
+async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('NO_GEMINI_KEY');
+
   const contents = [
     ...history.slice(-6).map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content || '' }]
     })),
-    {
-      role: 'user',
-      parts: [{ text: systemPrompt + '\n\nStudent says: ' + userMessage }]
-    }
+    { role: 'user', parts: [{ text: systemPrompt + '\n\nStudent says: ' + userMessage }] }
   ];
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature: 0.75,
-          topP: 0.9
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT',  threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-        ]
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('Gemini API error:', errText.substring(0, 300));
-    if (errText.includes('API_KEY_INVALID')) throw new Error('Invalid Gemini API key.');
-    if (errText.includes('PERMISSION_DENIED')) throw new Error('Gemini API key permission denied.');
-    if (errText.includes('RESOURCE_EXHAUSTED') || errText.includes('quota')) {
-      // Try fallback model
-      console.warn('Quota exceeded on gemini-2.0-flash, trying fallback...');
-      const r2 = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${key}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.75 } }) }
-      );
-      if (r2.ok) {
-        const d2 = await r2.json();
-        const t2 = d2.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (t2) return t2;
+  for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash-8b']) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.75, topP: 0.9 },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+          ]
+        })
       }
-      throw new Error('AI quota exceeded. Please try again in a minute.');
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
     }
-    throw new Error('AI service error. Please try again shortly.');
+    const errText = await response.text().catch(() => '');
+    if (!errText.includes('RESOURCE_EXHAUSTED')) break;
+    console.warn(`${model} quota exhausted, trying next...`);
   }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Empty AI response. Please try again.');
-  return text;
+  throw new Error('GEMINI_FAILED');
 }
 
-// ── POST /api/ai/chat ─────────────────────────────────
+// ── MAIN: Try all providers in order ────────────────
+async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const providers = [
+    { name: 'Groq', fn: callGroq },
+    { name: 'OpenRouter', fn: callOpenRouter },
+    { name: 'Gemini', fn: callGemini }
+  ];
+
+  for (const provider of providers) {
+    try {
+      console.log(`Trying ${provider.name}...`);
+      const text = await provider.fn(systemPrompt, userMessage, history, maxTokens);
+      console.log(`✅ ${provider.name} responded`);
+      return text;
+    } catch (e) {
+      console.warn(`❌ ${provider.name} failed:`, e.message);
+    }
+  }
+
+  return "Good question! I will explain this in our next class. Keep studying hard!";
+}
+
+// ── POST /api/ai/chat ────────────────────────────────
 router.post('/chat', auth, async (req, res) => {
   try {
     const { message, subject, character, lesson_context, conversation_history } = req.body;
@@ -102,7 +170,8 @@ router.post('/chat', auth, async (req, res) => {
       role: m.role === 'ai' ? 'assistant' : 'user',
       content: m.text || m.content || ''
     }));
-    const reply = await callGemini(buildPrompt(ch, subject, lesson_context), message, history, 300);
+    const prompt = buildPrompt(ch, subject, lesson_context);
+    const reply = await callAI(prompt, message, history, 300);
     res.json({ reply, character: ch.name });
   } catch (e) {
     console.error('AI chat error:', e.message);
@@ -110,57 +179,56 @@ router.post('/chat', auth, async (req, res) => {
   }
 });
 
-// ── POST /api/ai/lesson-intro ─────────────────────────
-router.post('/lesson-intro', auth, async (req, res) => {
+// ── POST /api/ai/generate-questions ──────────────────
+router.post('/generate-questions', auth, tutorOrAdmin, async (req, res) => {
   try {
-    const { subject, topic, character, lesson_script } = req.body;
-    const ch = AI[character] || AI.ken;
-    const system = `You are ${ch.name}, a real Zambian GCE teacher. Write ONLY the teacher speech. Never mention AI.`;
-    const msg = `Write a warm class opening speech (60-80 words) as ${ch.name}.
-Subject: ${subject}. Topic: ${topic || "today's lesson"}.
-${lesson_script ? 'Lesson overview: ' + lesson_script.substring(0, 300) : ''}
-Style: ${ch.gender === 'male' ? 'Energetic, encouraging, confident' : 'Warm, caring, professional'} Zambian teacher.
-Greet class. Tell them the topic. Make them excited. Sound natural, not robotic.
-WRITE ONLY THE SPEECH TEXT.`;
-    const intro = await callGemini(system, msg, [], 220);
-    res.json({ intro });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    const { subject, topic, count = 5, type = 'mcq' } = req.body;
+    const prompt = `You are an expert GCE O-Level teacher in Zambia. Generate exactly ${count} ${type.toUpperCase()} questions about "${topic || subject}" for Zambian students.
 
-// ── POST /api/ai/generate-test ────────────────────────
-router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
-  try {
-    const { subject, topic, num_questions = 5, difficulty = 'medium' } = req.body;
-    const system = 'You create GCE exam questions. Return ONLY valid JSON. No markdown. No text outside the JSON.';
-    const msg = `Create exactly ${num_questions} GCE Zambian exam questions.
-Subject: ${subject}. Topic: ${topic || subject}. Difficulty: ${difficulty}.
-Return this exact JSON (no extra text):
-{"title":"${topic || subject} Quiz","questions":[
-  {"type":"mcq","question":"Question here?","options":["A. Option1","B. Option2","C. Option3","D. Option4"],"answer":"A. Option1","explanation":"Brief reason"},
-  {"type":"truefalse","question":"Statement here?","options":["True","False"],"answer":"True","explanation":"Brief reason"},
-  {"type":"short","question":"Question here?","answer":"Correct answer","explanation":"Brief reason"}
-]}
-Use Zambian real-life examples. Keep language simple for Zambian students.`;
-    const text = await callGemini(system, msg, [], 2000);
-    const clean = text.replace(/```json\n?|\n?```|```/g, '').trim();
+RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
+{
+  "questions": [
+    {
+      "question": "question text",
+      "type": "${type}",
+      "options": ["A. option1", "B. option2", "C. option3", "D. option4"],
+      "correct_answer": "A",
+      "explanation": "brief explanation"
+    }
+  ]
+}`;
+
+    const raw = await callAI(prompt, `Generate ${count} ${type} questions for ${subject}`, [], 1000);
+    const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     res.json(parsed);
   } catch (e) {
-    console.error('Generate test error:', e.message);
+    console.error('Generate questions error:', e.message);
     res.status(500).json({ error: 'Could not generate questions. Please try again.' });
   }
 });
 
-// ── PUT /api/ai/class/:id/script ──────────────────────
-router.put('/class/:id/script', auth, tutorOrAdmin, async (req, res) => {
+// ── POST /api/ai/class-response ──────────────────────
+router.post('/class-response', auth, async (req, res) => {
   try {
-    const cls = await LiveClass.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(cls);
+    const { question, subject, character, lesson_context, class_context } = req.body;
+    const ch = AI[character] || AI.ken;
+    const prompt = buildPrompt(ch, subject, lesson_context);
+    const ctx = class_context ? `\nClass context: ${class_context}` : '';
+    const reply = await callAI(prompt, question + ctx, [], 250);
+    res.json({ reply, character: ch.name });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── GET /api/ai/status ───────────────────────────────
+router.get('/status', async (req, res) => {
+  res.json({
+    groq: !!process.env.GROQ_API_KEY,
+    openrouter: !!process.env.OPENROUTER_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY
+  });
 });
 
 module.exports = router;
