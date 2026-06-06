@@ -38,10 +38,9 @@ const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
 // Get a proper viewable URL for files
 const getViewUrl = (url, type) => {
   if (!url) return '';
-  // For PDFs uploaded as raw - convert to viewable
+  // For PDFs - use Google Docs viewer to display inline
   if (type === 'pdf' && url.includes('cloudinary.com')) {
-    // Use fl_attachment:false to serve inline
-    return url.replace('/upload/', '/upload/fl_inline/');
+    return 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=true';
   }
   return url;
 };
