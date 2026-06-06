@@ -4413,7 +4413,7 @@ function QuestionsPage() {
     } catch (e) {
       add({
         title: 'AI note',
-        body: 'Gemini is loading. Check your GEMINI_API_KEY in Render environment.',
+        body: 'Gemini is loading. AI is warming up, please try again in a moment.',
         icon: 'ℹ️',
         type: 'w'
       });
@@ -4987,7 +4987,7 @@ function ProfilePage() {
     } catch (e) {
       add({
         title: 'Upload note',
-        body: 'Add Cloudinary keys in Render to enable photo uploads',
+        body: 'Add Cloudinary keys in Vercel to enable photo uploads',
         icon: 'ℹ️',
         type: 'w'
       });
@@ -7188,7 +7188,7 @@ function TutorCreateTest() {
     } catch (e) {
       add({
         title: 'AI note',
-        body: e.message.includes('credit') || e.message.includes('GEMINI') ? 'Add GEMINI_API_KEY in Render to generate AI questions' : e.message,
+        body: e.message.includes('credit') || e.message.includes('GEMINI') ? 'Add GEMINI_API_KEY in Vercel to generate AI questions' : e.message,
         icon: 'ℹ️',
         type: 'w'
       });
@@ -8042,7 +8042,7 @@ function TutorMaterials() {
     } catch (e) {
       add({
         title: 'Upload failed',
-        body: e.message.includes('cloud') || e.message.includes('disabled') ? 'File uploads need Cloudinary setup. Free at cloudinary.com → add keys to Render environment' : e.message,
+        body: e.message.includes('cloud') || e.message.includes('disabled') ? 'File uploads need Cloudinary setup. Free at cloudinary.com → add keys to Vercel environment variables' : e.message,
         icon: '❌',
         type: 'd'
       });

@@ -67,9 +67,23 @@ async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 3
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error('Gemini API error:', errText.substring(0, 200));
-    if (errText.includes('API_KEY_INVALID')) throw new Error('Invalid Gemini API key. Please check Render environment variables.');
-    if (errText.includes('PERMISSION_DENIED')) throw new Error('Gemini API key permission denied. Try regenerating at aistudio.google.com');
+    console.error('Gemini API error:', errText.substring(0, 300));
+    if (errText.includes('API_KEY_INVALID')) throw new Error('Invalid Gemini API key.');
+    if (errText.includes('PERMISSION_DENIED')) throw new Error('Gemini API key permission denied.');
+    if (errText.includes('RESOURCE_EXHAUSTED') || errText.includes('quota')) {
+      // Try fallback model
+      console.warn('Quota exceeded on gemini-2.0-flash, trying fallback...');
+      const r2 = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${key}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens, temperature: 0.75 } }) }
+      );
+      if (r2.ok) {
+        const d2 = await r2.json();
+        const t2 = d2.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (t2) return t2;
+      }
+      throw new Error('AI quota exceeded. Please try again in a minute.');
+    }
     throw new Error('AI service error. Please try again shortly.');
   }
 
