@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#064d2c"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<title>Peace Mindset Private School — Live Classroom · Mufulira, Zambia</title>
+<title>Peace Mindset Private School — GCE Online · Mufulira, Zambia</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -30,8 +30,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid #12a05c!important}
 @keyframes wave{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
 @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 canvas{touch-action:none;display:block}
-/* Floating live class button */
-.float-live{position:fixed;bottom:80px;right:16px;z-index:90;background:linear-gradient(135deg,#7f1d1d,#dc2626);color:#fff;border:none;border-radius:50px;padding:12px 18px;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;box-shadow:0 6px 24px rgba(220,38,38,0.5);display:flex;align-items:center;gap:7px;animation:pulse 2s ease-in-out infinite}
 </style>
 </head>
 <body class="auth-mode">
@@ -4307,8 +4305,13 @@ function ChatPage() {
   }, "\u203A")))));
 }
 function QuestionsPage() {
-  const {profile, socket} = useAuth();
-  const {add} = useToast();
+  const {
+    profile,
+    socket
+  } = useAuth();
+  const {
+    add
+  } = useToast();
   const [asking, setAsking] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState('');
@@ -4317,7 +4320,7 @@ function QuestionsPage() {
   const [aiThinking, setAiThinking] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatRef = useRef();
-  const ch = AI_CHARS[SUBJECTS.find(s=>s.id===selSub)?.char||'ken'] || AI_CHARS.ken;
+  const ch = AI_CHARS[SUBJECTS.find(s => s.id === selSub)?.char || 'ken'] || AI_CHARS.ken;
 
   // Load group messages for selected subject
   useEffect(() => {
@@ -4326,25 +4329,28 @@ function QuestionsPage() {
       try {
         const d = await apiFetch('GET', `/messages/group/${selSub}`, null, tok());
         setMsgs(Array.isArray(d) ? d : []);
-      } catch(e) { setMsgs([]); }
-      finally { setLoading(false); }
+      } catch (e) {
+        setMsgs([]);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
     if (!socket) return;
     const handler = m => {
       if (Number(m.subject_id) === Number(selSub)) {
-        setMsgs(p => p.find(x=>x._id===m._id) ? p : [...p, m]);
+        setMsgs(p => p.find(x => x._id === m._id) ? p : [...p, m]);
       }
     };
     socket.on('new_group_message', handler);
     socket.emit('join_group', selSub);
     return () => socket.off('new_group_message', handler);
   }, [selSub, socket]);
-
   useEffect(() => {
-    setTimeout(() => { if(chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 100);
+    setTimeout(() => {
+      if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }, 100);
   }, [msgs]);
-
   const askQuestion = async () => {
     if (!input.trim()) return;
     const q = input.trim();
@@ -4357,17 +4363,20 @@ function QuestionsPage() {
       fd.append('subject_id', selSub);
       fd.append('content', q);
       await apiFetch('POST', '/messages/group', null, tok(), fd);
-    } catch(e) {}
+    } catch (e) {}
 
     // Get AI answer
     setAiThinking(true);
     try {
-      const charKey = SUBJECTS.find(s=>s.id===selSub)?.char || 'ken';
+      const charKey = SUBJECTS.find(s => s.id === selSub)?.char || 'ken';
       const r = await apiFetch('POST', '/ai/chat', {
         message: q,
         subject: selSub ? sn(selSub) : 'General',
         character: charKey,
-        conversation_history: msgs.slice(-6).map(m=>({role:'user',text:m.content})),
+        conversation_history: msgs.slice(-6).map(m => ({
+          role: 'user',
+          text: m.content
+        })),
         lesson_context: ''
       }, tok());
       if (r.reply) {
@@ -4379,185 +4388,523 @@ function QuestionsPage() {
         // Speak the answer
         ZambianVoice.speak(r.reply, charKey === 'msimbi' ? 'female' : 'male');
       }
-    } catch(e) {
-      add({title:'AI note', body:'Gemini is loading. Check your GEMINI_API_KEY in Render environment.', icon:'ℹ️', type:'w'});
+    } catch (e) {
+      add({
+        title: 'AI note',
+        body: 'Gemini is loading. Check your GEMINI_API_KEY in Render environment.',
+        icon: 'ℹ️',
+        type: 'w'
+      });
     }
     setAiThinking(false);
     setAsking(false);
     setTab('chat');
   };
-
-  const getUser = id => ({ name: id?.toString() === profile?._id?.toString() ? 'You' : 'Student', isMe: id?.toString() === profile?._id?.toString() });
-
-  return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 120px)',background:C.cBg,borderRadius:16,overflow:'hidden',boxShadow:'0 4px 24px rgba(0,0,0,0.15)'}}>
-      {/* Header */}
-      <div style={{background:`linear-gradient(135deg,${C.gd},${C.g})`,padding:'13px 16px',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-          <div style={{width:40,height:40,borderRadius:'50%',background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>{ch.avatar}</div>
-          <div style={{flex:1}}>
-            <div style={{color:'#fff',fontWeight:700,fontSize:15}}>{ch.name}</div>
-            <div style={{color:'rgba(255,255,255,0.7)',fontSize:11}}>AI Tutor · Peace Mindset · Mufulira 🇿🇲</div>
-          </div>
-          {aiThinking&&<SpeakingWaves/>}
-        </div>
-        {/* Subject pills */}
-        <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2}}>
-          <button type="button" onClick={()=>setSelSub(0)} style={{flexShrink:0,padding:'5px 13px',borderRadius:20,border:`1.5px solid ${selSub===0?'#fff':'rgba(255,255,255,0.3)'}`,background:selSub===0?'rgba(255,255,255,0.2)':'transparent',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:selSub===0?700:400,fontFamily:'inherit'}}>
-            All
-          </button>
-          {SUBJECTS.map(s=>(
-            <button key={s.id} type="button" onClick={()=>setSelSub(s.id)} style={{flexShrink:0,padding:'5px 13px',borderRadius:20,border:`1.5px solid ${selSub===s.id?'#fff':'rgba(255,255,255,0.3)'}`,background:selSub===s.id?'rgba(255,255,255,0.2)':'transparent',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:selSub===s.id?700:400,fontFamily:'inherit'}}>
-              {s.i} {s.n}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{display:'flex',background:C.chatSide,flexShrink:0,borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
-        {[['chat','💬 Discussion'],['ask','❓ Ask AI']].map(([t,l])=>(
-          <button key={t} type="button" onClick={()=>setTab(t)} style={{flex:1,padding:'10px 0',border:'none',background:'transparent',color:tab===t?C.gl:'rgba(255,255,255,0.45)',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:tab===t?700:400,borderBottom:tab===t?`2px solid ${C.gl}`:'2px solid transparent'}}>
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      {tab==='chat' ? (
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div ref={chatRef} style={{flex:1,overflowY:'auto',padding:'12px 10px',background:C.cBg}}>
-            {loading && <div style={{display:'flex',justifyContent:'center',padding:24}}><div style={{width:24,height:24,border:`2px solid ${C.g}`,borderTop:'2px solid transparent',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/></div>}
-            {!loading && msgs.length===0 && (
-              <div style={{textAlign:'center',padding:'40px 20px'}}>
-                <div style={{fontSize:50,marginBottom:12}}>💬</div>
-                <div style={{color:'rgba(255,255,255,0.5)',fontSize:14,marginBottom:8}}>No questions yet for this subject</div>
-                <div style={{color:'rgba(255,255,255,0.35)',fontSize:12}}>Tap "Ask AI" to start a conversation!</div>
-              </div>
-            )}
-            {msgs.map((m, i) => {
-              const isMe = m.sender_id?.toString() === profile?._id?.toString();
-              const isAI = m.content?.startsWith && (
-                m.content.startsWith('👨🏿') || m.content.startsWith('👩🏿') ||
-                Object.values(AI_CHARS).some(c => m.content.startsWith(c.avatar))
-              );
-              const aiChar = isAI ? Object.values(AI_CHARS).find(c => m.content.startsWith(c.avatar)) : null;
-              const displayText = isAI && aiChar ? m.content.replace(aiChar.avatar + ' ' + aiChar.name + ': ', '') : m.content;
-              return (
-                <div key={m._id||i} style={{marginBottom:8,display:'flex',flexDirection:isMe?'row-reverse':'row',gap:7,alignItems:'flex-end'}}>
-                  {!isMe && (
-                    <div style={{width:30,height:30,borderRadius:'50%',background:isAI?(aiChar?.color||C.g):'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>
-                      {isAI ? (aiChar?.avatar||'🤖') : '👤'}
-                    </div>
-                  )}
-                  <div style={{maxWidth:'78%'}}>
-                    {!isMe && <div style={{fontSize:10,color:isAI?(aiChar?.color||C.gl):'rgba(255,255,255,0.5)',fontWeight:600,marginBottom:2}}>{isAI?(aiChar?.name||'AI Tutor'):'Student'} · {ftime(m.createdAt)}</div>}
-                    <div style={{background:isMe?`linear-gradient(135deg,${C.gd},${C.g})`:isAI?`rgba(${isAI&&ck==='msimbi'?'124,58,237':'6,77,44'},0.25)`:'rgba(255,255,255,0.09)',color:C.cTxt,borderRadius:isMe?'16px 16px 3px 16px':'16px 16px 16px 3px',padding:'10px 13px',fontSize:13,lineHeight:1.6,border:isAI?`1px solid ${aiChar?.color||C.g}33`:'none'}}>
-                      {isAI && <div style={{fontSize:11,color:aiChar?.color||C.gl,fontWeight:700,marginBottom:4}}>{aiChar?.name||'AI Tutor'} says:</div>}
-                      {displayText}
-                    </div>
-                    {!isMe && isAI && (
-                      <button type="button" onClick={()=>ZambianVoice.speak(displayText, aiChar?.name?.includes("M'simbi")?'female':'male')} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:11,marginTop:3,padding:0}}>
-                        🔊 Hear answer
-                      </button>
-                    )}
-                    {isMe && <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:2,textAlign:'right'}}>{ftime(m.createdAt)}</div>}
-                  </div>
-                </div>
-              );
-            })}
-            {aiThinking && (
-              <div style={{display:'flex',alignItems:'flex-end',gap:7,marginBottom:8}}>
-                <div style={{width:30,height:30,borderRadius:'50%',background:ch.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>{ch.avatar}</div>
-                <div style={{background:'rgba(255,255,255,0.09)',borderRadius:'16px 16px 16px 3px',padding:'10px 14px',border:`1px solid ${ch.color}33`}}>
-                  <div style={{fontSize:10,color:ch.color,fontWeight:600,marginBottom:4}}>{ch.name} is thinking...</div>
-                  <SpeakingWaves color={ch.color}/>
-                </div>
-              </div>
-            )}
-          </div>
-          {/* Quick ask from chat tab */}
-          <div style={{padding:'8px 10px',background:C.chatSide,borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),askQuestion())} placeholder={`Ask ${ch.name} a question...`} style={{flex:1,padding:'10px 14px',borderRadius:22,border:'none',fontSize:13,fontFamily:'inherit',outline:'none',background:C.cIn,color:C.cTxt}}/>
-            <button type="button" onClick={askQuestion} disabled={asking||!input.trim()} style={{width:40,height:40,background:`linear-gradient(135deg,${C.gd},${C.g})`,border:'none',borderRadius:'50%',color:'#fff',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',opacity:!input.trim()?.5:1,flexShrink:0}}>➤</button>
-          </div>
-        </div>
-      ) : (
-        /* ASK AI TAB */
-        <div style={{flex:1,overflowY:'auto',padding:14,background:C.cBg}}>
-          {/* AI character card */}
-          <div style={{background:`linear-gradient(135deg,${ch.color}22,${ch.color}11)`,border:`1.5px solid ${ch.color}44`,borderRadius:16,padding:'14px 16px',marginBottom:14,display:'flex',gap:12,alignItems:'center'}}>
-            <div style={{fontSize:44}}>{ch.avatar}</div>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:15,color:C.cTxt}}>{ch.name}</div>
-              <div style={{fontSize:12,color:'rgba(255,255,255,0.6)',marginTop:2}}>{selSub ? sn(selSub) : 'All Subjects'} Tutor</div>
-              <div style={{fontSize:11,color:ch.color,marginTop:4,fontWeight:600}}>Always here to help you learn! 📚</div>
-            </div>
-            <div style={{background:ch.color,borderRadius:20,padding:'4px 12px',fontSize:11,color:'#fff',fontWeight:700}}>Active</div>
-          </div>
-
-          {/* Subject selector */}
-          <div style={{marginBottom:14}}>
-            <label style={{...LB,color:'rgba(255,255,255,0.7)'}}>📚 Subject (optional)</label>
-            <select style={{...IN,background:C.cIn,color:C.cTxt,border:'1px solid rgba(255,255,255,0.15)',appearance:'none'}} value={selSub} onChange={e=>setSelSub(Number(e.target.value))}>
-              <option value={0}>General (Any subject)</option>
-              {SUBJECTS.map(s=><option key={s.id} value={s.id}>{s.i} {s.n}</option>)}
-            </select>
-          </div>
-
-          {/* Question input */}
-          <div style={{marginBottom:14}}>
-            <label style={{...LB,color:'rgba(255,255,255,0.7)'}}>❓ Your Question</label>
-            <textarea value={input} onChange={e=>setInput(e.target.value)} style={{...IN,height:100,resize:'vertical',background:C.cIn,color:C.cTxt,border:'1px solid rgba(255,255,255,0.15)',fontSize:14}} placeholder={`Ask ${ch.name} anything...
+  const getUser = id => ({
+    name: id?.toString() === profile?._id?.toString() ? 'You' : 'Student',
+    isMe: id?.toString() === profile?._id?.toString()
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'calc(100vh - 120px)',
+      background: C.cBg,
+      borderRadius: 16,
+      overflow: 'hidden',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.15)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: `linear-gradient(135deg,${C.gd},${C.g})`,
+      padding: '13px 16px',
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 40,
+      height: 40,
+      borderRadius: '50%',
+      background: 'rgba(255,255,255,0.15)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 22
+    }
+  }, ch.avatar), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: '#fff',
+      fontWeight: 700,
+      fontSize: 15
+    }
+  }, ch.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: 11
+    }
+  }, "AI Tutor \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      overflowX: 'auto',
+      paddingBottom: 2
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setSelSub(0),
+    style: {
+      flexShrink: 0,
+      padding: '5px 13px',
+      borderRadius: 20,
+      border: `1.5px solid ${selSub === 0 ? '#fff' : 'rgba(255,255,255,0.3)'}`,
+      background: selSub === 0 ? 'rgba(255,255,255,0.2)' : 'transparent',
+      color: '#fff',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: selSub === 0 ? 700 : 400,
+      fontFamily: 'inherit'
+    }
+  }, "All"), SUBJECTS.map(s => /*#__PURE__*/React.createElement("button", {
+    key: s.id,
+    type: "button",
+    onClick: () => setSelSub(s.id),
+    style: {
+      flexShrink: 0,
+      padding: '5px 13px',
+      borderRadius: 20,
+      border: `1.5px solid ${selSub === s.id ? '#fff' : 'rgba(255,255,255,0.3)'}`,
+      background: selSub === s.id ? 'rgba(255,255,255,0.2)' : 'transparent',
+      color: '#fff',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: selSub === s.id ? 700 : 400,
+      fontFamily: 'inherit'
+    }
+  }, s.i, " ", s.n)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      background: C.chatSide,
+      flexShrink: 0,
+      borderBottom: '1px solid rgba(255,255,255,0.06)'
+    }
+  }, [['chat', '💬 Discussion'], ['ask', '❓ Ask AI']].map(([t, l]) => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    type: "button",
+    onClick: () => setTab(t),
+    style: {
+      flex: 1,
+      padding: '10px 0',
+      border: 'none',
+      background: 'transparent',
+      color: tab === t ? C.gl : 'rgba(255,255,255,0.45)',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      fontSize: 13,
+      fontWeight: tab === t ? 700 : 400,
+      borderBottom: tab === t ? `2px solid ${C.gl}` : '2px solid transparent'
+    }
+  }, l))), tab === 'chat' ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    ref: chatRef,
+    style: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '12px 10px',
+      background: C.cBg
+    }
+  }, loading && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      padding: 24
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 24,
+      height: 24,
+      border: `2px solid ${C.g}`,
+      borderTop: '2px solid transparent',
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite'
+    }
+  })), !loading && msgs.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '40px 20px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 50,
+      marginBottom: 12
+    }
+  }, "\uD83D\uDCAC"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'rgba(255,255,255,0.5)',
+      fontSize: 14,
+      marginBottom: 8
+    }
+  }, "No questions yet for this subject"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'rgba(255,255,255,0.35)',
+      fontSize: 12
+    }
+  }, "Tap \"Ask AI\" to start a conversation!")), msgs.map((m, i) => {
+    const isMe = m.sender_id?.toString() === profile?._id?.toString();
+    const isAI = m.content?.startsWith && (m.content.startsWith('👨🏿') || m.content.startsWith('👩🏿') || Object.values(AI_CHARS).some(c => m.content.startsWith(c.avatar)));
+    const aiChar = isAI ? Object.values(AI_CHARS).find(c => m.content.startsWith(c.avatar)) : null;
+    const displayText = isAI && aiChar ? m.content.replace(aiChar.avatar + ' ' + aiChar.name + ': ', '') : m.content;
+    return /*#__PURE__*/React.createElement("div", {
+      key: m._id || i,
+      style: {
+        marginBottom: 8,
+        display: 'flex',
+        flexDirection: isMe ? 'row-reverse' : 'row',
+        gap: 7,
+        alignItems: 'flex-end'
+      }
+    }, !isMe && /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 30,
+        height: 30,
+        borderRadius: '50%',
+        background: isAI ? aiChar?.color || C.g : 'rgba(255,255,255,0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 15,
+        flexShrink: 0
+      }
+    }, isAI ? aiChar?.avatar || '🤖' : '👤'), /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: '78%'
+      }
+    }, !isMe && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: isAI ? aiChar?.color || C.gl : 'rgba(255,255,255,0.5)',
+        fontWeight: 600,
+        marginBottom: 2
+      }
+    }, isAI ? aiChar?.name || 'AI Tutor' : 'Student', " \xB7 ", ftime(m.createdAt)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: isMe ? `linear-gradient(135deg,${C.gd},${C.g})` : isAI ? `rgba(${isAI && ck === 'msimbi' ? '124,58,237' : '6,77,44'},0.25)` : 'rgba(255,255,255,0.09)',
+        color: C.cTxt,
+        borderRadius: isMe ? '16px 16px 3px 16px' : '16px 16px 16px 3px',
+        padding: '10px 13px',
+        fontSize: 13,
+        lineHeight: 1.6,
+        border: isAI ? `1px solid ${aiChar?.color || C.g}33` : 'none'
+      }
+    }, isAI && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: aiChar?.color || C.gl,
+        fontWeight: 700,
+        marginBottom: 4
+      }
+    }, aiChar?.name || 'AI Tutor', " says:"), displayText), !isMe && isAI && /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => ZambianVoice.speak(displayText, aiChar?.name?.includes("M'simbi") ? 'female' : 'male'),
+      style: {
+        background: 'none',
+        border: 'none',
+        color: 'rgba(255,255,255,0.4)',
+        cursor: 'pointer',
+        fontSize: 11,
+        marginTop: 3,
+        padding: 0
+      }
+    }, "\uD83D\uDD0A Hear answer"), isMe && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.35)',
+        marginTop: 2,
+        textAlign: 'right'
+      }
+    }, ftime(m.createdAt))));
+  }), aiThinking && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'flex-end',
+      gap: 7,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30,
+      height: 30,
+      borderRadius: '50%',
+      background: ch.color,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 15
+    }
+  }, ch.avatar), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(255,255,255,0.09)',
+      borderRadius: '16px 16px 16px 3px',
+      padding: '10px 14px',
+      border: `1px solid ${ch.color}33`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: ch.color,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, ch.name, " is thinking..."), /*#__PURE__*/React.createElement(SpeakingWaves, {
+    color: ch.color
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '8px 10px',
+      background: C.chatSide,
+      borderTop: '1px solid rgba(255,255,255,0.07)',
+      display: 'flex',
+      gap: 7,
+      alignItems: 'center',
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: input,
+    onChange: e => setInput(e.target.value),
+    onKeyDown: e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), askQuestion()),
+    placeholder: `Ask ${ch.name} a question...`,
+    style: {
+      flex: 1,
+      padding: '10px 14px',
+      borderRadius: 22,
+      border: 'none',
+      fontSize: 13,
+      fontFamily: 'inherit',
+      outline: 'none',
+      background: C.cIn,
+      color: C.cTxt
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: askQuestion,
+    disabled: asking || !input.trim(),
+    style: {
+      width: 40,
+      height: 40,
+      background: `linear-gradient(135deg,${C.gd},${C.g})`,
+      border: 'none',
+      borderRadius: '50%',
+      color: '#fff',
+      cursor: 'pointer',
+      fontSize: 18,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      opacity: !input.trim() ? .5 : 1,
+      flexShrink: 0
+    }
+  }, "\u27A4"))) :
+  /*#__PURE__*/
+  /* ASK AI TAB */
+  React.createElement("div", {
+    style: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: 14,
+      background: C.cBg
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: `linear-gradient(135deg,${ch.color}22,${ch.color}11)`,
+      border: `1.5px solid ${ch.color}44`,
+      borderRadius: 16,
+      padding: '14px 16px',
+      marginBottom: 14,
+      display: 'flex',
+      gap: 12,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 44
+    }
+  }, ch.avatar), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15,
+      color: C.cTxt
+    }
+  }, ch.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.6)',
+      marginTop: 2
+    }
+  }, selSub ? sn(selSub) : 'All Subjects', " Tutor"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: ch.color,
+      marginTop: 4,
+      fontWeight: 600
+    }
+  }, "Always here to help you learn! \uD83D\uDCDA")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: ch.color,
+      borderRadius: 20,
+      padding: '4px 12px',
+      fontSize: 11,
+      color: '#fff',
+      fontWeight: 700
+    }
+  }, "Active")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...LB,
+      color: 'rgba(255,255,255,0.7)'
+    }
+  }, "\uD83D\uDCDA Subject (optional)"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...IN,
+      background: C.cIn,
+      color: C.cTxt,
+      border: '1px solid rgba(255,255,255,0.15)',
+      appearance: 'none'
+    },
+    value: selSub,
+    onChange: e => setSelSub(Number(e.target.value))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: 0
+  }, "General (Any subject)"), SUBJECTS.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: s.id
+  }, s.i, " ", s.n)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...LB,
+      color: 'rgba(255,255,255,0.7)'
+    }
+  }, "\u2753 Your Question"), /*#__PURE__*/React.createElement("textarea", {
+    value: input,
+    onChange: e => setInput(e.target.value),
+    style: {
+      ...IN,
+      height: 100,
+      resize: 'vertical',
+      background: C.cIn,
+      color: C.cTxt,
+      border: '1px solid rgba(255,255,255,0.15)',
+      fontSize: 14
+    },
+    placeholder: `Ask ${ch.name} anything...
 e.g. What is photosynthesis?
-How do I solve 2x + 5 = 15?`}/>
-          </div>
-
-          {/* Quick questions */}
-          <div style={{marginBottom:14}}>
-            <label style={{...LB,color:'rgba(255,255,255,0.7)'}}>⚡ Quick Questions</label>
-            <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
-              {[
-                'Explain photosynthesis simply',
-                'How do I solve quadratic equations?',
-                'What are the causes of World War 1?',
-                'Explain the water cycle',
-                'What is cellular respiration?',
-                'How do I write a good essay?'
-              ].map(q=>(
-                <button key={q} type="button" onClick={()=>{setInput(q);}} style={{background:'rgba(255,255,255,0.07)',border:`1px solid rgba(255,255,255,0.15)`,borderRadius:20,padding:'7px 13px',cursor:'pointer',color:'rgba(255,255,255,0.8)',fontSize:12,fontFamily:'inherit',textAlign:'left'}}>
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Ask button */}
-          <button type="button" style={{...BT(),width:'100%',justifyContent:'center',fontSize:16,padding:'15px',opacity:asking?.7:1}} onClick={askQuestion} disabled={asking||!input.trim()}>
-            {asking ? (
-              <span style={{display:'flex',alignItems:'center',gap:8}}>
-                <div style={{width:18,height:18,border:'2px solid rgba(255,255,255,0.4)',borderTop:'2px solid #fff',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
-                {ch.name} is answering...
-              </span>
-            ) : `${ch.avatar} Ask ${ch.name}`}
-          </button>
-
-          {/* How it works */}
-          <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:14,padding:'13px 15px',marginTop:14}}>
-            <div style={{fontWeight:700,color:'rgba(255,255,255,0.7)',marginBottom:8,fontSize:13}}>💡 How it works</div>
-            <div style={{fontSize:12,color:'rgba(255,255,255,0.5)',lineHeight:1.8}}>
-              1. Type your academic question above<br/>
-              2. {ch.name} answers in warm Zambian English<br/>
-              3. Tap 🔊 to hear the answer spoken aloud<br/>
-              4. Human tutors can also add detailed replies
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+How do I solve 2x + 5 = 15?`
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...LB,
+      color: 'rgba(255,255,255,0.7)'
+    }
+  }, "\u26A1 Quick Questions"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 7
+    }
+  }, ['Explain photosynthesis simply', 'How do I solve quadratic equations?', 'What are the causes of World War 1?', 'Explain the water cycle', 'What is cellular respiration?', 'How do I write a good essay?'].map(q => /*#__PURE__*/React.createElement("button", {
+    key: q,
+    type: "button",
+    onClick: () => {
+      setInput(q);
+    },
+    style: {
+      background: 'rgba(255,255,255,0.07)',
+      border: `1px solid rgba(255,255,255,0.15)`,
+      borderRadius: 20,
+      padding: '7px 13px',
+      cursor: 'pointer',
+      color: 'rgba(255,255,255,0.8)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      textAlign: 'left'
+    }
+  }, q)))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    style: {
+      ...BT(),
+      width: '100%',
+      justifyContent: 'center',
+      fontSize: 16,
+      padding: '15px',
+      opacity: asking ? .7 : 1
+    },
+    onClick: askQuestion,
+    disabled: asking || !input.trim()
+  }, asking ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 18,
+      height: 18,
+      border: '2px solid rgba(255,255,255,0.4)',
+      borderTop: '2px solid #fff',
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite'
+    }
+  }), ch.name, " is answering...") : `${ch.avatar} Ask ${ch.name}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: 14,
+      padding: '13px 15px',
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      color: 'rgba(255,255,255,0.7)',
+      marginBottom: 8,
+      fontSize: 13
+    }
+  }, "\uD83D\uDCA1 How it works"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.5)',
+      lineHeight: 1.8
+    }
+  }, "1. Type your academic question above", /*#__PURE__*/React.createElement("br", null), "2. ", ch.name, " answers in warm Zambian English", /*#__PURE__*/React.createElement("br", null), "3. Tap \uD83D\uDD0A to hear the answer spoken aloud", /*#__PURE__*/React.createElement("br", null), "4. Human tutors can also add detailed replies"))));
 }
-
 function ProfilePage() {
   const {
     profile,
