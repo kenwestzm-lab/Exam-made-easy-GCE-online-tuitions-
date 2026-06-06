@@ -26,7 +26,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     server: 'Peace Mindset API v5 - Live Classroom',
-    gemini: (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY process.env.GEMINI_API_KEY.startsWith('AIza')process.env.GEMINI_API_KEY.startsWith('AIza') process.env.GEMINI_API_KEY.length > 10) ? 'configured' : 'configured (AQ format)',
+    gemini: process.env.GEMINI_API_KEY ? 'configured' : 'missing',
     cloudinary: process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_CLOUD_NAME !== '' ? 'configured' : 'missing',
     time: new Date().toISOString()
   });
