@@ -65,77 +65,59 @@ const apiFetch = async (method, path, body, token, fd) => {
   }
 };
 const tok = () => localStorage.getItem('pms_t');
-const SUBJECTS = [{
-  id: 1,
-  n: 'Mathematics',
-  i: '📐',
-  char: 'ken'
-}, {
-  id: 2,
-  n: 'English Language',
-  i: '📖',
-  char: 'msimbi'
-}, {
-  id: 3,
-  n: 'Biology',
-  i: '🌿',
-  char: 'msimbi'
-}, {
-  id: 4,
-  n: 'Chemistry',
-  i: '⚗️',
-  char: 'ken'
-}, {
-  id: 5,
-  n: 'Physics',
-  i: '⚡',
-  char: 'ken'
-}, {
-  id: 6,
-  n: 'Civic Education',
-  i: '🏛️',
-  char: 'msimbi'
-}, {
-  id: 7,
-  n: 'Geography',
-  i: '🌍',
-  char: 'msimbi'
-}, {
-  id: 8,
-  n: 'Commerce',
-  i: '💼',
-  char: 'ken'
-}, {
-  id: 9,
-  n: 'Accounts',
-  i: '📊',
-  char: 'ken'
-}, {
-  id: 10,
-  n: 'History',
-  i: '📜',
-  char: 'msimbi'
-}, {
-  id: 11,
-  n: 'Religious Ed',
-  i: '✝️',
-  char: 'msimbi'
-}, {
-  id: 12,
-  n: 'Add. Mathematics',
-  i: '🔢',
-  char: 'ken'
-}, {
-  id: 13,
-  n: 'Home Economics',
-  i: '🏠',
-  char: 'msimbi'
-}, {
-  id: 14,
-  n: 'Computer Studies',
-  i: '💻',
-  char: 'ken'
-}];
+// Zambian Grade System
+const GRADES = [
+  { id: 'grade6',  n: 'Grade 6',          level: 'primary' },
+  { id: 'grade7',  n: 'Grade 7',          level: 'primary' },
+  { id: 'grade8',  n: 'Grade 8 (Form 1)', level: 'junior' },
+  { id: 'grade9',  n: 'Grade 9 (Form 2)', level: 'junior' },
+  { id: 'grade10', n: 'Grade 10 (Form 3)',level: 'senior' },
+  { id: 'grade11', n: 'Grade 11 (Form 4)',level: 'senior' },
+  { id: 'grade12', n: 'Grade 12 (Form 5 GCE)', level: 'gce' },
+  { id: 'gce',     n: 'GCE Repeater',     level: 'gce' },
+];
+
+// All subjects with grade applicability
+const SUBJECTS = [
+  // Core - all grades
+  { id: 1,  n: 'Mathematics',       i: '📐', char: 'ken',    grades: ['grade6','grade7','grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 2,  n: 'English Language',  i: '📖', char: 'msimbi', grades: ['grade6','grade7','grade8','grade9','grade10','grade11','grade12','gce'] },
+  // Primary
+  { id: 15, n: 'Literacy (Eng)',    i: '✏️', char: 'msimbi', grades: ['grade6','grade7'] },
+  { id: 16, n: 'Numeracy',          i: '🔢', char: 'ken',    grades: ['grade6','grade7'] },
+  { id: 17, n: 'Social Studies',    i: '🤝', char: 'msimbi', grades: ['grade6','grade7'] },
+  { id: 18, n: 'Environmental Sci', i: '🌱', char: 'msimbi', grades: ['grade6','grade7'] },
+  { id: 19, n: 'Expressive Arts',   i: '🎨', char: 'msimbi', grades: ['grade6','grade7'] },
+  // Junior Secondary (Gr 8-9)
+  { id: 3,  n: 'Biology',           i: '🌿', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 4,  n: 'Chemistry',         i: '⚗️', char: 'ken',    grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 5,  n: 'Physics',           i: '⚡', char: 'ken',    grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 6,  n: 'Civic Education',   i: '🏛️', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 7,  n: 'Geography',         i: '🌍', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 10, n: 'History',           i: '📜', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 11, n: 'Religious Ed',      i: '✝️', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 20, n: 'French',            i: '🇫🇷', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 21, n: 'Zambian Language',  i: '🇿🇲', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 13, n: 'Home Economics',    i: '🏠', char: 'msimbi', grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 22, n: 'Design & Tech',     i: '🔧', char: 'ken',    grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  // Senior/GCE (Gr 10-12)
+  { id: 8,  n: 'Commerce',          i: '💼', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 9,  n: 'Accounts',          i: '📊', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 12, n: 'Add. Mathematics',  i: '🔢', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 14, n: 'Computer Studies',  i: '💻', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 23, n: 'Economics',         i: '📈', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 24, n: 'Principles of Accounts', i: '🧾', char: 'ken', grades: ['grade10','grade11','grade12','gce'] },
+  { id: 25, n: 'Business Studies',  i: '🏢', char: 'ken',    grades: ['grade10','grade11','grade12','gce'] },
+  { id: 26, n: 'Agriculture',       i: '🌾', char: 'ken',    grades: ['grade8','grade9','grade10','grade11','grade12','gce'] },
+  { id: 27, n: 'Food & Nutrition',  i: '🍽️', char: 'msimbi', grades: ['grade10','grade11','grade12','gce'] },
+  { id: 28, n: 'Literature in Eng', i: '📚', char: 'msimbi', grades: ['grade10','grade11','grade12','gce'] },
+];
+
+// Get subjects for a specific grade
+const subjectsForGrade = (gradeId) => {
+  if (!gradeId) return SUBJECTS;
+  return SUBJECTS.filter(s => s.grades.includes(gradeId));
+};
 const PROVINCES = ["Central", "Copperbelt", "Eastern", "Luapula", "Lusaka", "Muchinga", "Northern", "North-Western", "Southern", "Western"];
 const sn = id => SUBJECTS.find(s => s.id === Number(id))?.n || 'Unknown';
 const si = id => SUBJECTS.find(s => s.id === Number(id))?.i || '📚';
@@ -878,9 +860,10 @@ function AuthScreen() {
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
-  }, "Select..."), ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5 (Grade 11)', 'Grade 12', 'Repeater'].map(g => /*#__PURE__*/React.createElement("option", {
-    key: g
-  }, g)))), role === 'tutor' && /*#__PURE__*/React.createElement("div", {
+  }, "Select grade..."), GRADES.map(g => /*#__PURE__*/React.createElement("option", {
+    key: g.id,
+    value: g.id
+  }, g.n)))), role === 'tutor' && /*#__PURE__*/React.createElement("div", {
     style: {
       background: '#fffbeb',
       border: '1.5px solid #fde68a',
@@ -5149,6 +5132,9 @@ function SubscribePage() {
   const pendIds = new Set(pays.filter(p => p.status === 'pending').map(p => Number(p.subject_id)));
   const toggle = id => setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const price = 85;
+  // Filter subjects by student's grade
+  const myGrade = profile?.grade;
+  const availableSubjects = subjectsForGrade(myGrade);
   const submit = async () => {
     const txn = txnRef.current?.value?.trim();
     if (!sel.length || !txn) {
@@ -5301,13 +5287,13 @@ function SubscribePage() {
       margin: '0 0 13px',
       fontSize: 14
     }
-  }, "\uD83D\uDCDA Select Subjects"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCDA Select Subjects (" + (GRADES.find(g=>g.id===myGrade)?.n || 'All Grades') + ")"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill,minmax(115px,1fr))',
       gap: 7
     }
-  }, SUBJECTS.map(s => {
+  }, availableSubjects.map(s => {
     const ac = actIds.has(s.id),
       pn = pendIds.has(s.id),
       pk = sel.includes(s.id);

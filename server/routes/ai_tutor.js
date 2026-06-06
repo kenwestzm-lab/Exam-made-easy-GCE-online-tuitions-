@@ -232,3 +232,22 @@ router.get('/status', async (req, res) => {
 });
 
 module.exports = router;
+
+// Alias for frontend compatibility
+router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
+  try {
+    const { subject, topic, count = 5, type = 'mcq' } = req.body;
+    const prompt = `You are an expert GCE O-Level teacher in Zambia. Generate exactly ${count} ${type.toUpperCase()} questions about "${topic || subject}" for Zambian students.
+
+RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
+{"questions":[{"question":"question text","type":"${type}","options":["A. option1","B. option2","C. option3","D. option4"],"correct_answer":"A","explanation":"brief explanation"}]}`;
+
+    const raw = await callAI(prompt, `Generate ${count} ${type} questions for ${subject}`, [], 1500);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    res.json(parsed);
+  } catch (e) {
+    console.error('Generate test error:', e.message);
+    res.status(500).json({ error: 'Could not generate questions. Please try again.' });
+  }
+});

@@ -45,13 +45,12 @@ const getViewUrl = (url, type) => {
   return url;
 };
 
-// Get download URL with proper filename
+// Get download URL - use direct URL, browser handles download
 const getDownloadUrl = (url, filename, type) => {
   if (!url) return '';
-  if (url.includes('cloudinary.com')) {
-    const ext = type === 'pdf' ? 'pdf' : type === 'word' ? 'docx' : type === 'pptx' ? 'pptx' : '';
-    const name = filename ? filename.replace(/[^a-z0-9]/gi, '_') : 'file';
-    return url.replace('/upload/', `/upload/fl_attachment:${name}/`);
+  // For raw files on cloudinary, add fl_attachment to force download
+  if (url.includes('cloudinary.com') && url.includes('/raw/upload/')) {
+    return url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
   }
   return url;
 };
