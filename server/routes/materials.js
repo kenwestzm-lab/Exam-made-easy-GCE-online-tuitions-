@@ -49,6 +49,31 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Proxy download - forces proper file download
+router.get('/:id/download', auth, async (req, res) => {
+  try {
+    const m = await Material.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { downloads: 1 } },
+      { new: true }
+    );
+    if (!m?.file_url) return res.status(404).json({ error: 'File not found' });
+
+    // Fetch file from Cloudinary and pipe it
+    const response = await fetch(m.file_url);
+    if (!response.ok) return res.status(502).json({ error: 'Could not fetch file' });
+
+    const ext = m.type === 'pdf' ? 'pdf' : m.type === 'word' ? 'docx' : m.type === 'pptx' ? 'pptx' : m.type === 'image' ? 'jpg' : 'bin';
+    const filename = (m.title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
+
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Increment download count
 router.post('/:id/download', auth, async (req, res) => {
   try {

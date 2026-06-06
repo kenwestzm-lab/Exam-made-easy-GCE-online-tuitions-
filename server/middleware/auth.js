@@ -2,9 +2,12 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const auth = async (req, res, next) => {
   try {
+    // Accept token from header OR query string (for file downloads)
     const h = req.headers.authorization;
-    if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'Please login to continue' });
-    const decoded = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET || 'peacemindset_secret');
+    const queryToken = req.query.token;
+    if (!h && !queryToken) return res.status(401).json({ error: 'Please login to continue' });
+    const token = queryToken || h.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'peacemindset_secret');
     const user = await User.findById(decoded.id);
     if (!user) return res.status(401).json({ error: 'User not found. Please login again.' });
     req.user = user; next();

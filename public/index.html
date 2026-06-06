@@ -5807,10 +5807,9 @@ function MaterialsPage({
         style: { ...BT('gh', true), fontSize: 11, padding: '4px 10px', cursor: 'pointer', border: 'none' }
       }, "\uD83D\uDC41 View"),
       React.createElement("a", {
-        href: m.download_url || m.file_url,
+        href: m.download_url || BACKEND+'/api/materials/'+m._id+'/download?token='+tok(),
         target: "_blank",
         rel: "noreferrer",
-        onClick: async () => { try { await apiFetch('POST', '/materials/'+m._id+'/download', null, tok()); } catch(e){} },
         style: { ...BT('p', true), textDecoration: 'none', fontSize: 11, padding: '4px 10px' }
       }, "\u2B07 Download")) : /*#__PURE__*/React.createElement("span", {
       style: {
@@ -8215,7 +8214,7 @@ function TutorMaterials() {
     style: { ...BT('gh', true), fontSize: 11, padding: '6px 11px' },
     onClick: () => window.open(m.view_url || m.file_url, "_blank")
   }, "\uD83D\uDC41 View"), /*#__PURE__*/React.createElement("a", {
-    href: m.download_url || m.file_url,
+    href: BACKEND+'/api/materials/'+m._id+'/download?token='+tok(),
     target: "_blank",
     rel: "noreferrer",
     style: { ...BT('p', true), fontSize: 11, padding: '6px 11px', textDecoration: 'none' }
