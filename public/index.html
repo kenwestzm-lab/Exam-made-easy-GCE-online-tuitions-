@@ -116,7 +116,15 @@ const SUBJECTS = [
 // Get subjects for a specific grade
 const subjectsForGrade = (gradeId) => {
   if (!gradeId) return SUBJECTS;
-  return SUBJECTS.filter(s => s.grades.includes(gradeId));
+  // Handle old format mapping
+  const gradeMap = {
+    'Form 1': 'grade8', 'Form 2': 'grade9', 'Form 3': 'grade10',
+    'Form 4': 'grade11', 'Form 5 (Grade 11)': 'grade11',
+    'Grade 12': 'grade12', 'Repeater': 'gce'
+  };
+  const gid = gradeMap[gradeId] || gradeId;
+  const filtered = SUBJECTS.filter(s => s.grades.includes(gid));
+  return filtered.length > 0 ? filtered : SUBJECTS;
 };
 const PROVINCES = ["Central", "Copperbelt", "Eastern", "Luapula", "Lusaka", "Muchinga", "Northern", "North-Western", "Southern", "Western"];
 const sn = id => SUBJECTS.find(s => s.id === Number(id))?.n || 'Unknown';
