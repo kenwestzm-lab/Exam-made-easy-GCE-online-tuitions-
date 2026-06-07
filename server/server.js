@@ -40,6 +40,7 @@ app.use('/api/materials', require('./routes/materials'));
 app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/tests', require('./routes/tests'));
 app.use('/api/ai', require('./routes/ai_tutor'));
+app.use('/api/ai-tokens', require('./routes/ai_tokens'));
 app.use('/api', require('./routes/misc'));
 
 // ── Socket.IO Real-time ───────────────────────────────

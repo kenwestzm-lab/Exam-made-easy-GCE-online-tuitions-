@@ -142,6 +142,7 @@ const AI_CHARS = {
   ken: {
     name: 'Teacher Ken',
     avatar: '👨🏿‍🏫',
+    photo: 'https://res.cloudinary.com/djzlbigqz/image/upload/peace-mindset/avatars/teacher_ken',
     color: '#064d2c',
     pitch: 0.88,
     rate: 0.78,
@@ -150,12 +151,14 @@ const AI_CHARS = {
   msimbi: {
     name: "Mis M'simbi",
     avatar: '👩🏿‍🏫',
+    photo: null,
     color: '#7c3aed',
     pitch: 1.12,
     rate: 0.75,
     hints: ['zira', 'hazel', 'susan', 'karen', 'victoria']
   }
 };
+const AI_FREE_LIMIT = 5;
 let _voices = [],
   _vr = false;
 const lv = () => {
@@ -4331,6 +4334,29 @@ function QuestionsPage() {
   const [selSub, setSelSub] = useState(0);
   const [tab, setTab] = useState('ask');
   const [aiThinking, setAiThinking] = useState(false);
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState(null);
+  const [aiPayForm, setAiPayForm] = useState({ plan: 'basic', method: 'MTN Mobile Money', transaction_id: '', notes: '' });
+  const [aiPayBusy, setAiPayBusy] = useState(false);
+
+  // Load token status
+  useEffect(() => {
+    if (!profile?._id) return;
+    apiFetch('GET', '/ai-tokens/status', null, tok()).then(s => setTokenStatus(s)).catch(()=>{});
+  }, [profile?._id]);
+
+  const submitAiPayment = async () => {
+    if (!aiPayForm.transaction_id) { add({ title: 'Enter transaction ID', icon: '⚠️', type: 'w' }); return; }
+    setAiPayBusy(true);
+    try {
+      const fd = new FormData();
+      Object.entries(aiPayForm).forEach(([k,v]) => fd.append(k, v));
+      await apiFetch('POST', '/ai-tokens/payment', null, tok(), fd);
+      add({ title: '✅ Payment submitted!', body: 'Admin will approve shortly. You will get your tokens.', icon: '🤖', type: 'i' });
+      setShowTokenModal(false);
+    } catch(e) { add({ title: 'Failed', body: e.message, icon: '❌', type: 'd' }); }
+    setAiPayBusy(false);
+  };
   const [loading, setLoading] = useState(true);
   const chatRef = useRef();
   const ch = AI_CHARS[SUBJECTS.find(s => s.id === selSub)?.char || 'ken'] || AI_CHARS.ken;
@@ -4367,6 +4393,21 @@ function QuestionsPage() {
   const askQuestion = async () => {
     if (!input.trim()) return;
     const q = input.trim();
+
+    // Check AI tokens first
+    try {
+      const tokenStatus = await apiFetch('POST', '/ai-tokens/use', {}, tok());
+      if (tokenStatus.error === 'NO_TOKENS') {
+        setShowTokenModal(true);
+        return;
+      }
+    } catch(e) {
+      if (e.message?.includes('NO_TOKENS') || e.message?.includes('403')) {
+        setShowTokenModal(true);
+        return;
+      }
+    }
+
     setInput('');
     setAsking(true);
     setTab('chat');
@@ -4423,6 +4464,48 @@ function QuestionsPage() {
     name: id?.toString() === profile?._id?.toString() ? 'You' : 'Student',
     isMe: id?.toString() === profile?._id?.toString()
   });
+  // Token purchase modal
+  if (showTokenModal) {
+    const plans = { basic: { tokens: 15, amount: 5 }, standard: { tokens: 50, amount: 15 }, premium: { tokens: 150, amount: 40 } };
+    const selPlan = plans[aiPayForm.plan];
+    return /*#__PURE__*/React.createElement("div", { style: { padding: 16 } },
+      React.createElement("div", { style: { background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.1)' } },
+        React.createElement("div", { style: { textAlign: 'center', marginBottom: 16 } },
+          React.createElement("div", { style: { fontSize: 40 } }, "🤖"),
+          React.createElement("h3", { style: { color: C.gd, margin: '8px 0 4px' } }, "Get AI Tokens"),
+          React.createElement("p", { style: { color: C.gr, fontSize: 13, margin: 0 } }, "You have used all " + AI_FREE_LIMIT + " free questions")
+        ),
+        tokenStatus && React.createElement("div", { style: { background: C.grl, borderRadius: 10, padding: '8px 12px', marginBottom: 14, fontSize: 12, color: C.grd } },
+          "Free: " + tokenStatus.free_used + "/" + tokenStatus.free_limit + " used · Paid tokens: " + tokenStatus.paid_tokens
+        ),
+        React.createElement("div", { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 } },
+          Object.entries(plans).map(([k, p]) => React.createElement("div", {
+            key: k,
+            onClick: () => setAiPayForm(f => ({...f, plan: k})),
+            style: { border: '2px solid ' + (aiPayForm.plan === k ? C.g : C.grl), borderRadius: 12, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', background: aiPayForm.plan === k ? C.gp : '#fff' }
+          },
+            React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.gd } }, p.tokens + " tokens"),
+            React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: C.g, margin: '4px 0' } }, "K" + p.amount),
+            React.createElement("div", { style: { fontSize: 10, color: C.gr } }, k.toUpperCase())
+          ))
+        ),
+        React.createElement("div", { style: { background: C.grl, borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 12 } },
+          React.createElement("div", { style: { fontWeight: 700, color: C.gd, marginBottom: 6 } }, "💳 Pay to:"),
+          React.createElement("div", null, "📱 MTN Money: 0761468402"),
+          React.createElement("div", null, "📱 Airtel: 0570109056"),
+          React.createElement("div", null, "🏦 Access Bank: 0136496126029")
+        ),
+        React.createElement("select", { value: aiPayForm.method, onChange: e => setAiPayForm(f=>({...f,method:e.target.value})), style: {...IN, marginBottom: 8} },
+          ["MTN Mobile Money","Airtel Money","Access Bank","Cash"].map(m => React.createElement("option", {key:m}, m))
+        ),
+        React.createElement("input", { placeholder: "Transaction ID / Reference *", value: aiPayForm.transaction_id, onChange: e => setAiPayForm(f=>({...f,transaction_id:e.target.value})), style: {...IN, marginBottom: 8} }),
+        React.createElement("input", { placeholder: "Notes (optional)", value: aiPayForm.notes, onChange: e => setAiPayForm(f=>({...f,notes:e.target.value})), style: {...IN, marginBottom: 12} }),
+        React.createElement("button", { type: "button", onClick: submitAiPayment, disabled: aiPayBusy, style: {...BT(), width: '100%', justifyContent: 'center', marginBottom: 8} }, aiPayBusy ? "⏳ Submitting..." : "Submit Payment — K" + selPlan.amount + " for " + selPlan.tokens + " tokens"),
+        React.createElement("button", { type: "button", onClick: () => setShowTokenModal(false), style: {...BT('gh'), width: '100%', justifyContent: 'center'} }, "Cancel")
+      )
+    );
+  }
+
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -4455,9 +4538,11 @@ function QuestionsPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: 22
+      fontSize: 22,
+      overflow: 'hidden',
+      flexShrink: 0
     }
-  }, ch.avatar), /*#__PURE__*/React.createElement("div", {
+  }, ch.photo ? React.createElement("img", { src: ch.photo, alt: ch.name, style: { width: '100%', height: '100%', objectFit: 'cover' }, onError: e => { e.target.style.display='none'; } }) : ch.avatar), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1
     }
@@ -4472,7 +4557,7 @@ function QuestionsPage() {
       color: 'rgba(255,255,255,0.7)',
       fontSize: 11
     }
-  }, "AI Tutor \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
+  }, "AI Tutor \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2"), tokenStatus && React.createElement("div", { style: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } }, tokenStatus.free_remaining > 0 ? "\uD83D\uDFE2 " + tokenStatus.free_remaining + " free questions left" : tokenStatus.paid_tokens > 0 ? "\uD83D\uDFE1 " + tokenStatus.paid_tokens + " tokens" : "\uD83D\uDD34 No tokens - tap to buy")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,

@@ -113,6 +113,27 @@ const AnnSchema = new Schema({
   author_id: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+// AI Token Schema
+const AITokenSchema = new Schema({
+  student_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  free_used: { type: Number, default: 0 },      // free questions used (max 5)
+  paid_tokens: { type: Number, default: 0 },    // paid tokens available
+  total_used: { type: Number, default: 0 },     // total questions ever asked
+}, { timestamps: true });
+
+// AI Token Payment Schema
+const AIPaySchema = new Schema({
+  student_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  plan: { type: String, enum: ['basic','standard','premium'], default: 'basic' },
+  tokens: { type: Number, required: true },     // tokens to add on approval
+  amount: { type: Number, required: true },     // ZMW amount paid
+  method: { type: String },
+  transaction_id: { type: String },
+  receipt_url: { type: String },
+  status: { type: String, enum: ['pending','approved','rejected'], default: 'pending' },
+  admin_note: { type: String },
+}, { timestamps: true });
+
 module.exports = {
   User: mongoose.model('User', UserSchema),
   Subscription: mongoose.model('Subscription', SubSchema),
@@ -126,4 +147,6 @@ module.exports = {
   LiveClass: mongoose.model('LiveClass', LiveSchema),
   Message: mongoose.model('Message', MsgSchema),
   Announcement: mongoose.model('Announcement', AnnSchema),
+  AIToken: mongoose.model('AIToken', AITokenSchema),
+  AIPayment: mongoose.model('AIPayment', AIPaySchema),
 };
