@@ -164,14 +164,28 @@ async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) 
 // ── POST /api/ai/chat ────────────────────────────────
 router.post('/chat', auth, async (req, res) => {
   try {
-    const { message, subject, character, lesson_context, conversation_history } = req.body;
+    const { message, subject, character, lesson_context, conversation_history, image_base64 } = req.body;
     const ch = AI[character] || AI.ken;
     const history = (conversation_history || []).slice(-6).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
       content: m.text || m.content || ''
     }));
     const prompt = buildPrompt(ch, subject, lesson_context);
-    const reply = await callAI(prompt, message, history, 300);
+    
+    let reply;
+    if (image_base64) {
+      // Use Groq vision or describe image context
+      const imgPrompt = prompt + '\n\nA student has sent you an image with their question. Describe what you see and help them understand it as a teacher would.';
+      // Try Groq with image description fallback
+      try {
+        const groqReply = await callGroq(imgPrompt, message + ' [Student sent an image/photo of their question or problem]', history, 400);
+        reply = groqReply;
+      } catch(e) {
+        reply = await callAI(imgPrompt, message, history, 400);
+      }
+    } else {
+      reply = await callAI(prompt, message, history, 300);
+    }
     res.json({ reply, character: ch.name });
   } catch (e) {
     console.error('AI chat error:', e.message);

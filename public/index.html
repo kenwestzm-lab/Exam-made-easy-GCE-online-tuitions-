@@ -4335,6 +4335,7 @@ function QuestionsPage() {
   const [tab, setTab] = useState('ask');
   const [aiThinking, setAiThinking] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
+  const [qImage, setQImage] = useState(null);
   const [tokenStatus, setTokenStatus] = useState(null);
   const [aiPayForm, setAiPayForm] = useState({ plan: 'basic', method: 'MTN Mobile Money', transaction_id: '', notes: '' });
   const [aiPayBusy, setAiPayBusy] = useState(false);
@@ -4392,17 +4393,28 @@ function QuestionsPage() {
   }, [msgs]);
   const askQuestion = async () => {
     if (!input.trim()) return;
-    const q = input.trim();
+    const q = input.trim() || (qImage ? 'What is in this image? Please explain it.' : '');
+    if (!q && !qImage) return;
 
     // Check AI tokens first
     try {
-      const tokenStatus = await apiFetch('POST', '/ai-tokens/use', {}, tok());
-      if (tokenStatus.error === 'NO_TOKENS') {
+      const tokenResult = await apiFetch('POST', '/ai-tokens/use', {}, tok());
+      if (tokenResult.error === 'NO_TOKENS') {
         setShowTokenModal(true);
         return;
       }
+      // Update token display in real time
+      setTokenStatus(prev => prev ? {
+        ...prev,
+        free_remaining: tokenResult.free_remaining,
+        paid_tokens: tokenResult.paid_tokens,
+        free_used: tokenResult.type === 'free' ? (prev.free_used||0)+1 : prev.free_used,
+        can_ask: tokenResult.free_remaining > 0 || tokenResult.paid_tokens > 0
+      } : prev);
     } catch(e) {
-      if (e.message?.includes('NO_TOKENS') || e.message?.includes('403')) {
+      if (e.message?.includes('NO_TOKENS') || e.message?.includes('free questions') || e.message?.includes('tokens')) {
+        // Refresh token status
+        apiFetch('GET', '/ai-tokens/status', null, tok()).then(s => setTokenStatus(s)).catch(()=>{});
         setShowTokenModal(true);
         return;
       }
@@ -4440,8 +4452,10 @@ function QuestionsPage() {
           role: 'user',
           text: m.content
         })),
-        lesson_context: ''
+        lesson_context: '',
+        image_base64: qImage?.base64 || null
       }, tok());
+      setQImage(null);
       if (r.reply) {
         const aiReplyMsg = { _id: 'air_'+Date.now(), sender_id: 'ai', content: r.reply, createdAt: new Date().toISOString(), subject_id: selSub, type: 'group' };
         setMsgs(p => p.map(m => m._id === tempAI._id ? aiReplyMsg : m));
@@ -4788,6 +4802,28 @@ function QuestionsPage() {
       flexShrink: 0
     }
   }, /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    id: "qi-img",
+    accept: "image/*",
+    style: { display: 'none' },
+    onChange: async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        setQImage({ file, preview: ev.target.result, base64: ev.target.result.split(',')[1] });
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+  }), qImage && React.createElement("div", { style: { position: 'relative', marginRight: 4 } },
+    React.createElement("img", { src: qImage.preview, style: { width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '2px solid '+C.g } }),
+    React.createElement("button", { type: "button", onClick: () => setQImage(null), style: { position: 'absolute', top: -6, right: -6, background: C.d, border: 'none', borderRadius: '50%', width: 16, height: 16, color: '#fff', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, "×")
+  ), React.createElement("button", {
+    type: "button",
+    onClick: () => document.getElementById('qi-img').click(),
+    style: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 20, cursor: 'pointer', padding: '0 4px', flexShrink: 0 }
+  }, "📷"), /*#__PURE__*/React.createElement("input", {
     value: input,
     onChange: e => setInput(e.target.value),
     onKeyDown: e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), askQuestion()),
@@ -4806,7 +4842,7 @@ function QuestionsPage() {
   }), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: askQuestion,
-    disabled: asking || !input.trim(),
+    disabled: asking || (!input.trim() && !qImage),
     style: {
       width: 40,
       height: 40,
