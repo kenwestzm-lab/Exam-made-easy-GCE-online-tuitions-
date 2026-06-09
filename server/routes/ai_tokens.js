@@ -82,6 +82,7 @@ router.post('/payment', auth, upload.single('receipt'), async (req, res) => {
       receipt_url = r.secure_url;
     }
 
+    const io = req.app.get('io');
     const payment = await AIPayment.create({
       student_id: req.user._id,
       plan,
@@ -92,6 +93,8 @@ router.post('/payment', auth, upload.single('receipt'), async (req, res) => {
       notes,
       receipt_url
     });
+    // Notify all admins in real time
+    if (io) io.to('admins').emit('new_ai_payment', { student: req.user.name, plan: payment.plan, amount: payment.amount });
     res.status(201).json(payment);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -127,8 +130,9 @@ router.put('/payments/:id/approve', auth, adminOnly, async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Notify via socket
-    const io = require('../server').get?.('io');
+    // Notify student via socket
+    const io = req.app.get('io');
+    if (io) io.to(`user_${p.student_id}`).emit('ai_tokens_approved', { tokens: p.tokens, plan: p.plan });
 
     res.json({ ...p.toObject(), tokens_added: p.tokens });
   } catch(e) { res.status(500).json({ error: e.message }); }

@@ -130,6 +130,10 @@ io.on('connection', (socket) => {
     } catch(e) { console.error('Auto-start error:', e.message); }
   });
 
+  socket.on('join_admin', () => {
+    socket.join('admins');
+  });
+
   socket.on('disconnect', () => {
     console.log('🔌 Disconnected:', socket.id);
   });

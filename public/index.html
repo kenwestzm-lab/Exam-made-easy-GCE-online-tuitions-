@@ -6,6 +6,11 @@
 <meta name="theme-color" content="#064d2c"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#064d2c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Peace Mindset">
 <title>Peace Mindset Private School — GCE Online · Mufulira, Zambia</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -4346,6 +4351,17 @@ function QuestionsPage() {
     apiFetch('GET', '/ai-tokens/status', null, tok()).then(s => setTokenStatus(s)).catch(()=>{});
   }, [profile?._id]);
 
+  // Listen for token approval in real time
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('ai_tokens_approved', (data) => {
+      add({ title: '🎉 AI Tokens Activated!', body: data.tokens + ' tokens added! (' + data.plan + ' plan)', icon: '🤖', type: 'i' });
+      window.pmNotify?.('Tokens Activated!', data.tokens + ' AI tokens added to your account!');
+      apiFetch('GET', '/ai-tokens/status', null, tok()).then(s => setTokenStatus(s)).catch(()=>{});
+    });
+    return () => socket.off('ai_tokens_approved');
+  }, [socket]);
+
   const submitAiPayment = async () => {
     if (!aiPayForm.transaction_id) { add({ title: 'Enter transaction ID', icon: '⚠️', type: 'w' }); return; }
     setAiPayBusy(true);
@@ -8652,6 +8668,27 @@ function AdminApp() {
   const {
     add
   } = useToast();
+  const { socket } = useAuth();
+
+  // Join admin room for real-time notifications
+  useEffect(() => {
+    if (socket) {
+      socket.emit('join_admin');
+      socket.on('new_payment', (data) => {
+        add({ title: '💳 New Payment!', body: data.student + ' paid ZMW ' + data.amount + ' for ' + data.subject, icon: '💰', type: 'i' });
+        window.pmNotify?.('New Payment!', data.student + ' paid ZMW ' + data.amount);
+      });
+      socket.on('new_ai_payment', (data) => {
+        add({ title: '🤖 AI Token Payment!', body: data.student + ' paid ZMW ' + data.amount + ' for ' + data.plan + ' plan', icon: '🤖', type: 'i' });
+        window.pmNotify?.('AI Token Payment!', data.student + ' - ZMW ' + data.amount);
+      });
+      return () => {
+        socket.off('new_payment');
+        socket.off('new_ai_payment');
+      };
+    }
+  }, [socket]);
+
   const {
     data: pays,
     setData: setPays
@@ -8670,6 +8707,11 @@ function AdminApp() {
     icon: '💳',
     label: 'Payments',
     badge: pnd || null
+  }, {
+    id: 'ai_payments',
+    icon: '🤖',
+    label: 'AI Tokens',
+    badge: aiPnd || null
   }, {
     id: 'users',
     icon: '👥',
@@ -8973,6 +9015,64 @@ function AdminApp() {
       disabled: proc === p._id
     }, "\u274C Reject"))))));
   };
+  // AI Token Payments
+  const {
+    data: aiPays,
+    setData: setAiPays
+  } = useApiData('/ai-tokens/payments/all');
+  const aiPnd = aiPays.filter(p => p.status === 'pending').length;
+
+  const AIPayments = () => {
+    const [tab, setTab] = useState('pending');
+    const [proc, setProc] = useState(null);
+    const filtered = aiPays.filter(p => p.status === tab);
+
+    const approve = async id => {
+      setProc(id);
+      try {
+        await apiFetch('PUT', `/ai-tokens/payments/${id}/approve`, { admin_note: 'Approved' }, tok());
+        setAiPays(p => p.map(x => x._id === id ? { ...x, status: 'approved' } : x));
+        add({ title: '✅ AI tokens activated!', icon: '🤖', type: 'i' });
+      } catch(e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+      finally { setProc(null); }
+    };
+
+    const reject = async id => {
+      setProc(id);
+      try {
+        await apiFetch('PUT', `/ai-tokens/payments/${id}/reject`, { admin_note: 'Rejected' }, tok());
+        setAiPays(p => p.map(x => x._id === id ? { ...x, status: 'rejected' } : x));
+        add({ title: 'Payment rejected', icon: '❌', type: 'w' });
+      } catch(e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+      finally { setProc(null); }
+    };
+
+    return /*#__PURE__*/React.createElement("div", { style: { paddingBottom: 20 } },
+      React.createElement("h2", { style: { color: C.gd, marginBottom: 13, fontSize: 19 } }, "🤖 AI Token Payments (", aiPnd, " pending)"),
+      React.createElement("div", { style: { display: 'flex', background: '#f3f7f5', borderRadius: 12, padding: 4, marginBottom: 13, gap: 4 } },
+        [['pending', `⏳ Pending (${aiPays.filter(p=>p.status==='pending').length})`], ['approved', '✅ Approved'], ['rejected', '❌ Rejected']].map(([tb, lb]) =>
+          React.createElement("button", { key: tb, type: "button", onClick: () => setTab(tb), style: { flex: 1, padding: '9px 4px', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, background: tab === tb ? `linear-gradient(135deg,${C.gd},${C.g})` : 'transparent', color: tab === tb ? '#fff' : C.gr } }, lb)
+        )
+      ),
+      filtered.length === 0 ? React.createElement("div", { style: { textAlign: 'center', padding: 38, color: C.gr } }, "No ", tab, " AI payments") :
+      filtered.map(p => React.createElement("div", { key: p._id, style: { ...CD, marginBottom: 13, borderLeft: `4px solid ${p.status==='approved' ? C.ok : p.status==='rejected' ? C.d : C.gold}` } },
+        React.createElement("div", { style: { fontWeight: 700, fontSize: 15 } }, p.student_id?.name || 'Student'),
+        React.createElement("div", { style: { fontSize: 12, color: C.gr } }, p.student_id?.email, " · ", p.student_id?.phone),
+        React.createElement("div", { style: { fontSize: 14, color: C.dk, margin: '5px 0' } },
+          "🤖 ", React.createElement("strong", null, p.plan?.toUpperCase()), " plan · ", p.tokens, " tokens · ",
+          React.createElement("strong", { style: { color: C.g } }, "ZMW ", p.amount)
+        ),
+        p.method && React.createElement("div", { style: { fontSize: 12, color: C.gr } }, "💳 ", p.method, p.transaction_id ? " · Ref: " + p.transaction_id : ""),
+        p.receipt_url && React.createElement("a", { href: p.receipt_url, target: "_blank", rel: "noreferrer", style: { fontSize: 12, color: C.g } }, "📎 View Receipt"),
+        p.status === 'pending' && React.createElement("div", { style: { display: 'flex', gap: 7, marginTop: 10 } },
+          React.createElement("button", { type: "button", disabled: proc === p._id, onClick: () => approve(p._id), style: { ...BT('p', true), fontSize: 12, flex: 1 } }, proc === p._id ? '⏳' : '✅ Approve & Add Tokens'),
+          React.createElement("button", { type: "button", disabled: proc === p._id, onClick: () => reject(p._id), style: { ...BT('d', true), fontSize: 12 } }, '❌')
+        ),
+        p.status !== 'pending' && React.createElement("div", { style: { fontSize: 11, color: p.status==='approved' ? C.ok : C.d, marginTop: 6, fontWeight: 600 } }, p.status === 'approved' ? '✅ Tokens Added' : '❌ Rejected')
+      ))
+    );
+  };
+
   const Users = () => {
     const [tab, setTab] = useState('students');
     const [srch, setSrch] = useState('');
@@ -9355,6 +9455,7 @@ function AdminApp() {
   const pages = {
     home: /*#__PURE__*/React.createElement(Dash, null),
     payments: /*#__PURE__*/React.createElement(Payments, null),
+    ai_payments: /*#__PURE__*/React.createElement(AIPayments, null),
     users: /*#__PURE__*/React.createElement(Users, null),
     announce: /*#__PURE__*/React.createElement(Announce, null),
     profile: /*#__PURE__*/React.createElement(ProfilePage, null)
@@ -9496,6 +9597,25 @@ function App() {
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(() => console.log('✅ Offline support active'))
+      .catch(e => console.warn('SW:', e));
+  });
+}
+// Real-time notification helper
+window.pmNotify = (title, body, url) => {
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/icon-192.png' });
+  }
+};
+// Request notification permission
+if (Notification.permission === 'default') {
+  setTimeout(() => Notification.requestPermission(), 3000);
+}
 </script>
 </body>
 </html>

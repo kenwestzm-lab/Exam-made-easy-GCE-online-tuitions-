@@ -35,6 +35,7 @@ router.post('/payment', auth, upload.single('receipt'), async (req, res) => {
       receipt_url = r.secure_url;
     }
 
+    const io = req.app.get('io');
     const payments = await Promise.all(ids.map(sid =>
       Payment.create({
         student_id: req.user._id,
@@ -48,6 +49,8 @@ router.post('/payment', auth, upload.single('receipt'), async (req, res) => {
       })
     ));
 
+    // Notify admins
+    if (io) io.to('admins').emit('new_payment', { student: req.user.name, amount: Number(amount), subject: ids.length + ' subject(s)' });
     res.status(201).json(payments.length === 1 ? payments[0] : payments);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -113,6 +116,9 @@ router.put('/payments/:id/approve', auth, adminOnly, async (req, res) => {
     // Notify student via socket if available
     const io = p.app?.get?.('io');
 
+    // Notify student
+    const io2 = req.app.get('io');
+    if (io2) io2.to(`user_${p.student_id}`).emit('subscription_approved', { subject_id: p.subject_id, expires: newExp });
     res.json({ ...p.toObject(), subscription_expires: newExp });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
