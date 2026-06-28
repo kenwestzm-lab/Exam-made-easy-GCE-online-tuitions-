@@ -5697,7 +5697,7 @@ function MaterialsPage({
     }, "Premium"), ok ? m.file_url ? /*#__PURE__*/React.createElement(React.Fragment, null,
       m.type !== 'video' && m.type !== 'audio' && React.createElement("button", {
         type: "button",
-        onClick: () => openFile(m.view_url || m.file_url, m.type),
+        onClick: () => window.open(BACKEND+'/api/materials/'+m._id+'/view?token='+tok(), '_blank'),
         style: { ...BT('gh', true), fontSize: 11, padding: '4px 10px', cursor: 'pointer', border: 'none' }
       }, "\uD83D\uDC41 View"),
       React.createElement("a", {

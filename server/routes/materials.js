@@ -51,6 +51,24 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Proxy VIEW - renders PDF inline in browser
+router.get('/:id/view', auth, async (req, res) => {
+  try {
+    const m = await Material.findById(req.params.id);
+    if (!m?.file_url) return res.status(404).send('File not found');
+    const response = await fetch(m.file_url);
+    if (!response.ok) return res.status(502).send('Could not fetch file');
+    const ext = m.type === 'pdf' ? 'pdf' : m.type === 'word' ? 'docx' : m.type === 'pptx' ? 'pptx' : 'bin';
+    const mime = m.type === 'pdf' ? 'application/pdf' : m.type === 'word' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream';
+    const filename = (m.title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', 'inline; filename="' + filename + '"');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch(e) { res.status(500).send(e.message); }
+});
+
 // Proxy download - forces proper file download
 router.get('/:id/download', auth, async (req, res) => {
   try {
