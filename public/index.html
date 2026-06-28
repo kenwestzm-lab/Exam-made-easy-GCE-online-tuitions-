@@ -4029,7 +4029,7 @@ function ChatPage() {
       React.createElement('button',{onClick:()=>{setSel(null);setSelG(null);},style:{background:'none',border:'none',color:'#fff',fontSize:22,cursor:'pointer',padding:0,lineHeight:1}},'\u2190'),
       React.createElement('div',{style:{width:38,height:38,borderRadius:'50%',background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:16,flexShrink:0}},avatar),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontWeight:700,fontSize:15}}),cn),
+        React.createElement('div',{style:{fontWeight:700,fontSize:15}},cn),
         React.createElement('div',{style:{fontSize:11,opacity:0.8}},tab==='direct'?(sel?.role||''):'Group chat')
       )
     ),
