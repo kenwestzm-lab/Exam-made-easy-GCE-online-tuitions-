@@ -39,11 +39,14 @@ const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
 const extFor = (type) => ({ pdf: 'pdf', word: 'docx', pptx: 'pptx' }[type] || null);
 
 // Force the delivery URL to carry the correct extension so Cloudinary
-// sends the right Content-Type. Works even for files uploaded before this fix.
+// sends the right Content-Type. ONLY safe for /image/upload/ delivery URLs —
+// appending an extension to a /raw/upload/ URL changes the asset reference
+// and 404s, since raw public_ids don't carry an extension suffix.
 const ensureExt = (url, type) => {
   if (!url) return url;
+  if (!url.includes('/image/upload/')) return url; // raw/video — leave untouched
   const ext = extFor(type);
-  if (!ext) return url; // images/video already have a usable extension
+  if (!ext) return url;
   if (url.toLowerCase().endsWith('.' + ext)) return url;
   return url + '.' + ext;
 };
