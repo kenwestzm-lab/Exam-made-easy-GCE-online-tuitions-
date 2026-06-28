@@ -57,14 +57,16 @@ const getViewUrl = (url, type) => {
   return ensureExt(url, type);
 };
 
-// Get download URL - force download via fl_attachment, with correct extension
+// Get download URL - for raw files just use direct URL, browser handles download
 const getDownloadUrl = (url, filename, type) => {
   if (!url) return '';
-  let u = ensureExt(url, type);
-  if (u.includes('cloudinary.com') && u.includes('/upload/') && !u.includes('fl_attachment')) {
-    u = u.replace('/upload/', '/upload/fl_attachment/');
+  // For raw uploads never modify the URL - it will 404
+  if (url.includes('/raw/upload/')) return url;
+  // For image uploads can add fl_attachment
+  if (url.includes('/image/upload/') && !url.includes('fl_attachment')) {
+    return url.replace('/image/upload/', '/image/upload/fl_attachment/');
   }
-  return u;
+  return url;
 };
 
 module.exports = { upload, uploadToCloudinary, cloudinary, getViewUrl, getDownloadUrl };
