@@ -3999,7 +3999,7 @@ function ChatPage() {
             ),
             React.createElement('div',{style:{flex:1,minWidth:0}},
               React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
-                React.createElement('div',{style:{fontWeight:600,fontSize:15,color:'#111'}}),tab==='direct'?item.name:item.n),
+                React.createElement('div',{style:{fontWeight:600,fontSize:15,color:'#111'}},tab==='direct'?item.name:item.n)),
               React.createElement('div',{style:{fontSize:12,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},tab==='direct'?'Tap to message':'Tap to open group')
             ),
             ucount>0 && React.createElement('div',{style:{background:'#25D366',color:'#fff',borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}},ucount>9?'9+':ucount)
