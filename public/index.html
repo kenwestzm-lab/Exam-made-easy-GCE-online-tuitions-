@@ -39,6 +39,28 @@ canvas{touch-action:none;display:block}
 </head>
 <body class="auth-mode">
 <div id="root"></div>
+<button id="diagbtn" style="position:fixed;bottom:10px;right:10px;z-index:99999;background:#c00;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:12px;">DIAG</button>
+<div id="diagbox" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px;z-index:99998;display:none;overflow:auto;white-space:pre-wrap;"></div>
+<script>
+document.getElementById('diagbtn').onclick = async function() {
+  var box = document.getElementById('diagbox');
+  box.style.display = 'block';
+  box.innerText = 'Running diagnostics...\n\n';
+  var token = localStorage.getItem('pms_t');
+  box.innerText += 'Token: ' + (token ? 'FOUND (len ' + token.length + ')' : 'NOT FOUND - please log in first') + '\n\n';
+  if (!token) return;
+  var BACKEND2 = 'https://exam-made-easy-gce-online-tuitions-1-ges6.onrender.com';
+  try {
+    var r = await fetch(BACKEND2 + '/api/materials', { headers: { Authorization: 'Bearer ' + token } });
+    box.innerText += 'Status: ' + r.status + '\n\n';
+    var text = await r.text();
+    box.innerText += 'Response:\n' + text.substring(0, 3000);
+  } catch(e) {
+    box.innerText += 'FETCH ERROR: ' + e.message;
+  }
+  box.onclick = function(){ box.style.display='none'; };
+};
+</script>
 <script>
 const {
   useState,
@@ -8237,10 +8259,11 @@ function TutorMaterials() {
     }
   }, sn(m.subject_id), " \xB7 ", m.type, " \xB7 ", m.downloads || 0, " downloads")), /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', gap: 5 }
-  }, m.file_url && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    style: { ...BT('gh', true), fontSize: 11, padding: '6px 11px' },
-    onClick: () => window.open(m.view_url || m.file_url, "_blank")
+  }, m.file_url && /*#__PURE__*/React.createElement("a", {
+    href: m.view_url || m.file_url,
+    target: "_blank",
+    rel: "noreferrer",
+    style: { ...BT('gh', true), fontSize: 11, padding: '6px 11px', textDecoration: 'none', display: 'inline-block' }
   }, "\uD83D\uDC41 View"), /*#__PURE__*/React.createElement("a", {
     href: BACKEND+'/api/materials/'+m._id+'/download?token='+tok(),
     target: "_blank",
