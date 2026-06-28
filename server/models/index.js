@@ -10,6 +10,8 @@ const UserSchema = new Schema({
   approved: { type: Boolean, default: false },
   phone: String, grade: String, province: String, bio: String,
   avatar: String, avatarUrl: String,
+  is_online: { type: Boolean, default: false },
+  last_seen: { type: Date, default: Date.now },
 }, { timestamps: true });
 
 // SUBSCRIPTION
@@ -104,6 +106,8 @@ const MsgSchema = new Schema({
   receiver_id: { type: Schema.Types.ObjectId, ref: 'User' },
   subject_id: Number, content: String, image_url: String,
   type: { type: String, default: 'direct' },
+  is_read: { type: Boolean, default: false },
+  read_at: Date,
 }, { timestamps: true });
 
 // ANNOUNCEMENT

@@ -48,7 +48,7 @@ const {
   createContext,
   useContext
 } = React;
-const BACKEND = 'https://peacemindsetgcezm.vercel.app';
+const BACKEND = 'https://peace-mindset-api.onrender.com';
 const apiFetch = async (method, path, body, token, fd) => {
   try {
     const o = {
@@ -70,6 +70,17 @@ const apiFetch = async (method, path, body, token, fd) => {
   }
 };
 const tok = () => localStorage.getItem('pms_t');
+const openFile = (url, type) => {
+  if (!url) return;
+  const isPDF = type === 'pdf' || url.includes('.pdf') || url.includes('/raw/');
+  if (isPDF) {
+    // Try multiple PDF viewers in order
+    const gdocs = 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=false';
+    window.open(gdocs, '_blank');
+  } else {
+    window.open(url, '_blank');
+  }
+};
 // Zambian Grade System
 const GRADES = [
   { id: 'grade6',  n: 'Grade 6',          level: 'primary' },
@@ -2295,6 +2306,8 @@ function EnhancedAIClassRoom({
   const [tab, setTab] = useState('board');
   const [ended, setEnded] = useState(false);
   const [handUp, setHandUp] = useState(false);
+  const [listening, setListening] = useState(false);
+  const currentQuestion = useRef('');
   const [hands, setHands] = useState([]);
   const [students, setStudents] = useState([]);
   const [typing, setTyping] = useState(false);
@@ -2382,8 +2395,9 @@ function EnhancedAIClassRoom({
       setTimeout(async () => {
         if (done.current) return;
         setTyping(true);
-        const q = await getAIResponse(`Ask one simple checking question about: "${chunk.substring(0, 80)}"`, sn(classData?.subject_id), ck);
+        const q = await getAIResponse(`Ask one deep thinking question about: "${chunk.substring(0, 80)}". Make students think, not just recall facts. End by saying "Raise your hand if you know the answer!"`, sn(classData?.subject_id), ck);
         setTyping(false);
+        currentQuestion.current = q;
         qSpk(q, false);
       }, delay);
     }
@@ -2504,10 +2518,12 @@ function EnhancedAIClassRoom({
       name,
       raised
     }) => {
-      if (raised) setHands(p => [...p.filter(h => h.userId !== userId), {
-        userId,
-        name
-      }]);else setHands(p => p.filter(h => h.userId !== userId));
+      if (raised) {
+        setHands(p => [...p.filter(h => h.userId !== userId), { userId, name }]);
+        if (classData?.presenter_type === 'ai') {
+          setTimeout(() => callOnStudent(name, currentQuestion.current), 1500);
+        }
+      } else setHands(p => p.filter(h => h.userId !== userId));
     });
     socket.on('class_status_change', ({
       status
@@ -2628,7 +2644,62 @@ function EnhancedAIClassRoom({
       name: profile?.name,
       raised: n
     });
+    if (n) {
+      addMsg('system', '✋ You raised your hand. Wait for the teacher to call on you.');
+    }
   };
+
+  const startVoiceAnswer = useCallback((question) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      addMsg('system', '🎤 Voice not supported. Please type your answer below.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    setListening(true);
+    addMsg('system', '🎤 Listening... speak your answer now.');
+    rec.onresult = async (e) => {
+      const answer = e.results[0][0].transcript;
+      setListening(false);
+      setHandUp(false);
+      if (socket && classData?._id) socket.emit('hand_raise', { classId: classData._id, userId: profile?._id, name: profile?.name, raised: false });
+      addMsg('me', answer);
+      if (socket && classData?._id) socket.emit('class_question', { classId: classData._id, question: answer, studentName: profile?.name });
+      try {
+        const r = await apiFetch('POST', '/ai/check-answer', {
+          student_name: profile?.name,
+          student_answer: answer,
+          question: question || 'the teacher question',
+          subject: sn(classData?.subject_id),
+          character: ck,
+          lesson_context: (classData?.lesson_script || '').substring(0, 400)
+        }, tok());
+        if (r.reply) qSpk(r.reply, false);
+      } catch(e) {}
+    };
+    rec.onerror = () => { setListening(false); addMsg('system', '🎤 Could not hear clearly. Please try again or type below.'); };
+    rec.onend = () => setListening(false);
+    rec.start();
+  }, [socket, classData, profile, ck, qSpk, addMsg]);
+
+  const callOnStudent = useCallback(async (studentName, question) => {
+    try {
+      const r = await apiFetch('POST', '/ai/call-student', {
+        student_name: studentName,
+        question: question || currentQuestion.current,
+        subject: sn(classData?.subject_id),
+        character: ck,
+        lesson_context: (classData?.lesson_script || '').substring(0, 400)
+      }, tok());
+      if (r.reply) qSpk(r.reply, false);
+    } catch(e) {
+      qSpk(`Yes, ${studentName}! Please share your answer with the class.`, false);
+    }
+  }, [classData, ck, qSpk]);
   const sendAnnouncement = () => {
     if (!newAnn.trim() || !socket) return;
     socket.emit('class_announcement', {
@@ -3467,7 +3538,7 @@ function EnhancedAIClassRoom({
       fontSize: 17,
       flexShrink: 0
     }
-  }, handUp ? '✋' : '🖐️'), /*#__PURE__*/React.createElement("input", {
+  }, listening ? '🎤' : handUp ? '✋' : '🖐️'), listening && React.createElement('span', { style: { color: C.gold, fontSize: 11, marginLeft: 4 } }, 'Listening...'), /*#__PURE__*/React.createElement("input", {
     value: input,
     onChange: e => setInput(e.target.value),
     onKeyDown: e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), tab === 'chat' ? sendQuestion() : null),
@@ -3507,339 +3578,271 @@ function EnhancedAIClassRoom({
 }
 
 /* ── ENHANCED LIVE CLASSES PAGE ───────────────────────────── */
-function EnhancedLiveClassesPage({
-  subs,
-  pays
-}) {
-  const {
-    profile,
-    socket
-  } = useAuth();
-  const {
-    add
-  } = useToast();
-  const {
-    data: classes,
-    refetch
-  } = useApiData('/live-classes');
-  const [activeClass, setActiveClass] = useState(null);
-  const [viewMode, setViewMode] = useState('upcoming'); // upcoming | past
-  const autoRef = useRef();
 
-  // Auto-start checker
-  useEffect(() => {
-    const chk = () => {
-      classes.forEach(cls => {
-        if (cls.status === 'upcoming' && cls.auto_start && cls.presenter_type === 'ai' && cls.scheduled_date && cls.scheduled_time) {
-          const s = new Date(cls.scheduled_date + 'T' + cls.scheduled_time + ':00');
-          const diff = new Date() - s;
-          if (diff >= 0 && diff < 120000) {
-            if (socket) socket.emit('check_auto_start', {
-              classId: cls._id
-            });
-            refetch();
-          }
-        }
-      });
-    };
-    chk();
-    autoRef.current = setInterval(chk, 30000);
-    return () => clearInterval(autoRef.current);
-  }, [classes, socket]);
-  const join = cls => {
-    if (cls.status !== 'live') {
-      add({
-        title: 'Class not live yet',
-        body: `Starts ${cls.scheduled_time} on ${cls.scheduled_date}`,
-        icon: '⏰',
-        type: 'w'
-      });
-      return;
-    }
-    if (profile?.role === 'student' && !isSub(subs, pays, cls.subject_id)) {
-      add({
-        title: 'Subscription required',
-        body: 'Subscribe to this subject to join',
-        icon: '🔒',
-        type: 'w'
-      });
-      return;
-    }
-    setActiveClass(cls);
-  };
-  const upd = async (id, status) => {
-    try {
-      await apiFetch('PUT', `/live-classes/${id}`, {
-        status
-      }, tok());
-      refetch();
-    } catch (e) {
-      add({
-        title: 'Error',
-        body: e.message,
-        icon: '❌',
-        type: 'd'
-      });
-    }
-  };
-  if (activeClass) return /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'fixed',
-      inset: 0,
-      zIndex: 200,
-      background: '#0d0d1a'
-    }
-  }, /*#__PURE__*/React.createElement(EnhancedAIClassRoom, {
-    classData: activeClass,
-    socket: socket,
-    onEnd: () => {
-      setActiveClass(null);
-      refetch();
-    }
-  }));
-  const live = classes.filter(c => c.status === 'live');
-  const upcoming = classes.filter(c => c.status === 'upcoming');
-  const ended = classes.filter(c => c.status === 'ended');
-  const visible = viewMode === 'upcoming' ? [...live, ...upcoming] : ended;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      paddingBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      color: C.gd,
-      marginBottom: 13,
-      fontSize: 19
-    }
-  }, "\uD83C\uDFA5 Live Classes"), live.length > 0 && /*#__PURE__*/React.createElement("div", {
-    onClick: () => join(live[0]),
-    style: {
-      background: `linear-gradient(135deg,#7f1d1d,${C.d})`,
-      color: '#fff',
-      borderRadius: 16,
-      padding: '14px 18px',
-      marginBottom: 14,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      cursor: 'pointer',
-      boxShadow: '0 4px 20px rgba(220,38,38,0.4)',
-      animation: 'pulse 2s ease-in-out infinite'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 12,
-      height: 12,
-      borderRadius: '50%',
-      background: '#fff',
-      animation: 'blink 0.8s ease-in-out infinite',
-      flexShrink: 0
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 800,
-      fontSize: 15
-    }
-  }, "\uD83D\uDD34 ", live[0].title, " \u2014 LIVE NOW!"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      opacity: .85
-    }
-  }, sn(live[0].subject_id), " \xB7 Tap to join immediately")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'rgba(255,255,255,0.2)',
-      borderRadius: 10,
-      padding: '8px 14px',
-      fontWeight: 700,
-      fontSize: 13
-    }
-  }, "JOIN \u2192")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      background: '#f3f7f5',
-      borderRadius: 12,
-      padding: 4,
-      marginBottom: 14,
-      gap: 4
-    }
-  }, [['upcoming', `📅 Upcoming (${upcoming.length + live.length})`], ['past', `✓ Past (${ended.length})`]].map(([m, l]) => /*#__PURE__*/React.createElement("button", {
-    key: m,
-    type: "button",
-    onClick: () => setViewMode(m),
-    style: {
-      flex: 1,
-      padding: '10px 0',
-      border: 'none',
-      borderRadius: 9,
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      fontSize: 13,
-      fontWeight: 700,
-      background: viewMode === m ? `linear-gradient(135deg,${C.gd},${C.g})` : 'transparent',
-      color: viewMode === m ? '#fff' : C.gr
-    }
-  }, l))), visible.map(cls => {
-    const ch2 = cls.presenter_type === 'ai' ? AI_CHARS[cls.ai_character || 'ken'] : null;
-    const isLive = cls.status === 'live';
-    return /*#__PURE__*/React.createElement("div", {
-      key: cls._id,
-      style: {
-        ...CD,
-        borderLeft: `4px solid ${isLive ? C.d : cls.status === 'upcoming' ? C.g : C.gr}`,
-        marginBottom: 12
-      }
-    }, isLive && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: C.d,
-        animation: 'blink 0.8s ease-in-out infinite'
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: C.d,
-        fontWeight: 700
-      }
-    }, "LIVE NOW")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        flexWrap: 'wrap',
-        gap: 9
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 7,
-        marginBottom: 4
-      }
-    }, ch2 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 22
-      }
-    }, ch2.avatar), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        fontSize: 15
-      }
-    }, cls.title)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: C.gr
-      }
-    }, si(cls.subject_id), " ", sn(cls.subject_id), " \xB7 ", cls.scheduled_date, " ", cls.scheduled_time), ch2 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: ch2.color,
-        fontWeight: 600,
-        marginTop: 3
-      }
-    }, ch2.name, " \xB7 ", cls.class_type, cls.auto_start ? ' · ⏰ Auto-start' : ''), cls.lesson_topic && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: C.grd,
-        marginTop: 4
-      }
-    }, "\uD83D\uDCDA Topic: ", cls.lesson_topic), cls.description && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: C.grd,
-        marginTop: 4,
-        lineHeight: 1.5
-      }
-    }, cls.description)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 7,
-        flexWrap: 'wrap',
-        alignItems: 'center'
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        background: isLive ? C.dl : cls.status === 'upcoming' ? C.okl : C.grl,
-        color: isLive ? C.d : cls.status === 'upcoming' ? C.ok : C.gr,
-        borderRadius: 20,
-        padding: '4px 11px',
-        fontSize: 11,
-        fontWeight: 600
-      }
-    }, isLive ? '🔴 LIVE' : cls.status === 'upcoming' ? '📅 Upcoming' : '✓ Ended'), isLive && /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => join(cls),
-      style: {
-        ...BT('p', true),
-        fontSize: 13
-      }
-    }, ch2 ? `${ch2.avatar} Join Class` : '📹 Join'), cls.status !== 'ended' && cls.meet_link && cls.presenter_type === 'human' && /*#__PURE__*/React.createElement("a", {
-      href: cls.meet_link,
-      target: "_blank",
-      rel: "noreferrer",
-      style: {
-        ...BT('gh', true),
-        textDecoration: 'none',
-        display: 'inline-flex',
-        fontSize: 12
-      }
-    }, "\uD83D\uDCF9 Meet"), cls.recording_url && /*#__PURE__*/React.createElement("a", {
-      href: cls.recording_url,
-      target: "_blank",
-      rel: "noreferrer",
-      style: {
-        ...BT('gh', true),
-        textDecoration: 'none',
-        display: 'inline-flex',
-        fontSize: 12
-      }
-    }, "\u25B6 Recording"), profile?.role === 'tutor' && cls.tutor_id === profile?._id && cls.status === 'upcoming' && /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => upd(cls._id, 'live'),
-      style: {
-        ...BT('d', true),
-        fontSize: 12
-      }
-    }, "\uD83D\uDD34 Go Live"), profile?.role === 'tutor' && cls.tutor_id === profile?._id && cls.status === 'live' && /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => setActiveClass(cls),
-      style: {
-        ...BT('p', true),
-        fontSize: 12
-      }
-    }, "\uD83D\uDCFA Open Class"))));
-  }), visible.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: 'center',
-      padding: 40,
-      color: C.gr
-    }
-  }, "No ", viewMode === 'upcoming' ? 'upcoming' : 'past', " classes"));
+
+const LC={dark:'#0a1a0f',card:'rgba(255,255,255,0.05)',border:'rgba(255,255,255,0.1)',gold:'#c9930a',goldl:'rgba(201,147,10,0.15)',goldb:'rgba(201,147,10,0.3)',red:'#ef4444',redl:'rgba(239,68,68,0.15)',redb:'rgba(239,68,68,0.3)',green:'#10b981',blue:'#3b82f6',white:'#fff',grey:'rgba(255,255,255,0.45)',lightgrey:'rgba(255,255,255,0.08)'};
+
+function LiveWhiteboard({classId,socket,isPresenter}){
+  const canvasRef=useRef();const drawing=useRef(false);const strokes=useRef([]);const cur=useRef([]);
+  const [tool,setTool]=useState('pen');const [color,setColor]=useState('#ffffff');const [size,setSize]=useState(3);
+  const colors=['#ffffff','#c9930a','#ef4444','#10b981','#3b82f6','#a855f7','#f97316','#000000'];
+  const getPos=(e,canvas)=>{const rect=canvas.getBoundingClientRect();const t=e.touches?.[0]||e;return{x:(t.clientX-rect.left)*(canvas.width/rect.width),y:(t.clientY-rect.top)*(canvas.height/rect.height)};};
+  const redraw=useCallback(()=>{const canvas=canvasRef.current;if(!canvas)return;const ctx=canvas.getContext('2d');ctx.fillStyle='#0a1a0f';ctx.fillRect(0,0,canvas.width,canvas.height);strokes.current.forEach(s=>{if(!s.points?.length)return;ctx.beginPath();if(s.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=(s.size||3)*4;}else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color||'#fff';ctx.lineWidth=s.size||3;}ctx.lineCap='round';ctx.lineJoin='round';ctx.moveTo(s.points[0].x,s.points[0].y);s.points.forEach(p=>ctx.lineTo(p.x,p.y));ctx.stroke();ctx.globalCompositeOperation='source-over';});},[]);
+  useEffect(()=>{const canvas=canvasRef.current;if(!canvas)return;const ro=new ResizeObserver(()=>{canvas.width=canvas.offsetWidth*window.devicePixelRatio;canvas.height=canvas.offsetHeight*window.devicePixelRatio;const ctx=canvas.getContext('2d');ctx.scale(window.devicePixelRatio,window.devicePixelRatio);redraw();});ro.observe(canvas);return()=>ro.disconnect();},[redraw]);
+  useEffect(()=>{if(!socket)return;socket.on('whiteboard_stroke',s=>{strokes.current.push(s);redraw();});socket.on('whiteboard_clear',()=>{strokes.current=[];redraw();});socket.on('whiteboard_full_sync',({strokes:s})=>{strokes.current=s;redraw();});if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{if(d?.strokes){strokes.current=d.strokes;redraw();}}).catch(()=>{});return()=>{socket.off('whiteboard_stroke');socket.off('whiteboard_clear');socket.off('whiteboard_full_sync');};},[socket,classId,redraw]);
+  const startDraw=e=>{if(!isPresenter)return;e.preventDefault();drawing.current=true;cur.current=[getPos(e,canvasRef.current)];};
+  const moveDraw=e=>{if(!drawing.current||!isPresenter)return;e.preventDefault();const canvas=canvasRef.current;const pos=getPos(e,canvas);cur.current.push(pos);const ctx=canvas.getContext('2d');const pts=cur.current;const len=pts.length;if(len<2)return;ctx.beginPath();if(tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=size*4;}else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=color;ctx.lineWidth=size;}ctx.lineCap='round';ctx.lineJoin='round';ctx.moveTo(pts[len-2].x,pts[len-2].y);ctx.lineTo(pts[len-1].x,pts[len-1].y);ctx.stroke();ctx.globalCompositeOperation='source-over';};
+  const endDraw=()=>{if(!drawing.current||!isPresenter)return;drawing.current=false;const stroke={points:cur.current,color,size,tool};strokes.current.push(stroke);if(socket&&classId)socket.emit('whiteboard_stroke',{classId,stroke});cur.current=[];};
+  const clearBoard=()=>{strokes.current=[];redraw();if(socket&&classId)socket.emit('whiteboard_clear',{classId});};
+  const saveBoard=()=>{apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current},tok()).catch(()=>{});};
+  const shareBoard=()=>{if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current});};
+  return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',background:'#0a1a0f'}},
+    isPresenter&&React.createElement('div',{style:{display:'flex',gap:6,padding:'8px 10px',background:'rgba(0,0,0,0.5)',borderBottom:'1px solid rgba(255,255,255,0.1)',flexWrap:'wrap',alignItems:'center',flexShrink:0}},
+      [['pen','Pen'],['eraser','Eraser']].map(([t,label])=>React.createElement('button',{key:t,onClick:()=>setTool(t),style:{background:tool===t?LC.gold:'rgba(255,255,255,0.08)',border:'none',borderRadius:6,padding:'5px 10px',cursor:'pointer',fontSize:12,color:tool===t?'#000':LC.white,fontWeight:600}},label)),
+      React.createElement('div',{style:{display:'flex',gap:3}},colors.map(c=>React.createElement('button',{key:c,onClick:()=>setColor(c),style:{width:20,height:20,borderRadius:'50%',background:c,border:color===c?'2px solid '+LC.gold:'2px solid transparent',cursor:'pointer'}}))),
+      React.createElement('input',{type:'range',min:1,max:12,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:60,accentColor:LC.gold}}),
+      React.createElement('span',{style:{fontSize:11,color:LC.grey}},size+'px'),
+      React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}},
+        React.createElement('button',{onClick:shareBoard,style:{background:'rgba(59,130,246,0.15)',border:'1px solid #3b82f6',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#3b82f6',fontSize:11,fontWeight:600}},'Share'),
+        React.createElement('button',{onClick:saveBoard,style:{background:'rgba(16,185,129,0.15)',border:'1px solid #10b981',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#10b981',fontSize:11,fontWeight:600}},'Save'),
+        React.createElement('button',{onClick:clearBoard,style:{background:'rgba(239,68,68,0.15)',border:'1px solid #ef4444',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#ef4444',fontSize:11,fontWeight:600}},'Clear')
+      )
+    ),
+    React.createElement('canvas',{ref:canvasRef,style:{flex:1,width:'100%',cursor:isPresenter?(tool==='eraser'?'cell':'crosshair'):'default',touchAction:'none'},onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw})
+  );
 }
+
+function AITextBoard({msgs,aiSpk,chAvatar,currentQ,waitingAnswer}){
+  const lastAI=msgs.filter(m=>m.role==='ai').slice(-1)[0];
+  return React.createElement('div',{style:{flex:1,background:'#0a1a0f',display:'flex',flexDirection:'column',overflow:'hidden'}},
+    React.createElement('div',{style:{padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.1)',display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(0,0,0,0.3)'}},
+      React.createElement('div',{style:{fontSize:28,filter:aiSpk?'drop-shadow(0 0 10px '+LC.gold+')':'none',transition:'filter 0.3s'}},chAvatar),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontWeight:700,fontSize:14,color:LC.white}},'Live Board'),
+        React.createElement('div',{style:{fontSize:11,color:aiSpk?LC.gold:LC.grey}},aiSpk?'Speaking...':'Lesson content')
+      )
+    ),
+    React.createElement('div',{style:{flex:1,overflowY:'auto',padding:18,display:'flex',flexDirection:'column',gap:12}},
+      lastAI?.image&&React.createElement('img',{src:lastAI.image,style:{maxWidth:'100%',borderRadius:12,border:'1px solid rgba(255,255,255,0.1)'}}),
+      lastAI&&React.createElement('div',{style:{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:14,padding:'16px 18px',fontSize:15,lineHeight:1.8,color:LC.white}},lastAI.text),
+      waitingAnswer&&currentQ&&React.createElement('div',{style:{background:'rgba(201,147,10,0.12)',border:'1px solid rgba(201,147,10,0.3)',borderRadius:12,padding:'12px 16px',textAlign:'center'}},
+        React.createElement('div',{style:{color:LC.gold,fontWeight:700,fontSize:13,marginBottom:4}},'Raise your hand to answer!'),
+        React.createElement('div',{style:{color:'rgba(255,255,255,0.6)',fontSize:12,lineHeight:1.5}},currentQ.substring(0,120))
+      )
+    )
+  );
+}
+
+function ParticipantsPanel({students,hands,isPresenter,onCallStudent}){
+  const [tab,setTab]=useState('all');
+  const raised=students.filter(s=>hands.find(h=>h.userId===s._id));
+  const list=tab==='raised'?raised:students;
+  return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column'}},
+    React.createElement('div',{style:{display:'flex',borderBottom:'1px solid rgba(255,255,255,0.1)',flexShrink:0}},
+      [['all','All ('+students.length+')'],['raised','Raised ('+raised.length+')']].map(([t,label])=>React.createElement('button',{key:t,onClick:()=>setTab(t),style:{flex:1,padding:'10px 4px',background:'none',border:'none',color:tab===t?LC.gold:LC.grey,fontSize:12,fontWeight:tab===t?700:400,borderBottom:'2px solid '+(tab===t?LC.gold:'transparent'),cursor:'pointer'}},label))
+    ),
+    React.createElement('div',{style:{flex:1,overflowY:'auto',padding:10}},
+      list.length===0&&React.createElement('div',{style:{color:LC.grey,textAlign:'center',padding:24,fontSize:12}},tab==='raised'?'No raised hands yet':'Waiting for students to join...'),
+      list.map(s=>React.createElement('div',{key:s._id,style:{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderRadius:10,marginBottom:4,background:'rgba(255,255,255,0.05)'}},
+        React.createElement('div',{style:{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,'+LC.gold+',#f0b429)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#000',fontSize:14,flexShrink:0}},s.name?.[0]||'?'),
+        React.createElement('div',{style:{flex:1,minWidth:0}},
+          React.createElement('div',{style:{fontSize:13,fontWeight:600,color:LC.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.name),
+          React.createElement('div',{style:{fontSize:10,color:LC.grey}},s.role||'student')
+        ),
+        hands.find(h=>h.userId===s._id)&&isPresenter&&React.createElement('button',{onClick:()=>onCallStudent(s.name),style:{background:LC.gold,border:'none',borderRadius:16,padding:'4px 12px',fontSize:11,fontWeight:700,cursor:'pointer',color:'#000'}},'Call')
+      ))
+    )
+  );
+}
+
+function ChatPanel({msgs,input,setInput,onSend,chAvatar}){
+  const end=useRef();
+  useEffect(()=>{end.current?.scrollIntoView({behavior:'smooth'});},[msgs]);
+  return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column'}},
+    React.createElement('div',{style:{flex:1,overflowY:'auto',padding:'10px 12px',display:'flex',flexDirection:'column',gap:7}},
+      msgs.map(m=>React.createElement('div',{key:m.id,style:{display:'flex',gap:7,alignItems:'flex-start',justifyContent:m.role==='me'?'flex-end':'flex-start'}},
+        m.role!=='me'&&React.createElement('div',{style:{fontSize:16,flexShrink:0,marginTop:1}},m.role==='ai'?chAvatar:m.role==='system'?'*':'?'),
+        React.createElement('div',{style:{maxWidth:'80%'}},
+          m.role==='student'&&React.createElement('div',{style:{fontSize:10,color:LC.gold,marginBottom:2,fontWeight:600}},m.name||'Student'),
+          m.image&&React.createElement('img',{src:m.image,style:{maxWidth:'100%',borderRadius:8,marginBottom:3,display:'block'}}),
+          React.createElement('div',{style:{background:m.role==='me'?'linear-gradient(135deg,'+LC.gold+',#f0b429)':m.role==='system'?'transparent':'rgba(255,255,255,0.07)',color:m.role==='me'?'#000':m.role==='system'?LC.grey:LC.white,borderRadius:m.role==='me'?'14px 14px 4px 14px':'14px 14px 14px 4px',padding:m.role==='system'?'3px 6px':'9px 12px',fontSize:m.role==='system'?11:13,border:m.role==='ai'?'1px solid rgba(255,255,255,0.1)':'none',fontStyle:m.role==='system'?'italic':'normal',lineHeight:1.5}},m.text),
+          React.createElement('div',{style:{fontSize:10,color:'rgba(255,255,255,0.25)',marginTop:2,textAlign:m.role==='me'?'right':'left'}},m.time)
+        )
+      )),
+      React.createElement('div',{ref:end})
+    ),
+    React.createElement('div',{style:{padding:'8px 10px',borderTop:'1px solid rgba(255,255,255,0.08)',display:'flex',gap:7,flexShrink:0}},
+      React.createElement('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&onSend(),placeholder:'Type a message...',style:{flex:1,background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'8px 12px',color:LC.white,fontSize:13,outline:'none'}}),
+      React.createElement('button',{onClick:onSend,style:{background:LC.gold,border:'none',borderRadius:10,padding:'8px 14px',cursor:'pointer',color:'#000',fontWeight:700,fontSize:15}},'Send')
+    )
+  );
+}
+
+function QuizPanel({quiz,setQuiz,socket,classId,isPresenter,character}){
+  const [answers,setAnswers]=useState({});const [submitted,setSubmitted]=useState(false);const [score,setScore]=useState(null);
+  const gen=async()=>{try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:'General',topic:'lesson',count:5,type:'mcq',character:character||'ken'},tok());if(qr?.questions)setQuiz({questions:qr.questions,pending:true});}catch(e){}};
+  const post=()=>{if(!quiz||!socket)return;socket.emit('class_quiz',{...quiz,classId});setQuiz(p=>({...p,pending:false}));};
+  const submit=()=>{let c=0;quiz.questions.forEach((q,i)=>{if(answers[i]===q.correct_answer)c++;});setScore(c);setSubmitted(true);if(socket)socket.emit('student_quiz_done',{classId,score:c,total:quiz.questions.length});};
+  return React.createElement('div',{style:{height:'100%',overflowY:'auto',padding:14}},
+    !quiz&&React.createElement('div',{style:{textAlign:'center',padding:32}},
+      React.createElement('div',{style:{fontSize:44,marginBottom:12}},'Quiz'),
+      React.createElement('div',{style:{fontSize:13,color:LC.grey,marginBottom:16}},'Quiz auto-generates at end of lesson'),
+      isPresenter&&React.createElement('button',{onClick:gen,style:{background:LC.gold,color:'#000',border:'none',borderRadius:11,padding:'11px 22px',fontWeight:700,cursor:'pointer',fontSize:13}},'Generate Quiz Now')
+    ),
+    quiz?.pending&&isPresenter&&React.createElement('div',{style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:12,padding:14,marginBottom:14}},
+      React.createElement('div',{style:{color:LC.gold,fontWeight:700,marginBottom:8,fontSize:14}},'AI Quiz Ready - Review and Post'),
+      React.createElement('button',{onClick:post,style:{background:LC.gold,color:'#000',border:'none',borderRadius:10,padding:'10px 20px',fontWeight:700,cursor:'pointer',fontSize:13,width:'100%'}},'Approve and Post to Students')
+    ),
+    score!==null&&React.createElement('div',{style:{background:score>=quiz.questions.length*0.7?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)',border:'1px solid '+(score>=quiz.questions.length*0.7?'#10b981':'#ef4444'),borderRadius:12,padding:14,marginBottom:14,textAlign:'center'}},
+      React.createElement('div',{style:{fontSize:28,fontWeight:700,color:LC.white}},score+'/'+quiz.questions.length),
+      React.createElement('div',{style:{color:LC.grey,fontSize:12,marginTop:4}},score>=quiz.questions.length*0.7?'Excellent work!':'Keep practicing!')
+    ),
+    quiz?.questions?.map((q,qi)=>React.createElement('div',{key:qi,style:{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:12,padding:14,marginBottom:10}},
+      React.createElement('div',{style:{fontWeight:700,fontSize:13,marginBottom:10,lineHeight:1.5,color:LC.white}},(qi+1)+'. '+q.question),
+      q.options?.map((opt,oi)=>{const letter=opt[0];const sel=answers[qi]===letter;const correct=submitted&&letter===q.correct_answer;const wrong=submitted&&sel&&letter!==q.correct_answer;return React.createElement('button',{key:oi,onClick:()=>!submitted&&setAnswers(p=>({...p,[qi]:letter})),style:{display:'block',width:'100%',textAlign:'left',background:correct?'rgba(16,185,129,0.15)':wrong?'rgba(239,68,68,0.15)':sel?LC.goldl:'rgba(255,255,255,0.04)',border:'1px solid '+(correct?'#10b981':wrong?'#ef4444':sel?LC.gold:'rgba(255,255,255,0.09)'),borderRadius:8,padding:'8px 12px',color:LC.white,fontSize:12,cursor:submitted?'default':'pointer',marginBottom:5}},opt);}),
+      submitted&&q.explanation&&React.createElement('div',{style:{marginTop:8,padding:'8px 10px',background:'rgba(59,130,246,0.12)',borderRadius:8,fontSize:11,color:'rgba(255,255,255,0.7)'}},q.explanation)
+    )),
+    quiz&&!submitted&&!isPresenter&&quiz.questions?.length>0&&React.createElement('button',{onClick:submit,style:{background:LC.gold,color:'#000',border:'none',borderRadius:11,padding:'11px 20px',fontWeight:700,cursor:'pointer',fontSize:13,width:'100%',marginTop:8}},'Submit My Answers')
+  );
+}
+
+function MaterialsPanel(){
+  const {data:materials}=useApiData('/materials');
+  return React.createElement('div',{style:{height:'100%',overflowY:'auto',padding:14}},
+    React.createElement('div',{style:{color:LC.gold,fontWeight:700,marginBottom:12,fontSize:14}},'Class Materials'),
+    materials.length===0&&React.createElement('div',{style:{color:LC.grey,textAlign:'center',padding:24,fontSize:12}},'No materials uploaded yet'),
+    materials.slice(0,15).map(m=>React.createElement('div',{key:m._id,style:{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:10,padding:'10px 12px',marginBottom:8,display:'flex',alignItems:'center',gap:10}},
+      React.createElement('div',{style:{fontSize:22,flexShrink:0}},m.type==='pdf'?'PDF':m.type==='video'?'VID':m.type==='image'?'IMG':'FILE'),
+      React.createElement('div',{style:{flex:1,minWidth:0}},
+        React.createElement('div',{style:{fontSize:12,fontWeight:600,color:LC.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},m.title||m.name),
+        React.createElement('div',{style:{fontSize:10,color:LC.grey}},m.type?.toUpperCase()||'FILE')
+      ),
+      React.createElement('a',{href:m.view_url||m.file_url,target:'_blank',rel:'noreferrer',style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:8,padding:'5px 10px',fontSize:11,color:LC.gold,textDecoration:'none',fontWeight:600,flexShrink:0}},'Open')
+    ))
+  );
+}
+
+function ClassLobby({cls,profile,onJoin,onStart,onBack}){
+  const [countdown,setCountdown]=useState('--:--');
+  const isPresenter=profile?.role==='tutor'||profile?.role==='admin';
+  const ch={ken:{name:'Teacher Ken',avatar:'👨‍🏫'},msimbi:{name:"Mis M'simbi",avatar:'👩‍🏫'}}[cls.ai_character]||null;
+  useEffect(()=>{const tick=()=>{if(!cls.scheduled_date||!cls.scheduled_time)return;const start=new Date(cls.scheduled_date+'T'+cls.scheduled_time+':00');const diff=start-new Date();if(diff<=0){setCountdown('00:00');return;}const m=Math.floor(diff/60000);const s=Math.floor((diff%60000)/1000);setCountdown(String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'));};tick();const t=setInterval(tick,1000);return()=>clearInterval(t);},[cls]);
+  return React.createElement('div',{style:{minHeight:'100vh',background:'linear-gradient(160deg,#07160a,#0d2b17)',color:LC.white,display:'flex',flexDirection:'column'}},
+    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'rgba(0,0,0,0.4)',borderBottom:'1px solid rgba(255,255,255,0.1)'}},
+      React.createElement('button',{onClick:onBack,style:{background:'none',border:'none',color:LC.grey,fontSize:20,cursor:'pointer'}},'Back'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontWeight:700,fontSize:15}},cls.title),
+        React.createElement('div',{style:{fontSize:11,color:LC.grey}},(cls.scheduled_date||'')+' '+  (cls.scheduled_time||''))
+      ),
+      React.createElement('div',{style:{background:cls.status==='live'?'rgba(239,68,68,0.15)':'rgba(255,255,255,0.1)',border:'1px solid '+(cls.status==='live'?'rgba(239,68,68,0.3)':'rgba(255,255,255,0.2)'),borderRadius:20,padding:'3px 12px',fontSize:12,color:cls.status==='live'?LC.red:LC.white,fontWeight:600}},cls.status==='live'?'LIVE':'Upcoming')
+    ),
+    React.createElement('div',{style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,gap:18}},
+      React.createElement('div',{style:{fontSize:64,textAlign:'center'}},ch?ch.avatar:'📺'),
+      React.createElement('div',{style:{textAlign:'center'}},
+        React.createElement('h2',{style:{fontFamily:"'Playfair Display',serif",color:LC.gold,marginBottom:6,fontSize:22}},cls.title),
+        React.createElement('div',{style:{color:LC.grey,fontSize:13}},ch?ch.name:(cls.presenter_type==='human'?'Live Class':'Live Class'))
+      ),
+      cls.status!=='live'&&React.createElement('div',{style:{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:16,padding:'20px 36px',textAlign:'center'}},
+        React.createElement('div',{style:{fontSize:11,color:LC.grey,marginBottom:4}},'Class starts in'),
+        React.createElement('div',{style:{fontSize:52,fontWeight:700,color:LC.gold,fontFamily:'monospace'}},countdown)
+      ),
+      React.createElement('div',{style:{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 20px',width:'100%',maxWidth:320}},
+        [['Date',cls.scheduled_date||'TBD'],['Time',cls.scheduled_time||'TBD'],['Teacher',ch?ch.name:'Your Tutor'],['Type',cls.class_type||'Live']].map(([label,val])=>React.createElement('div',{key:label,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}},React.createElement('span',{style:{color:LC.grey}},label),React.createElement('span',{style:{color:LC.white,fontWeight:600}},val)))
+      ),
+      cls.status==='live'&&React.createElement('button',{onClick:onJoin,style:{background:'linear-gradient(135deg,'+LC.gold+',#f0b429)',color:'#000',border:'none',borderRadius:14,padding:'14px 0',fontWeight:700,cursor:'pointer',fontSize:16,width:'100%',maxWidth:300}},'Join Class Now'),
+      isPresenter&&cls.status==='upcoming'&&React.createElement('button',{onClick:onStart,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:LC.red,borderRadius:14,padding:'12px 0',fontWeight:700,cursor:'pointer',fontSize:14,width:'100%',maxWidth:300}},'Start Class Now'),
+      cls.meet_link&&cls.presenter_type==='human'&&React.createElement('a',{href:cls.meet_link,target:'_blank',rel:'noreferrer',style:{background:'rgba(59,130,246,0.15)',border:'1px solid #3b82f6',color:'#3b82f6',borderRadius:14,padding:'12px 0',fontWeight:700,fontSize:14,textDecoration:'none',width:'100%',maxWidth:300,textAlign:'center',display:'block'}},'Join Video Call')
+    )
+  );
+}
+
+function LiveClassRoom({classData,onExit,profile,socket}){
+  const ck=classData?.ai_character||'ken';
+  const isAI=classData?.presenter_type==='ai';
+  const ch={ken:{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫'},msimbi:{name:"Mis M'simbi",gender:'female',avatar:'👩‍🏫'}}[ck]||{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫'};
+  const isPresenter=profile?.role==='tutor'||profile?.role==='admin';
+  const sn=()=>classData?.subject_name||classData?.subject_id||'General';
+  const [msgs,setMsgs]=useState([]);const [students,setStudents]=useState([]);const [hands,setHands]=useState([]);
+  const [handUp,setHandUp]=useState(false);const [listening,setListening]=useState(false);const [scanningImg,setScanningImg]=useState(false);
+  const [aiSpk,setAiSpk]=useState(false);const [progress,setProgress]=useState(0);const [ended,setEnded]=useState(false);
+  const [quiz,setQuiz]=useState(null);const [input,setInput]=useState('');const [panel,setPanel]=useState('board');
+  const [waitingAnswer,setWaitingAnswer]=useState(false);const [currentQ,setCurrentQ]=useState('');
+  const [calledStudent,setCalledStudent]=useState(null);const [breath,setBreath]=useState(1);
+  const spkQ=useRef([]);const isspk=useRef(false);const chunks=useRef([]);const chunkIdx=useRef(0);
+  const done=useRef(false);const msgsEnd=useRef();const curQ=useRef('');const waiting=useRef(false);const autoTimer=useRef(null);
+
+  useEffect(()=>{if(!aiSpk){setBreath(1);return;}let p=0;const t=setInterval(()=>{p=(p+1)%4;setBreath([1,1.05,1.09,1.05][p]);},380);return()=>clearInterval(t);},[aiSpk]);
+
+  const addMsg=useCallback((role,text,meta={})=>{setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role,text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),...meta}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);},[]);
+
+  const processSpk=useCallback(()=>{if(isspk.current||!spkQ.current.length)return;const{text,cb}=spkQ.current.shift();isspk.current=true;setAiSpk(true);setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role:'ai',text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);if(socket&&classData?._id)socket.emit('ai_speaking',{classId:classData._id,text,character:ck});ZambianVoice.speak(text,ch.gender,null,()=>{isspk.current=false;setAiSpk(false);if(socket&&classData?._id)socket.emit('ai_done_speaking',{classId:classData._id});if(cb)cb();else setTimeout(processSpk,300);});},[socket,classData,ck,ch.gender]);
+
+  const say=useCallback((text,cb=null)=>{if(!text?.trim())return;spkQ.current.push({text,cb});if(!isspk.current)processSpk();},[processSpk]);
+
+  const next=useCallback(async()=>{if(done.current||chunkIdx.current>=chunks.current.length){if(!done.current){done.current=true;setProgress(100);say('Excellent work today class! We have completed our lesson. A quiz is now being prepared. Well done everyone!');try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:sn(),topic:classData?.lesson_topic||sn(),count:5,type:'mcq',character:ck},tok());if(qr?.questions){setQuiz({questions:qr.questions,pending:true});if(socket)socket.emit('ai_quiz_ready',{classId:classData._id,questions:qr.questions});}}catch(e){}}return;}const chunk=chunks.current[chunkIdx.current++];setProgress(Math.round(chunkIdx.current/chunks.current.length*100));if(chunk.type==='question'){curQ.current=chunk.question||chunk.text;setCurrentQ(curQ.current);waiting.current=true;setWaitingAnswer(true);say(curQ.current,()=>{autoTimer.current=setTimeout(()=>{if(!waiting.current)return;waiting.current=false;setWaitingAnswer(false);say('Let me explain that. Think carefully about what we just covered.',()=>setTimeout(next,800));},12000);});}else{say(chunk.text,()=>setTimeout(next,600));}},[say,classData,ck,socket,sn]);
+
+  const callStudent=useCallback(async(name)=>{if(autoTimer.current)clearTimeout(autoTimer.current);waiting.current=false;setWaitingAnswer(false);setCalledStudent(name);try{const r=await apiFetch('POST','/ai/call-student',{student_name:name,question:curQ.current,subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300)},tok());if(r.reply)say(r.reply);}catch(e){say('Yes '+name+'! Please share your answer with the class.');}},[say,ck,classData,sn]);
+
+  const voiceAnswer=useCallback(()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){addMsg('system','Voice not supported. Please type your answer.');return;}ZambianVoice.stop();const rec=new SR();rec.lang='en-US';rec.continuous=false;rec.interimResults=false;setListening(true);addMsg('system','Listening... speak your answer now.');rec.onresult=async(e)=>{const ans=e.results[0][0].transcript;setListening(false);setHandUp(false);setCalledStudent(null);if(socket&&classData?._id){socket.emit('hand_raise',{classId:classData._id,userId:profile?._id,name:profile?.name,raised:false});socket.emit('class_question',{classId:classData._id,question:ans,studentName:profile?.name});}addMsg('me',ans,{name:profile?.name});try{const r=await apiFetch('POST','/ai/check-answer',{student_name:profile?.name,student_answer:ans,question:curQ.current||'the lesson',subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300)},tok());if(r.reply)say(r.reply,()=>{waiting.current=false;setWaitingAnswer(false);setTimeout(next,1000);});}catch(e){waiting.current=false;setWaitingAnswer(false);next();}}; rec.onerror=()=>{setListening(false);addMsg('system','Could not hear. Please type.');};rec.onend=()=>setListening(false);rec.start();},[socket,classData,profile,ck,say,next,addMsg,sn]);
+
+  useEffect(()=>{if(!classData?._id)return;let gone=false;if(socket)socket.emit('join_class',{classId:classData._id,user:{_id:profile?._id,name:profile?.name,role:profile?.role}});if(!isAI)return;(async()=>{let intro='Good day class! I am '+ch.name+'. Welcome to today lesson. Get ready to think deeply!';try{const r=await apiFetch('POST','/ai/lesson-intro',{subject:sn(),topic:classData?.lesson_topic||'',character:ck,lesson_script:classData?.lesson_script||''},tok());if(r.intro)intro=r.intro;}catch(e){}if(gone)return;if(classData?.lesson_script){try{const lb=await apiFetch('POST','/ai/build-lesson',{subject:sn(),topic:classData?.lesson_topic||sn(),notes:classData.lesson_script,character:ck},tok());if(lb?.chunks?.length)chunks.current=lb.chunks;}catch(e){chunks.current=classData.lesson_script.split(/[.!?]+/).map(c=>c.trim()).filter(c=>c.length>10).map((text,i)=>({text,type:i%4===3?'question':'teach',question:i%4===3?text+' What do you think?':null}));}}if(gone)return;if(classData?.lesson_image_url){say(intro,()=>{if(gone)return;addMsg('ai','Take a look at this, class.',{image:classData.lesson_image_url});if(socket)socket.emit('class_image',{classId:classData._id,url:classData.lesson_image_url,caption:'Lesson photo'});say(classData.lesson_image_explanation||'Now class, look carefully at this image. It will help you understand today lesson.',()=>{if(!gone)setTimeout(next,800);});});}else{say(intro,()=>{if(!gone)setTimeout(next,800);});}})();return()=>{gone=true;};},[classData?._id]);
+
+  useEffect(()=>{if(!socket)return;const onJoin=({user})=>{setStudents(p=>[...p.filter(s=>s._id!==user?._id),user].filter(Boolean));addMsg('system',(user?.name||'A student')+' joined the class.');};const onLeft=({userId})=>setStudents(p=>p.filter(s=>s._id!==userId));const onQ=({question,studentName})=>{addMsg('student',question,{name:studentName});if(!waiting.current&&isAI)apiFetch('POST','/ai/chat',{message:'Student '+studentName+' asks: '+question,subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300),conversation_history:[]},tok()).then(r=>{if(r.reply)say(r.reply);}).catch(()=>{});};const onHand=({userId,name,raised})=>{if(raised){setHands(p=>[...p.filter(h=>h.userId!==userId),{userId,name}]);if(waiting.current&&isAI)setTimeout(()=>callStudent(name),800);}else setHands(p=>p.filter(h=>h.userId!==userId));};const onStatus=({status})=>{if(status==='ended'){setEnded(true);ZambianVoice.stop();done.current=true;}};const onQuiz=q=>{setQuiz(q);setPanel('quiz');addMsg('system','Quiz received! Go to Quiz tab.');};const onAIQuiz=({questions})=>{if(isPresenter){setQuiz({questions,pending:true});setPanel('quiz');addMsg('system','AI generated a quiz. Please review and post.');}};const onImg=({url,caption})=>{setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role:'ai',text:caption||'',image:url,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);};const onAISpk=({text})=>{if(!isAI)addMsg('ai',text);};socket.on('student_joined',onJoin);socket.on('student_left',onLeft);socket.on('class_question',onQ);socket.on('hand_raise',onHand);socket.on('class_status_change',onStatus);socket.on('class_quiz',onQuiz);socket.on('ai_quiz_ready',onAIQuiz);socket.on('class_image',onImg);socket.on('ai_speaking',onAISpk);return()=>{['student_joined','student_left','class_question','hand_raise','class_status_change','class_quiz','ai_quiz_ready','class_image','ai_speaking'].forEach(e=>socket.off(e));};},[socket,callStudent,isPresenter,isAI,say,ck,classData]);
+
+  const sendMsg=async()=>{if(!input.trim())return;const q=input.trim();setInput('');addMsg('me',q,{name:profile?.name});if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:q,studentName:profile?.name});};
+  const raiseHand=()=>{const n=!handUp;setHandUp(n);if(socket&&classData?._id)socket.emit('hand_raise',{classId:classData._id,userId:profile?._id,name:profile?.name,raised:n});if(n)addMsg('system','You raised your hand. Wait for Teacher to call on you.');};
+  const endClass=async()=>{ZambianVoice.stop();done.current=true;try{await apiFetch('PUT','/live-classes/'+classData._id,{status:'ended'},tok());}catch(e){}if(socket)socket.emit('class_status_change',{classId:classData._id,status:'ended'});setEnded(true);};
+
+  if(ended)return React.createElement('div',{style:{minHeight:'100vh',background:'linear-gradient(160deg,#07160a,#0d2b17)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:LC.white}},React.createElement('div',{style:{fontSize:64,marginBottom:16}},'END'),React.createElement('h2',{style:{color:LC.gold,fontFamily:"'Playfair Display',serif",marginBottom:8}},'Class Ended'),React.createElement('p',{style:{color:LC.grey,marginBottom:24}},'Thank you for attending!'),React.createElement('button',{onClick:onExit,style:{background:LC.gold,color:'#000',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:700,cursor:'pointer',fontSize:15}},'Back to Classes'));
+
+  const nav=[{id:'board',label:isAI?'Board':'Whiteboard',icon:'B'},{id:'chat',label:'Chat',icon:'C'},{id:'participants',label:'People',icon:'P'},{id:'quiz',label:'Quiz',icon:'Q'},{id:'materials',label:'Files',icon:'F'}];
+
+  return React.createElement('div',{style:{height:'100vh',display:'flex',flexDirection:'column',background:'linear-gradient(160deg,#07160a,#0d2b17)',color:LC.white,overflow:'hidden'}},
+    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(0,0,0,0.5)',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}},
+      React.createElement('button',{onClick:()=>{ZambianVoice.stop();onExit();},style:{background:'none',border:'none',color:LC.grey,fontSize:18,cursor:'pointer',padding:4}},'Back'),
+      isAI&&React.createElement('div',{style:{fontSize:20,flexShrink:0,filter:aiSpk?'drop-shadow(0 0 8px '+LC.gold+')':'none',transition:'filter 0.4s'}},ch.avatar),
+      React.createElement('div',{style:{flex:1,minWidth:0}},
+        React.createElement('div',{style:{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},classData?.title||'Live Class'),
+        React.createElement('div',{style:{fontSize:11,color:aiSpk?LC.gold:LC.grey}},isAI?(aiSpk?'Speaking...':'Live'):'Live - '+students.length+' students')
+      ),
+      isAI&&React.createElement('div',{style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:20,padding:'2px 9px',fontSize:11,color:LC.gold,fontWeight:600,flexShrink:0}},progress+'%'),
+      React.createElement('div',{style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:20,padding:'2px 9px',fontSize:11,color:LC.red,display:'flex',alignItems:'center',gap:3,flexShrink:0}},
+        React.createElement('span',{style:{width:5,height:5,borderRadius:'50%',background:LC.red,display:'inline-block',animation:'pulse 1.5s infinite'}}),
+        'LIVE'
+      )
+    ),
+    isAI&&React.createElement('div',{style:{height:2,background:'rgba(255,255,255,0.06)',flexShrink:0}},React.createElement('div',{style:{height:'100%',width:progress+'%',background:'linear-gradient(90deg,'+LC.gold+',#f0b429)',transition:'width 0.9s ease'}})),
+    React.createElement('div',{style:{flex:1,overflow:'hidden'}},
+      panel==='board'&&(isAI?React.createElement(AITextBoard,{msgs,aiSpk,chAvatar:ch.avatar,currentQ,waitingAnswer}):React.createElement(LiveWhiteboard,{classId:classData._id,socket,isPresenter})),
+      panel==='chat'&&React.createElement(ChatPanel,{msgs,input,setInput,onSend:sendMsg,chAvatar:ch.avatar}),
+      panel==='participants'&&React.createElement(ParticipantsPanel,{students,hands,isPresenter,onCallStudent:callStudent}),
+      panel==='quiz'&&React.createElement(QuizPanel,{quiz,setQuiz,socket,classId:classData._id,isPresenter,character:ck}),
+      panel==='materials'&&React.createElement(MaterialsPanel,null)
+    ),
+    calledStudent===profile?.name&&React.createElement('div',{style:{background:'rgba(16,185,129,0.12)',borderTop:'1px solid rgba(16,185,129,0.3)',padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}},
+      React.createElement('div',{style:{flex:1,fontSize:13,color:'#34d399',fontWeight:700}},ch.name+' called on you! Speak your answer.'),
+      React.createElement('button',{onClick:voiceAnswer,disabled:listening,style:{background:listening?'rgba(16,185,129,0.3)':'#10b981',color:LC.white,border:'none',borderRadius:10,padding:'8px 16px',fontWeight:700,cursor:'pointer',fontSize:13}},listening?'Listening...':'Speak Answer')
+    ),
+    React.createElement('div',{style:{padding:'6px 8px',background:'rgba(0,0,0,0.5)',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:5,alignItems:'center',flexShrink:0}},
+      !isPresenter&&React.createElement('button',{onClick:raiseHand,style:{background:handUp?LC.gold:'rgba(255,255,255,0.07)',border:'1px solid '+(handUp?LC.gold:'rgba(255,255,255,0.1)'),borderRadius:9,padding:'7px 10px',cursor:'pointer',color:handUp?'#000':LC.white,fontSize:16,flexShrink:0}},listening?'MIC':handUp?'HAND':'RAISE'),
+      React.createElement('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&sendMsg(),placeholder:isPresenter?'Send to class...':'Ask or answer...',style:{flex:1,background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'8px 11px',color:LC.white,fontSize:13,outline:'none'}}),
+      React.createElement('button',{onClick:sendMsg,style:{background:LC.gold,border:'none',borderRadius:9,padding:'8px 13px',cursor:'pointer',color:'#000',fontSize:15,flexShrink:0,fontWeight:700}},'Send'),
+      isPresenter&&React.createElement('label',{style:{background:scanningImg?LC.goldl:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.white,fontSize:13,flexShrink:0},title:'Share image'},
+        scanningImg?'Wait...':'Image',
+        React.createElement('input',{type:'file',accept:'image/*',disabled:scanningImg,style:{display:'none'},onChange:async e=>{const file=e.target.files?.[0];if(!file||scanningImg)return;setScanningImg(true);const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);try{const r=await fetch('/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Diagram'});const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',sn());fd2.append('mode','explain');const r2=await fetch('/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();if(isAI)say(d2.result||'Look carefully at this diagram.');else addMsg('ai',d2.result||'Look carefully at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}setScanningImg(false);}})
+      ),
+      isPresenter&&React.createElement('button',{onClick:endClass,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.red,fontSize:11,flexShrink:0,fontWeight:600}},'End')
+    ),
+    React.createElement('div',{style:{display:'flex',background:'rgba(0,0,0,0.6)',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}},
+      nav.map(item=>React.createElement('button',{key:item.id,onClick:()=>setPanel(item.id),style:{flex:1,padding:'7px 2px',background:'none',border:'none',color:panel===item.id?LC.gold:LC.grey,fontSize:10,fontWeight:panel===item.id?700:400,borderTop:'2px solid '+(panel===item.id?LC.gold:'transparent'),cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2}},React.createElement('span',{style:{fontSize:15}},item.icon),item.label))
+    )
+  );
+}
+
+
 function ChatPage() {
-  const {
-    profile,
-    socket
-  } = useAuth();
-  const {
-    data: users
-  } = useApiData('/users');
+  const { profile, socket } = useAuth();
+  const { data: users } = useApiData('/users');
   const [tab, setTab] = useState('direct');
   const [sel, setSel] = useState(null);
   const [selG, setSelG] = useState(null);
@@ -3847,484 +3850,245 @@ function ChatPage() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [srch, setSrch] = useState('');
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [unread, setUnread] = useState({});
+  const [recording, setRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
   const cRef = useRef();
+  const mediaRec = useRef(null);
+  const audioChunks = useRef([]);
+
   const others = users.filter(u => u._id !== profile?._id);
-  const groups = [{
-    id: 0,
-    n: '🏫 General Chat',
-    i: '🏫'
-  }, ...SUBJECTS.map(s => ({
-    id: s.id,
-    n: `${s.i} ${s.n}`,
-    i: s.i
-  }))];
+  const groups = [{id:0,n:'General Chat',i:'school'}, ...SUBJECTS.map(s=>({id:s.id,n:s.n,i:s.i}))];
+
+  // Real-time messages
   useEffect(() => {
-    if (sel === null && selG === null) return;
-    const load = async () => {
+    if (!socket) return;
+    const onDirect = msg => {
+      const relevant = tab==='direct' && sel && (msg.receiver_id===sel._id || msg.sender_id===sel._id);
+      if (relevant) {
+        setMsgs(p => p.find(m=>m._id===msg._id) ? p : [...p, msg]);
+        setTimeout(() => cRef.current?.scrollTo(0,99999), 100);
+      } else if (msg.sender_id !== profile?._id) {
+        setUnread(p => ({...p, [msg.sender_id]: (p[msg.sender_id]||0)+1}));
+      }
+    };
+    const onGroup = msg => {
+      const relevant = tab==='group' && msg.subject_id===selG;
+      if (relevant) {
+        setMsgs(p => p.find(m=>m._id===msg._id) ? p : [...p, msg]);
+        setTimeout(() => cRef.current?.scrollTo(0,99999), 100);
+      } else if (msg.sender_id !== profile?._id) {
+        setUnread(p => ({...p, ['g'+msg.subject_id]: (p['g'+msg.subject_id]||0)+1}));
+      }
+    };
+    socket.on('new_direct_message', onDirect);
+    socket.on('new_group_message', onGroup);
+    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); };
+  }, [socket, sel, selG, tab, profile]);
+
+  // Join group rooms
+  useEffect(() => {
+    if (!socket || !profile) return;
+    socket.emit('join_user', profile._id);
+    groups.forEach(g => socket.emit('join_group', g.id));
+  }, [socket, profile]);
+
+  // Load messages
+  useEffect(() => {
+    if (sel===null && selG===null) return;
+    (async () => {
       try {
-        const path = tab === 'direct' ? `/messages/direct/${sel?._id}` : `/messages/group/${selG}`;
+        const path = tab==='direct' ? '/messages/direct/'+sel?._id : '/messages/group/'+selG;
         const d = await apiFetch('GET', path, null, tok());
         setMsgs(Array.isArray(d) ? d : []);
-      } catch (e) {}
-    };
-    load();
-    if (!socket) return;
-    const ev = tab === 'direct' ? 'new_direct_message' : 'new_group_message';
-    const h = m => {
-      const ok = tab === 'direct' ? m.sender_id === profile?._id || m.sender_id === sel?._id : Number(m.subject_id) === Number(selG);
-      if (ok) setMsgs(p => {
-        if (p.find(x => x._id === m._id)) return p;
-        return [...p, m];
-      });
-    };
-    socket.on(ev, h);
-    if (tab === 'group' && selG !== null) socket.emit('join_group', selG);
-    return () => socket.off(ev, h);
-  }, [sel?._id, selG, tab]);
-  useEffect(() => {
-    setTimeout(() => {
-      if (cRef.current) cRef.current.scrollTop = cRef.current.scrollHeight;
-    }, 80);
-  }, [msgs]);
+        // Clear unread
+        const key = tab==='direct' ? sel?._id : 'g'+selG;
+        setUnread(p => ({...p, [key]: 0}));
+        setTimeout(() => cRef.current?.scrollTo(0,99999), 200);
+      } catch(e) { setMsgs([]); }
+    })();
+  }, [sel, selG, tab]);
+
   const send = async () => {
-    if (!input.trim() || busy) return;
     const text = input.trim();
-    setInput('');
-    // Optimistic update - show message instantly like WhatsApp
-    const tempId = 'temp_' + Date.now();
-    const tempMsg = {
-      _id: tempId,
-      sender_id: profile?._id,
-      content: text,
-      createdAt: new Date().toISOString(),
-      type: tab,
-      receiver_id: sel?._id,
-      subject_id: selG,
-      _pending: true
-    };
-    setMsgs(p => [...p, tempMsg]);
-    setBusy(true);
+    if (!text && !mediaFile && !audioBlob) return;
+    setInput(''); setMediaFile(null); setMediaPreview(null); setAudioBlob(null);
+    const tempId = 'tmp_'+Date.now();
+    const temp = {_id:tempId,sender_id:profile?._id,content:text,image_url:mediaPreview,createdAt:new Date().toISOString(),_pending:true};
+    setMsgs(p=>[...p,temp]);
+    setTimeout(()=>cRef.current?.scrollTo(0,99999),80);
     try {
-      let saved;
-      if (tab === 'direct' && sel) {
-        const fd = new FormData();
-        fd.append('receiver_id', sel._id);
-        fd.append('content', text);
-        saved = await apiFetch('POST', '/messages/direct', null, tok(), fd);
-      } else if (tab === 'group' && selG !== null) {
-        const fd = new FormData();
-        fd.append('subject_id', selG);
-        fd.append('content', text);
-        saved = await apiFetch('POST', '/messages/group', null, tok(), fd);
-      }
-      // Replace temp message with real one from server
-      if (saved?._id) {
-        setMsgs(p => p.map(m => m._id === tempId ? saved : m));
-      }
-    } catch (e) {
-      // Remove failed message
-      setMsgs(p => p.filter(m => m._id !== tempId));
-      console.warn(e);
-    } finally {
-      setBusy(false);
-    }
+      const fd = new FormData();
+      if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
+      if (tab==='group' && selG!==null) fd.append('subject_id', selG);
+      if (text) fd.append('content', text);
+      if (mediaFile) fd.append('image', mediaFile);
+      if (audioBlob) fd.append('image', audioBlob, 'voice.webm');
+      const path = tab==='direct' ? '/messages/direct' : '/messages/group';
+      const saved = await apiFetch('POST', path, null, tok(), fd);
+      if (saved?._id) setMsgs(p=>p.map(m=>m._id===tempId?saved:m));
+      else setMsgs(p=>p.filter(m=>m._id!==tempId));
+    } catch(e) { setMsgs(p=>p.filter(m=>m._id!==tempId)); }
+    setBusy(false);
   };
-  const gu = id => users.find(u => u._id === id);
-  if (sel || selG !== null) {
-    const cn = tab === 'direct' ? sel?.name : groups.find(g => g.id === selG)?.n;
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        display: 'flex',
-        flexDirection: 'column',
-        background: C.cBg
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '10px 13px',
-        background: C.cSide,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        flexShrink: 0,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => {
-        setSel(null);
-        setSelG(null);
-        setMsgs([]);
-      },
-      style: {
-        background: 'none',
-        border: 'none',
-        color: C.cTxt,
-        cursor: 'pointer',
-        fontSize: 22,
-        padding: '2px 6px',
-        flexShrink: 0
-      }
-    }, "\u2039"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 36,
-        height: 36,
-        borderRadius: '50%',
-        background: `linear-gradient(135deg,${C.gd},${C.g})`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontWeight: 700,
-        flexShrink: 0,
-        fontSize: 14
-      }
-    }, tab === 'direct' ? sel?.avatarUrl ? /*#__PURE__*/React.createElement("img", {
-      src: sel.avatarUrl,
-      alt: "",
-      style: {
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-        borderRadius: '50%'
-      }
-    }) : sel?.avatar || sel?.name?.[0] || '?' : groups.find(g => g.id === selG)?.i), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: C.cTxt,
-        fontWeight: 700,
-        fontSize: 14
-      }
-    }, cn), /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: C.cSub,
-        fontSize: 11,
-        textTransform: 'capitalize'
-      }
-    }, tab === 'direct' ? sel?.role : 'Group chat'))), /*#__PURE__*/React.createElement("div", {
-      ref: cRef,
-      style: {
-        flex: 1,
-        overflowY: 'auto',
-        padding: '12px 10px',
-        background: C.cBg
-      }
-    }, msgs.map((m, i) => {
-      const mine = m.sender_id === profile?._id;
-      const sender = gu(m.sender_id);
-      const rc = sender?.role === 'tutor' ? C.gold : sender?.role === 'admin' ? C.d : C.gl;
-      return /*#__PURE__*/React.createElement("div", {
-        key: i || m._id,
-        style: {
-          display: 'flex',
-          flexDirection: mine ? 'row-reverse' : 'row',
-          gap: 6,
-          marginBottom: 6,
-          alignItems: 'flex-end'
-        }
-      }, !mine && /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          background: `linear-gradient(135deg,${rc},${rc}88)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          fontWeight: 700,
-          fontSize: 11,
-          flexShrink: 0,
-          overflow: 'hidden'
-        }
-      }, sender?.avatarUrl ? /*#__PURE__*/React.createElement("img", {
-        src: sender.avatarUrl,
-        alt: "",
-        style: {
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover'
-        }
-      }) : sender?.avatar || sender?.name?.[0] || '?'), /*#__PURE__*/React.createElement("div", {
-        style: {
-          maxWidth: '75%'
-        }
-      }, !mine && tab === 'group' && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          color: rc,
-          fontWeight: 600,
-          marginBottom: 2
-        }
-      }, sender?.name), m.image_url && /*#__PURE__*/React.createElement("img", {
-        src: m.image_url,
-        alt: "",
-        style: {
-          maxWidth: 200,
-          borderRadius: 9,
-          display: 'block',
-          marginBottom: m.content ? 3 : 0
-        }
-      }), m.content && /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: mine ? C.cMe : C.cThem,
-          color: C.cTxt,
-          borderRadius: mine ? '13px 13px 3px 13px' : '13px 13px 13px 3px',
-          padding: '8px 12px',
-          fontSize: 14,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-          lineHeight: 1.45,
-          opacity: m._pending ? 0.6 : 1
-        }
-      }, m.content), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          color: C.cSub,
-          marginTop: 2,
-          textAlign: mine ? 'right' : 'left'
-        }
-      }, ftime(m.createdAt))));
-    }), msgs.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: 'center',
-        color: C.cSub,
-        padding: 40,
-        fontSize: 13
-      }
-    }, "No messages yet. Say hello! \uD83D\uDC4B")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '7px 9px',
-        background: C.cSide,
-        display: 'flex',
-        gap: 7,
-        alignItems: 'center',
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement("input", {
-      value: input,
-      onChange: e => setInput(e.target.value),
-      onKeyDown: e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send()),
-      placeholder: "Type a message...",
-      style: {
-        flex: 1,
-        padding: '9px 14px',
-        borderRadius: 20,
-        border: 'none',
-        fontSize: 14,
-        fontFamily: 'inherit',
-        outline: 'none',
-        background: C.cIn,
-        color: C.cTxt
-      }
-    }), /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: send,
-      disabled: busy || !input.trim(),
-      style: {
-        width: 38,
-        height: 38,
-        background: `linear-gradient(135deg,${C.gd},${C.g})`,
-        border: 'none',
-        borderRadius: '50%',
-        color: '#fff',
-        cursor: 'pointer',
-        fontSize: 18,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: !input.trim() ? .5 : 1,
-        flexShrink: 0
-      }
-    }, "\u27A4")));
+
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      audioChunks.current = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = e => audioChunks.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(audioChunks.current, {type:'audio/webm'});
+        setAudioBlob(blob);
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      mr.start();
+      mediaRec.current = mr;
+      setRecording(true);
+    } catch(e) { alert('Microphone access needed for voice messages'); }
+  };
+
+  const stopRec = () => {
+    mediaRec.current?.stop();
+    setRecording(false);
+  };
+
+  const gu = id => users.find(u=>u._id===id);
+  const ftime = ts => { if(!ts) return ''; const d=new Date(ts); return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); };
+  const fdate = ts => { if(!ts) return ''; const d=new Date(ts),now=new Date(); const diff=Math.floor((now-d)/86400000); if(diff===0)return 'Today'; if(diff===1)return 'Yesterday'; return d.toLocaleDateString(); };
+
+  const waBg = 'rgba(0,0,0,0.04)';
+  const waGreen = '#075E54'; const waLightGreen = '#DCF8C6'; const waMsg = '#fff';
+
+  // Chat list view
+  if (!sel && selG===null) {
+    const filtered = tab==='direct'
+      ? others.filter(u=>(u.name||'').toLowerCase().includes(srch.toLowerCase()))
+      : groups.filter(g=>g.n.toLowerCase().includes(srch.toLowerCase()));
+
+    return React.createElement('div', {style:{height:'100%',display:'flex',flexDirection:'column',background:'#f0f2f5'}},
+      // Header
+      React.createElement('div', {style:{background:waGreen,color:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}},
+        React.createElement('div', {style:{flex:1,fontWeight:700,fontSize:18,fontFamily:"'Playfair Display',serif"}},'Chats'),
+        React.createElement('div', {style:{display:'flex',gap:12}},
+          React.createElement('span', {style:{fontSize:20,cursor:'pointer'}}, '\uD83D\uDD0D'),
+          React.createElement('span', {style:{fontSize:20,cursor:'pointer'}}, '\u22EE')
+        )
+      ),
+      // Tab bar
+      React.createElement('div', {style:{display:'flex',background:'#fff',borderBottom:'1px solid #e5e7eb'}},
+        [['direct','Direct'],['group','Groups']].map(([t,label])=>
+          React.createElement('button',{key:t,onClick:()=>{setTab(t);setSel(null);setSelG(null);},style:{flex:1,padding:'11px 4px',background:'none',border:'none',color:tab===t?waGreen:'#666',fontWeight:tab===t?700:400,fontSize:14,borderBottom:tab===t?'2px solid '+waGreen:'2px solid transparent',cursor:'pointer'}},label)
+        )
+      ),
+      // Search
+      React.createElement('div', {style:{padding:'8px 12px',background:'#fff'}},
+        React.createElement('input',{value:srch,onChange:e=>setSrch(e.target.value),placeholder:'Search...',style:{width:'100%',padding:'8px 14px',borderRadius:20,border:'none',background:'#f0f2f5',fontSize:14,outline:'none',boxSizing:'border-box'}})
+      ),
+      // List
+      React.createElement('div', {style:{flex:1,overflowY:'auto'}},
+        filtered.map((item,i)=>{
+          const key = tab==='direct' ? item._id : 'g'+item.id;
+          const ucount = unread[key]||0;
+          return React.createElement('div',{key:i,onClick:()=>{if(tab==='direct'){setSel(item);setSelG(null);}else{setSelG(item.id);setSel(null);}setUnread(p=>({...p,[key]:0}));},style:{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'#fff',borderBottom:'1px solid #f0f2f5',cursor:'pointer',position:'relative'}},
+            React.createElement('div',{style:{width:48,height:48,borderRadius:'50%',background:'linear-gradient(135deg,#075E54,#128C7E)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:18,flexShrink:0}},
+              tab==='direct'?(item.avatarUrl?React.createElement('img',{src:item.avatarUrl,style:{width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover'}}):(item.name?.[0]||'?')):'\uD83D\uDC65'
+            ),
+            React.createElement('div',{style:{flex:1,minWidth:0}},
+              React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+                React.createElement('div',{style:{fontWeight:600,fontSize:15,color:'#111'}}),tab==='direct'?item.name:item.n),
+              React.createElement('div',{style:{fontSize:12,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},tab==='direct'?'Tap to message':'Tap to open group')
+            ),
+            ucount>0 && React.createElement('div',{style:{background:'#25D366',color:'#fff',borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}},ucount>9?'9+':ucount)
+          );
+        }),
+        filtered.length===0 && React.createElement('div',{style:{textAlign:'center',padding:40,color:'#666',fontSize:14}},'No conversations yet')
+      )
+    );
   }
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      height: 'calc(100vh - 130px)',
-      display: 'flex',
-      flexDirection: 'column',
-      background: C.cBg,
-      borderRadius: 14,
-      overflow: 'hidden',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '11px 13px 0',
-      background: C.cSide,
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      color: C.cTxt,
-      marginBottom: 11,
-      fontSize: 18,
-      fontFamily: "'Playfair Display',serif"
-    }
-  }, "\uD83D\uDCAC Chats"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      background: 'rgba(255,255,255,0.06)',
-      borderRadius: 11,
-      padding: 3,
-      marginBottom: 11,
-      gap: 3
-    }
-  }, [['direct', '👤 Direct'], ['group', '👥 Groups']].map(([t, l]) => /*#__PURE__*/React.createElement("button", {
-    key: t,
-    type: "button",
-    onClick: () => setTab(t),
-    style: {
-      flex: 1,
-      padding: '8px 0',
-      border: 'none',
-      borderRadius: 9,
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      fontSize: 13,
-      fontWeight: 700,
-      background: tab === t ? `linear-gradient(135deg,${C.gd},${C.g})` : 'transparent',
-      color: tab === t ? '#fff' : C.cSub
-    }
-  }, l))), /*#__PURE__*/React.createElement("input", {
-    value: srch,
-    onChange: e => setSrch(e.target.value),
-    placeholder: "\uD83D\uDD0D Search...",
-    style: {
-      width: '100%',
-      padding: '8px 13px',
-      borderRadius: 10,
-      border: 'none',
-      fontSize: 13,
-      fontFamily: 'inherit',
-      outline: 'none',
-      background: C.cIn,
-      color: C.cTxt,
-      marginBottom: 9,
-      boxSizing: 'border-box'
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      overflowY: 'auto',
-      background: C.cBg
-    }
-  }, tab === 'direct' ? others.filter(u => u.name?.toLowerCase().includes(srch.toLowerCase())).map(u => {
-    const rc = u.role === 'tutor' ? C.gold : u.role === 'admin' ? C.d : C.gl;
-    return /*#__PURE__*/React.createElement("div", {
-      key: u._id,
-      onClick: () => {
-        setSel(u);
-        setMsgs([]);
-      },
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 11,
-        padding: '12px 13px',
-        cursor: 'pointer',
-        borderBottom: `1px solid ${C.cIn}`
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 44,
-        height: 44,
-        borderRadius: '50%',
-        background: `linear-gradient(135deg,${rc},${rc}88)`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontWeight: 700,
-        fontSize: 18,
-        overflow: 'hidden',
-        flexShrink: 0
-      }
-    }, u.avatarUrl ? /*#__PURE__*/React.createElement("img", {
-      src: u.avatarUrl,
-      alt: "",
-      style: {
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover'
-      }
-    }) : u.avatar || u.name?.[0] || '?'), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        minWidth: 0
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        fontSize: 14,
-        color: C.cTxt
-      }
-    }, u.name), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: rc,
-        textTransform: 'capitalize',
-        marginTop: 1
-      }
-    }, u.role)), /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: C.cSub,
-        fontSize: 18
-      }
-    }, "\u203A"));
-  }) : groups.filter(g => g.n.toLowerCase().includes(srch.toLowerCase())).map(g => /*#__PURE__*/React.createElement("div", {
-    key: g.id,
-    onClick: () => {
-      setSelG(g.id);
-      setMsgs([]);
-    },
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 11,
-      padding: '12px 13px',
-      cursor: 'pointer',
-      borderBottom: `1px solid ${C.cIn}`
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 44,
-      height: 44,
-      borderRadius: 13,
-      background: `linear-gradient(135deg,${C.gd},${C.g})`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: 22,
-      flexShrink: 0
-    }
-  }, g.i), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 14,
-      color: C.cTxt
-    }
-  }, g.n), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.cSub,
-      marginTop: 1
-    }
-  }, "Group chat")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: C.cSub,
-      fontSize: 18
-    }
-  }, "\u203A")))));
+
+  // Chat conversation view
+  const cn = tab==='direct' ? sel?.name : groups.find(g=>g.id===selG)?.n || 'Group';
+  const avatar = tab==='direct' ? (sel?.name?.[0]||'?') : '\uD83D\uDC65';
+
+  // Group messages by date
+  const grouped = [];
+  let lastDate = '';
+  msgs.forEach(m => {
+    const d = fdate(m.createdAt);
+    if (d !== lastDate) { grouped.push({type:'date',date:d}); lastDate=d; }
+    grouped.push({type:'msg',msg:m});
+  });
+
+  return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column',background:'#ECE5DD'}},
+    // Header
+    React.createElement('div',{style:{background:waGreen,color:'#fff',padding:'10px 14px',display:'flex',alignItems:'center',gap:12,flexShrink:0}},
+      React.createElement('button',{onClick:()=>{setSel(null);setSelG(null);},style:{background:'none',border:'none',color:'#fff',fontSize:22,cursor:'pointer',padding:0,lineHeight:1}},'\u2190'),
+      React.createElement('div',{style:{width:38,height:38,borderRadius:'50%',background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:16,flexShrink:0}},avatar),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontWeight:700,fontSize:15}}),cn),
+        React.createElement('div',{style:{fontSize:11,opacity:0.8}},tab==='direct'?(sel?.role||''):'Group chat')
+      )
+    ),
+    // Messages
+    React.createElement('div',{ref:cRef,style:{flex:1,overflowY:'auto',padding:'10px 12px',display:'flex',flexDirection:'column',gap:2}},
+      grouped.map((item,i)=>{
+        if (item.type==='date') return React.createElement('div',{key:'d'+i,style:{textAlign:'center',margin:'8px 0'}},
+          React.createElement('span',{style:{background:'rgba(255,255,255,0.8)',padding:'3px 12px',borderRadius:12,fontSize:11,color:'#666'}},item.date)
+        );
+        const m = item.msg;
+        const mine = m.sender_id===profile?._id || m.sender_id===profile?._id?.toString();
+        const sender = gu(m.sender_id);
+        const isLink = m.content && (m.content.includes('http://') || m.content.includes('https://') || m.content.includes('www.'));
+        return React.createElement('div',{key:m._id||i,style:{display:'flex',justifyContent:mine?'flex-end':'flex-start',marginBottom:2}},
+          React.createElement('div',{style:{maxWidth:'78%',background:mine?waLightGreen:waMsg,borderRadius:mine?'12px 12px 4px 12px':'12px 12px 12px 4px',padding:'6px 10px 4px',boxShadow:'0 1px 2px rgba(0,0,0,0.15)',opacity:m._pending?0.6:1}},
+            !mine && tab==='group' && React.createElement('div',{style:{fontSize:11,fontWeight:700,color:waGreen,marginBottom:2}},sender?.name||'Unknown'),
+            m.image_url && (m.image_url.includes('audio')||m.image_url.includes('.webm')||m.image_url.includes('.ogg')
+              ? React.createElement('audio',{controls:true,src:m.image_url,style:{maxWidth:220,display:'block',marginBottom:m.content?4:0}})
+              : React.createElement('img',{src:m.image_url,onClick:()=>window.open(m.image_url,'_blank'),style:{maxWidth:220,borderRadius:8,display:'block',marginBottom:m.content?4:0,cursor:'pointer'}})
+            ),
+            m.content && (isLink
+              ? React.createElement('div',{style:{fontSize:14,lineHeight:1.5,wordBreak:'break-word',color:'#1a73e8',textDecoration:'underline',cursor:'pointer'},onClick:()=>{const url=m.content.startsWith('http')?m.content:'https://'+m.content;window.open(url,'_blank');}},m.content)
+              : React.createElement('div',{style:{fontSize:14,lineHeight:1.5,wordBreak:'break-word',color:'#111'}},m.content)
+            ),
+            React.createElement('div',{style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:3,marginTop:2}},
+              React.createElement('span',{style:{fontSize:10,color:'#666'}},ftime(m.createdAt)),
+              mine && React.createElement('span',{style:{fontSize:11,color:m._pending?'#999':'#53bdeb'}},m._pending?'\u2713':'\u2713\u2713')
+            )
+          )
+        );
+      }),
+      audioBlob && React.createElement('div',{style:{background:'#fff',borderRadius:12,padding:'8px 12px',margin:'4px 0',display:'flex',alignItems:'center',gap:8}},
+        React.createElement('span',{style:{fontSize:20}},'\uD83C\uDF99'),
+        React.createElement('span',{style:{fontSize:13,color:'#333',flex:1}},'Voice message ready'),
+        React.createElement('button',{onClick:()=>setAudioBlob(null),style:{background:'#ef4444',border:'none',borderRadius:'50%',width:24,height:24,color:'#fff',cursor:'pointer',fontSize:12}},'\u2715')
+      )
+    ),
+    // Input bar
+    React.createElement('div',{style:{background:'#f0f2f5',padding:'6px 10px',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}},
+      mediaPreview && React.createElement('div',{style:{position:'absolute',bottom:70,left:10,background:'#fff',borderRadius:12,padding:8,boxShadow:'0 2px 10px rgba(0,0,0,0.2)',zIndex:10}},
+        React.createElement('img',{src:mediaPreview,style:{width:120,height:120,objectFit:'cover',borderRadius:8,display:'block'}}),
+        React.createElement('button',{onClick:()=>{setMediaFile(null);setMediaPreview(null);},style:{position:'absolute',top:-8,right:-8,background:'#ef4444',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',cursor:'pointer',fontSize:11}},'\u2715')
+      ),
+      React.createElement('label',{style:{width:40,height:40,borderRadius:'50%',background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,fontSize:20,boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}},
+        '\uD83D\uDCCE',
+        React.createElement('input',{type:'file',accept:'image/*,video/mp4',style:{display:'none'},onChange:e=>{const f=e.target.files?.[0];if(!f)return;setMediaFile(f);if(f.type.startsWith('image/')){const r=new FileReader();r.onload=ev=>setMediaPreview(ev.target.result);r.readAsDataURL(f);}else setMediaPreview(null);}})
+      ),
+      React.createElement('div',{style:{flex:1,background:'#fff',borderRadius:24,padding:'8px 14px',display:'flex',alignItems:'center',gap:8,boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}},
+        React.createElement('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),send()),placeholder:'Type a message',style:{flex:1,border:'none',outline:'none',fontSize:14,background:'transparent',color:'#111'}}),
+        React.createElement('span',{style:{fontSize:18,cursor:'pointer'}},'\uD83D\uDE42')
+      ),
+      React.createElement('button',{
+        onClick: input.trim()||mediaFile||audioBlob ? send : (recording?stopRec:startRec),
+        style:{width:44,height:44,borderRadius:'50%',background:recording?'#ef4444':'#25D366',border:'none',color:'#fff',fontSize:20,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}
+      }, input.trim()||mediaFile||audioBlob ? '\u27A4' : (recording?'\u23F9':'\uD83C\uDFA4'))
+    )
+  );
 }
+
 function QuestionsPage() {
   const {
     profile,
@@ -5940,7 +5704,7 @@ function MaterialsPage({
     }, "Premium"), ok ? m.file_url ? /*#__PURE__*/React.createElement(React.Fragment, null,
       m.type !== 'video' && m.type !== 'audio' && React.createElement("button", {
         type: "button",
-        onClick: () => window.open(m.view_url || m.file_url, "_blank"),
+        onClick: () => openFile(m.view_url || m.file_url, m.type),
         style: { ...BT('gh', true), fontSize: 11, padding: '4px 10px', cursor: 'pointer', border: 'none' }
       }, "\uD83D\uDC41 View"),
       React.createElement("a", {
@@ -6752,6 +6516,80 @@ function StudentDash({
     }, sn(lc.subject_id), " \xB7 ", lc.scheduled_date));
   }))));
 }
+
+function EnhancedLiveClassesPage({ subs, pays }) {
+  const { profile, socket } = useAuth();
+  const { add } = useToast();
+  const { data: classes, refetch } = useApiData('/live-classes');
+  const [activeClass, setActiveClass] = useState(null);
+  const [lobbyClass, setLobbyClass] = useState(null);
+  const [viewMode, setViewMode] = useState('upcoming');
+  const autoRef = useRef();
+
+  useEffect(() => {
+    const chk = () => {
+      classes.forEach(cls => {
+        if (cls.status === 'upcoming' && cls.auto_start && cls.presenter_type === 'ai' && cls.scheduled_date && cls.scheduled_time) {
+          const s = new Date(cls.scheduled_date + 'T' + cls.scheduled_time + ':00');
+          const diff = new Date() - s;
+          if (diff >= 0 && diff < 120000) { if (socket) socket.emit('check_auto_start', { classId: cls._id }); refetch(); }
+        }
+      });
+    };
+    chk(); autoRef.current = setInterval(chk, 30000); return () => clearInterval(autoRef.current);
+  }, [classes, socket]);
+
+  if (activeClass) return React.createElement(LiveClassRoom, { classData: activeClass, onExit: () => { setActiveClass(null); setLobbyClass(null); refetch(); }, profile, socket });
+  if (lobbyClass) return React.createElement(ClassLobby, {
+    cls: lobbyClass, profile,
+    onBack: () => setLobbyClass(null),
+    onJoin: () => setActiveClass(lobbyClass),
+    onStart: async () => {
+      try { await apiFetch('PUT', '/live-classes/' + lobbyClass._id, { status: 'live' }, tok()); refetch(); setLobbyClass(p => ({ ...p, status: 'live' })); } catch(e) {}
+    }
+  });
+
+  const isSub = (s, p, subId) => { if (!subId) return true; return s?.some(x => x.subject_id === subId && x.status === 'active') || p?.some(x => x.subject_id === subId && x.status === 'approved'); };
+  const visible = classes.filter(c => viewMode === 'upcoming' ? c.status !== 'ended' : c.status === 'ended');
+  const isPresenter = profile?.role === 'tutor' || profile?.role === 'admin';
+  const AI_CHARS = { ken: { name: 'Teacher Ken', avatar: '👨‍🏫', color: LC.gold }, msimbi: { name: "Mis M'simbi", avatar: '👩‍🏫', color: '#7c3aed' } };
+
+  return React.createElement('div', { style: { padding: '0 0 80px' } },
+    React.createElement('div', { style: { display: 'flex', gap: 6, padding: '12px 14px', background: '#fff', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 10 } },
+      [['upcoming', 'Upcoming & Live'], ['past', 'Past Classes']].map(([v, label]) =>
+        React.createElement('button', { key: v, onClick: () => setViewMode(v), style: { flex: 1, padding: '8px 4px', borderRadius: 10, border: 'none', background: viewMode === v ? C.gd : '#f3f4f6', color: viewMode === v ? '#fff' : '#374151', fontWeight: viewMode === v ? 700 : 400, cursor: 'pointer', fontSize: 13 } }, label)
+      )
+    ),
+    visible.length === 0 && React.createElement('div', { style: { textAlign: 'center', padding: 40, color: C.gr } }, 'No ' + (viewMode === 'upcoming' ? 'upcoming' : 'past') + ' classes'),
+    visible.map(cls => {
+      const isLive = cls.status === 'live';
+      const ch = cls.presenter_type === 'ai' ? (AI_CHARS[cls.ai_character] || AI_CHARS.ken) : null;
+      const canJoin = isLive && (isPresenter || isSub(subs, pays, cls.subject_id));
+      const canAccess = isPresenter || isSub(subs, pays, cls.subject_id);
+      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : add({title:'Subscribe Required',body:'Please subscribe to this subject to access this class.',icon:'🔒',type:'w'}), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
+        React.createElement('div', { style: { padding: '14px 16px' } },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
+            React.createElement('div', { style: { width: 42, height: 42, borderRadius: 12, background: ch ? 'linear-gradient(135deg,' + LC.gold + ',#f0b429)' : 'linear-gradient(135deg,' + C.gd + ',' + C.g + ')', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#000', flexShrink: 0 } }, ch ? ch.avatar : 'LIVE'),
+            React.createElement('div', { style: { flex: 1, minWidth: 0 } },
+              React.createElement('div', { style: { fontWeight: 700, fontSize: 15, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, cls.title),
+              React.createElement('div', { style: { fontSize: 12, color: C.gr } }, cls.scheduled_date + ' · ' + cls.scheduled_time + (ch ? ' · ' + ch.name : ''))
+            ),
+            React.createElement('div', { style: { background: isLive ? C.dl : cls.status === 'upcoming' ? '#dbeafe' : '#f3f4f6', color: isLive ? C.d : cls.status === 'upcoming' ? '#1d4ed8' : C.gr, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0 } }, isLive ? 'LIVE' : cls.status === 'upcoming' ? 'Soon' : 'Ended')
+          ),
+          React.createElement('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+            canJoin && React.createElement('button', { onClick: e => { e.stopPropagation(); setActiveClass(cls); }, style: { ...BT('p', true), fontSize: 13, flex: 1 } }, 'Join Class'),
+            !canAccess && React.createElement('div', { style: { fontSize: 12, color: '#ef4444', fontWeight: 600 } }, '🔒 Subscribe to access this class'),
+            isPresenter && cls.status === 'upcoming' && React.createElement('button', { onClick: async e => { e.stopPropagation(); await apiFetch('PUT', '/live-classes/' + cls._id, { status: 'live' }, tok()); refetch(); }, style: { ...BT('d', true), fontSize: 12 } }, 'Start'),
+            isPresenter && cls.status === 'live' && React.createElement('button', { onClick: e => { e.stopPropagation(); setActiveClass(cls); }, style: { ...BT('p', true), fontSize: 12 } }, 'Open'),
+            cls.meet_link && cls.presenter_type === 'human' && React.createElement('a', { href: cls.meet_link, target: '_blank', rel: 'noreferrer', onClick: e => e.stopPropagation(), style: { ...BT('gh', true), textDecoration: 'none', fontSize: 12 } }, 'Video Call'),
+            cls.recording_url && React.createElement('a', { href: cls.recording_url, target: '_blank', rel: 'noreferrer', onClick: e => e.stopPropagation(), style: { ...BT('gh', true), textDecoration: 'none', fontSize: 12 } }, 'Recording')
+          )
+        )
+      );
+    })
+  );
+}
+
 function StudentApp() {
   const {
     profile
@@ -6866,9 +6704,12 @@ function ScheduleClass({
     class_type: 'whiteboard',
     lesson_topic: '',
     lesson_script: '',
+    lesson_image_url: '',
+    lesson_image_explanation: '',
     auto_start: false
   });
   const [saving, setSaving] = useState(false);
+  const [scanningPhoto, setScanningPhoto] = useState(false);
   const set = (k, v) => setForm(p => ({
     ...p,
     [k]: v
@@ -7092,17 +6933,74 @@ function ScheduleClass({
     }
   }, /*#__PURE__*/React.createElement("label", {
     style: LB
-  }, "\uD83D\uDCDD Lesson Script (AI follows word by word)"), /*#__PURE__*/React.createElement("textarea", {
+  }, "\uD83D\uDCDD Lesson Notes (AI builds its own script)"), /*#__PURE__*/React.createElement("textarea", {
     style: {
       ...IN,
       height: 130,
       resize: 'vertical',
       fontSize: 13
     },
-    placeholder: "Write exactly what the AI should say:\n\nGood morning class! Today we learn about photosynthesis.\n\nPhotosynthesis is the process by which plants make food...",
+    placeholder: "Paste notes, textbook content, or topic points here. AI will build its own professional lesson script automatically.\n\nExample:\nPhotosynthesis is how plants make food using sunlight, water and carbon dioxide...",
     value: form.lesson_script,
     onChange: e => set('lesson_script', e.target.value)
-  })), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: { background: C.gd, color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }
+  }, "\uD83D\uDCCE Upload PDF/TXT", /*#__PURE__*/React.createElement("input", {
+    type: "file", accept: ".txt,.pdf,.doc,.docx", style: { display: 'none' },
+    onChange: async e => {
+      const file = e.target.files?.[0]; if (!file) return;
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'pdf' || ext === 'doc' || ext === 'docx') {
+        const fd = new FormData(); fd.append('file', file);
+        try {
+          set('lesson_script', 'Reading file...');
+          const r = await fetch('/api/ai/extract-pdf', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body:fd });
+          const d = await r.json();
+          if (d.text) { set('lesson_script', d.text); }
+          else set('lesson_script', 'Could not read file. Please paste notes manually.');
+        } catch(e) { set('lesson_script', 'Upload failed. Please paste notes manually.'); }
+      } else {
+        const reader = new FileReader();
+        reader.onload = ev => { set('lesson_script', ev.target.result?.substring(0, 4000) || ''); };
+        reader.readAsText(file);
+      }
+    }
+  })), /*#__PURE__*/React.createElement("label", {
+    style: { background: scanningPhoto ? 'rgba(201,147,10,0.5)' : C.gold, color: '#000', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: scanningPhoto ? 'wait' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }
+  }, scanningPhoto ? "\u23F3 Scanning..." : "\uD83D\uDCF7 Scan Photo", /*#__PURE__*/React.createElement("input", {
+    type: "file", accept: "image/*", disabled: scanningPhoto, style: { display: 'none' },
+    onChange: async e => {
+      const file = e.target.files?.[0]; if (!file || scanningPhoto) return;
+      setScanningPhoto(true);
+      try {
+        const fd1 = new FormData(); fd1.append('image', file); fd1.append('classId', 'preview'); fd1.append('caption', 'Lesson photo');
+        const r1 = await fetch('/api/ai/class-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd1 });
+        const d1 = await r1.json();
+        const fd2 = new FormData(); fd2.append('image', file); fd2.append('character', form.ai_character); fd2.append('subject', ''); fd2.append('mode', 'extract_text');
+        const r2 = await fetch('/api/ai/scan-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd2 });
+        const d2 = await r2.json();
+        if (d1.url) set('lesson_image_url', d1.url);
+        if (d2.result) {
+          set('lesson_image_explanation', d2.result);
+          set('lesson_script', (form.lesson_script ? form.lesson_script + '\n\n' : '') + d2.result);
+        }
+      } catch(err) {
+        set('lesson_image_explanation', 'Could not scan photo. Please try again.');
+      }
+      setScanningPhoto(false);
+    }
+  })), /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: C.gr } }, "AI reads and builds lesson automatically")))
+  , form.lesson_image_url && /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 12, background: C.goldp, borderRadius: 10, padding: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("img", { src: form.lesson_image_url, style: { width: 60, height: 60, objectFit: 'cover', borderRadius: 8, flexShrink: 0 } }),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.dk, flex: 1 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, marginBottom: 3 } }, "\uD83D\uDCF7 Photo attached \u2014 AI will show and explain this during class"),
+      form.lesson_image_explanation?.substring(0, 100)
+    )
+  )
+  , /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -8698,6 +8596,8 @@ function AdminApp() {
     setData: setUsers
   } = useApiData('/users');
   const pnd = pays.filter(p => p.status === 'pending').length;
+  const { data: aiPays, setData: setAiPays } = useApiData("/ai-tokens/payments/all");
+  const aiPnd = aiPays.filter(p => p.status === "pending").length;
   const nav = [{
     id: 'home',
     icon: '🏠',
@@ -9016,11 +8916,6 @@ function AdminApp() {
     }, "\u274C Reject"))))));
   };
   // AI Token Payments
-  const {
-    data: aiPays,
-    setData: setAiPays
-  } = useApiData('/ai-tokens/payments/all');
-  const aiPnd = aiPays.filter(p => p.status === 'pending').length;
 
   const AIPayments = () => {
     const [tab, setTab] = useState('pending');
@@ -9466,6 +9361,7 @@ function AdminApp() {
     setActive: setAn
   }, pages[an] || pages.home);
 }
+class ErrorBoundary extends React.Component { constructor(p){super(p);this.state={err:null};} componentDidCatch(e){this.setState({err:e.message+" "+e.stack});} render(){if(this.state.err)return React.createElement("div",{style:{color:"red",padding:20,fontSize:13,wordBreak:"break-all",background:"#fff"}},this.state.err);return this.props.children;}}
 function AppInner() {
   const {
     profile,
@@ -9595,7 +9491,7 @@ function AppInner() {
 function App() {
   return /*#__PURE__*/React.createElement(AuthProvider, null, /*#__PURE__*/React.createElement(ToastProvider, null, /*#__PURE__*/React.createElement(AppInner, null)));
 }
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+window.onerror=function(m,s,l,c,e){document.body.innerHTML='<div style="color:red;padding:20px;font-size:14px;word-break:break-all">ERROR: '+m+' LINE:'+l+'<br>'+( e&&e.stack||'')+'</div>';};ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ErrorBoundary,null,React.createElement(App)));
 
 </script>
 <script>

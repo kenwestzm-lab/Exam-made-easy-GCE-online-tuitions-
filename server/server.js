@@ -47,6 +47,39 @@ app.use('/api', require('./routes/misc'));
 io.on('connection', (socket) => {
   console.log('🔌 Connected:', socket.id);
 
+  // Auto-join personal room
+  const userId = socket.handshake.query?.userId;
+  if (userId) {
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} joined personal room`);
+    socket.data.userId = userId;
+    const { User: PresenceUser } = require('./models');
+    PresenceUser.findByIdAndUpdate(userId, { is_online: true }).catch(()=>{});
+    io.emit('user_online', { userId });
+  }
+
+  socket.on('typing', ({ to, subject_id, name }) => {
+    if (to) io.to(`user_${to}`).emit('user_typing', { from: socket.data.userId, name });
+    else if (subject_id !== undefined) socket.to(`group_${subject_id}`).emit('user_typing', { from: socket.data.userId, name, subject_id });
+  });
+  socket.on('stop_typing', ({ to, subject_id }) => {
+    if (to) io.to(`user_${to}`).emit('user_stop_typing', { from: socket.data.userId });
+    else if (subject_id !== undefined) socket.to(`group_${subject_id}`).emit('user_stop_typing', { from: socket.data.userId, subject_id });
+  });
+
+  socket.on('mark_read', async ({ sender_id }) => {
+    try {
+      const { Message: MsgModel } = require('./models');
+      const myId = socket.data.userId;
+      if (!myId || !sender_id) return;
+      await MsgModel.updateMany(
+        { sender_id, receiver_id: myId, is_read: false, type: 'direct' },
+        { is_read: true, read_at: new Date() }
+      );
+      io.to(`user_${sender_id}`).emit('messages_read', { by: myId });
+    } catch (e) { console.error('mark_read error:', e.message); }
+  });
+
   socket.on('join_class', ({ classId, user }) => {
     socket.join(`class_${classId}`);
     if (user?._id) socket.join(`user_${user._id}`);
@@ -136,6 +169,12 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('🔌 Disconnected:', socket.id);
+    const uid = socket.data.userId;
+    if (uid) {
+      const { User: PresenceUser2 } = require('./models');
+      PresenceUser2.findByIdAndUpdate(uid, { is_online: false, last_seen: new Date() }).catch(()=>{});
+      io.emit('user_offline', { userId: uid, last_seen: new Date() });
+    }
   });
 });
 
