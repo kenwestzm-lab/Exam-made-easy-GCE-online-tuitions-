@@ -35,22 +35,17 @@ const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
   });
 };
 
-// Get a proper viewable URL for files
+// Get a proper viewable URL for files - browsers render PDFs natively, no third-party viewer needed
 const getViewUrl = (url, type) => {
   if (!url) return '';
-  // For PDFs - use Google Docs viewer to display inline
-  if (type === 'pdf' && url.includes('cloudinary.com')) {
-    return 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=true';
-  }
   return url;
 };
 
-// Get download URL - use direct URL, browser handles download
+// Get download URL - force download via fl_attachment for both image-stored PDFs and raw files
 const getDownloadUrl = (url, filename, type) => {
   if (!url) return '';
-  // For raw files on cloudinary, add fl_attachment to force download
-  if (url.includes('cloudinary.com') && url.includes('/raw/upload/')) {
-    return url.replace('/raw/upload/', '/raw/upload/fl_attachment/');
+  if (url.includes('cloudinary.com') && url.includes('/upload/') && !url.includes('fl_attachment')) {
+    return url.replace('/upload/', '/upload/fl_attachment/');
   }
   return url;
 };

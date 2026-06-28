@@ -26,9 +26,11 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
     const { title, description, subject_id, type, premium } = req.body;
     let file_url = '', size = '';
     if (req.file) {
-      // Always upload PDFs/docs as raw to preserve them
+      // PDFs upload as 'image' type - Cloudinary serves these with correct
+      // Content-Type headers so browsers render them inline natively.
+      // Word/PowerPoint have no native browser viewer, so they stay 'raw' (download-only).
       const rType = ['video','audio'].includes(type) ? 'video'
-        : ['pdf','pptx','word'].includes(type) ? 'raw'
+        : ['pptx','word'].includes(type) ? 'raw'
         : 'image';
       const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/materials', rType);
       file_url = r.secure_url;
