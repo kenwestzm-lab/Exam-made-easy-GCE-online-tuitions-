@@ -3870,9 +3870,13 @@ function ChatPage() {
   const [unread, setUnread] = useState({});
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const [waveVals, setWaveVals] = useState([4,8,5,10,6,9,4,7,5,8]);
   const cRef = useRef();
   const mediaRec = useRef(null);
   const audioChunks = useRef([]);
+  const recTimer = useRef(null);
 
   const others = users.filter(u => u._id !== profile?._id);
   const groups = [{id:0,n:'General Chat',i:'school'}, ...SUBJECTS.map(s=>({id:s.id,n:s.n,i:s.i}))];
@@ -3928,10 +3932,13 @@ function ChatPage() {
 
   const send = async () => {
     const text = input.trim();
-    if (!text && !mediaFile && !audioBlob) return;
+    const curMedia = mediaFile;
+    const curAudio = audioBlob;
+    const curPreview = mediaPreview;
+    if (!text && !curMedia && !curAudio) return;
     setInput(''); setMediaFile(null); setMediaPreview(null); setAudioBlob(null);
     const tempId = 'tmp_'+Date.now();
-    const temp = {_id:tempId,sender_id:profile?._id,content:text,image_url:mediaPreview,createdAt:new Date().toISOString(),_pending:true};
+    const temp = {_id:tempId,sender_id:profile?._id,content:text,image_url:curPreview,createdAt:new Date().toISOString(),_pending:true};
     setMsgs(p=>[...p,temp]);
     setTimeout(()=>cRef.current?.scrollTo(0,99999),80);
     try {
@@ -3939,10 +3946,11 @@ function ChatPage() {
       if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
       if (tab==='group' && selG!==null) fd.append('subject_id', selG);
       if (text) fd.append('content', text);
-      if (mediaFile) fd.append('image', mediaFile);
-      if (audioBlob) fd.append('image', audioBlob, 'voice.webm');
+      if (curMedia) fd.append('image', curMedia);
+      if (curAudio) fd.append('image', new File([curAudio], 'voice.webm', {type: curAudio.type || 'audio/webm'}));
       const path = tab==='direct' ? '/messages/direct' : '/messages/group';
-      const saved = await apiFetch('POST', path, null, tok(), fd);
+      const r = await fetch(BACKEND+'/api'+path, {method:'POST', headers:{Authorization:'Bearer '+tok()}, body:fd});
+      const saved = await r.json().catch(()=>null);
       if (saved?._id) setMsgs(p=>p.map(m=>m._id===tempId?saved:m));
       else setMsgs(p=>p.filter(m=>m._id!==tempId));
     } catch(e) { setMsgs(p=>p.filter(m=>m._id!==tempId)); }
@@ -3953,23 +3961,43 @@ function ChatPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
       audioChunks.current = [];
-      const mr = new MediaRecorder(stream);
-      mr.ondataavailable = e => audioChunks.current.push(e.data);
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+      const mr = new MediaRecorder(stream, {mimeType});
+      mr.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(audioChunks.current, {type:'audio/webm'});
+        const blob = new Blob(audioChunks.current, {type: mr.mimeType || mimeType});
         setAudioBlob(blob);
         stream.getTracks().forEach(t=>t.stop());
+        clearInterval(recTimer.current);
+        setRecSecs(0);
       };
-      mr.start();
+      mr.start(100);
       mediaRec.current = mr;
       setRecording(true);
-    } catch(e) { alert('Microphone access needed for voice messages'); }
+      setRecSecs(0);
+      recTimer.current = setInterval(()=>{
+        setRecSecs(p=>p+1);
+        setWaveVals(Array.from({length:10},()=>Math.floor(Math.random()*22)+3));
+      }, 350);
+    } catch(e) { alert('Please allow microphone access to send voice messages'); }
   };
 
   const stopRec = () => {
-    mediaRec.current?.stop();
+    if (mediaRec.current && mediaRec.current.state !== 'inactive') mediaRec.current.stop();
     setRecording(false);
+    clearInterval(recTimer.current);
   };
+
+  const cancelRec = () => {
+    if (mediaRec.current && mediaRec.current.state !== 'inactive') mediaRec.current.stop();
+    audioChunks.current = [];
+    setAudioBlob(null);
+    setRecording(false);
+    setRecSecs(0);
+    clearInterval(recTimer.current);
+  };
+
+  const fmtSecs = s => Math.floor(s/60)+':'+(s%60).toString().padStart(2,'0');
 
   const gu = id => users.find(u=>u._id===id);
   const ftime = ts => { if(!ts) return ''; const d=new Date(ts); return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); };
@@ -3988,9 +4016,14 @@ function ChatPage() {
       // Header
       React.createElement('div', {style:{background:waGreen,color:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}},
         React.createElement('div', {style:{flex:1,fontWeight:700,fontSize:18,fontFamily:"'Playfair Display',serif"}},'Chats'),
-        React.createElement('div', {style:{display:'flex',gap:12}},
+        React.createElement('div', {style:{display:'flex',gap:12,alignItems:'center',position:'relative'}},
           React.createElement('span', {style:{fontSize:20,cursor:'pointer'}}, '\uD83D\uDD0D'),
-          React.createElement('span', {style:{fontSize:20,cursor:'pointer'}}, '\u22EE')
+          React.createElement('span', {style:{fontSize:22,cursor:'pointer'}, onClick:()=>setShowMenu(p=>!p)}, '\u22EE'),
+          showMenu && React.createElement('div', {style:{position:'absolute',right:0,top:30,background:'#fff',borderRadius:10,boxShadow:'0 4px 20px rgba(0,0,0,0.25)',zIndex:200,minWidth:170,overflow:'hidden'}},
+            [['New Group',()=>setShowMenu(false)],['Settings',()=>setShowMenu(false)]].map(([label,fn])=>
+              React.createElement('div',{key:label,onClick:fn,style:{padding:'13px 18px',fontSize:14,color:'#111',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}},label)
+            )
+          )
         )
       ),
       // Tab bar
@@ -4076,10 +4109,19 @@ function ChatPage() {
           )
         );
       }),
-      audioBlob && React.createElement('div',{style:{background:'#fff',borderRadius:12,padding:'8px 12px',margin:'4px 0',display:'flex',alignItems:'center',gap:8}},
-        React.createElement('span',{style:{fontSize:20}},'\uD83C\uDF99'),
-        React.createElement('span',{style:{fontSize:13,color:'#333',flex:1}},'Voice message ready'),
-        React.createElement('button',{onClick:()=>setAudioBlob(null),style:{background:'#ef4444',border:'none',borderRadius:'50%',width:24,height:24,color:'#fff',cursor:'pointer',fontSize:12}},'\u2715')
+      (recording || audioBlob) && React.createElement('div',{style:{background:'#fff',borderRadius:12,padding:'10px 14px',margin:'4px 0',display:'flex',alignItems:'center',gap:8,boxShadow:'0 1px 4px rgba(0,0,0,0.12)'}},
+        recording ? React.createElement(React.Fragment,null,
+          React.createElement('button',{onClick:cancelRec,style:{background:'#ef4444',border:'none',borderRadius:'50%',width:30,height:30,color:'#fff',cursor:'pointer',fontSize:14,flexShrink:0}},'\uD83D\uDDD1'),
+          React.createElement('span',{style:{fontSize:12,color:'#ef4444',fontWeight:700,minWidth:34}},fmtSecs(recSecs)),
+          React.createElement('div',{style:{display:'flex',alignItems:'center',gap:2,flex:1,height:24}},
+            waveVals.map((h,i)=>React.createElement('div',{key:i,style:{width:3,height:h,background:'#ef4444',borderRadius:2,transition:'height 0.15s'}}))
+          ),
+          React.createElement('span',{style:{fontSize:11,color:'#ef4444',fontWeight:700}},'\u25CF REC')
+        ) : React.createElement(React.Fragment,null,
+          React.createElement('span',{style:{fontSize:20}},'\uD83C\uDF99'),
+          React.createElement('span',{style:{fontSize:13,color:'#333',flex:1}},'Voice message ready'),
+          React.createElement('button',{onClick:()=>setAudioBlob(null),style:{background:'#ef4444',border:'none',borderRadius:'50%',width:24,height:24,color:'#fff',cursor:'pointer',fontSize:12}},'\u2715')
+        )
       )
     ),
     // Input bar
