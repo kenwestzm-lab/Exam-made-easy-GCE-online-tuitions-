@@ -95,4 +95,21 @@ router.delete('/announcements/:id', auth, adminOnly, async (req, res) => {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /api/view-file — proxy PDF/doc with correct headers ──
+router.get('/view-file', auth, async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url || !url.startsWith('https://')) return res.status(400).send('Invalid URL');
+    const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+    const r = await fetch(url);
+    const ct = r.headers.get('content-type') || 'application/pdf';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    r.body.pipe(res);
+  } catch(e) {
+    res.status(500).send('Could not load file');
+  }
+});
+
 module.exports = router;
