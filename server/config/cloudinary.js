@@ -35,19 +35,33 @@ const uploadToCloudinary = (buffer, folder, resourceType = 'auto') => {
   });
 };
 
+// Map material type -> real file extension
+const extFor = (type) => ({ pdf: 'pdf', word: 'docx', pptx: 'pptx' }[type] || null);
+
+// Force the delivery URL to carry the correct extension so Cloudinary
+// sends the right Content-Type. Works even for files uploaded before this fix.
+const ensureExt = (url, type) => {
+  if (!url) return url;
+  const ext = extFor(type);
+  if (!ext) return url; // images/video already have a usable extension
+  if (url.toLowerCase().endsWith('.' + ext)) return url;
+  return url + '.' + ext;
+};
+
 // Get a proper viewable URL for files - browsers render PDFs natively, no third-party viewer needed
 const getViewUrl = (url, type) => {
   if (!url) return '';
-  return url;
+  return ensureExt(url, type);
 };
 
-// Get download URL - force download via fl_attachment for both image-stored PDFs and raw files
+// Get download URL - force download via fl_attachment, with correct extension
 const getDownloadUrl = (url, filename, type) => {
   if (!url) return '';
-  if (url.includes('cloudinary.com') && url.includes('/upload/') && !url.includes('fl_attachment')) {
-    return url.replace('/upload/', '/upload/fl_attachment/');
+  let u = ensureExt(url, type);
+  if (u.includes('cloudinary.com') && u.includes('/upload/') && !u.includes('fl_attachment')) {
+    u = u.replace('/upload/', '/upload/fl_attachment/');
   }
-  return url;
+  return u;
 };
 
 module.exports = { upload, uploadToCloudinary, cloudinary, getViewUrl, getDownloadUrl };
