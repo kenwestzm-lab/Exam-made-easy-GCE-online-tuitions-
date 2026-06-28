@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth, tutorOrAdmin } = require('../middleware/auth');
 const LiveClass = require('../models/LiveClass');
+const { upload, uploadToCloudinary } = require('../config/cloudinary');
 
 const AI = {
   ken:    { name: 'Teacher Ken',   gender: 'male' },
@@ -245,8 +246,6 @@ router.get('/status', async (req, res) => {
   });
 });
 
-module.exports = router;
-
 // Alias for frontend compatibility
 router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
   try {
@@ -265,3 +264,99 @@ RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
     res.status(500).json({ error: 'Could not generate questions. Please try again.' });
   }
 });
+
+// ── Vision-capable Gemini call (image + text) ────────
+async function callGeminiVision(prompt, base64Image, mimeType) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('NO_GEMINI_KEY');
+
+  const contents = [{
+    role: 'user',
+    parts: [
+      { text: prompt },
+      { inline_data: { mime_type: mimeType, data: base64Image } }
+    ]
+  }];
+
+  for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash-8b']) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          generationConfig: { maxOutputTokens: 500, temperature: 0.4 },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+          ]
+        })
+      }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } else {
+      console.warn(`Gemini vision (${model}) failed:`, await response.text().then(t => t.substring(0, 200)));
+    }
+  }
+  throw new Error('GEMINI_VISION_FAILED');
+}
+
+// ── POST /api/ai/extract-pdf — extract text from uploaded PDF ──
+router.post('/extract-pdf', auth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const pdfParse = require('pdf-parse');
+    const ext = req.file.originalname.split('.').pop().toLowerCase();
+    if (ext !== 'pdf') {
+      return res.json({ text: req.file.buffer.toString('utf-8').substring(0, 4000) });
+    }
+    const data = await pdfParse(req.file.buffer);
+    const text = (data.text || '').trim().substring(0, 6000);
+    if (!text) return res.json({ text: '', error: 'No readable text found in PDF' });
+    res.json({ text });
+  } catch (e) {
+    console.error('extract-pdf error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/ai/class-image — upload image to Cloudinary, return URL ──
+router.post('/class-image', auth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/class-images', 'image');
+    res.json({ url: r.secure_url });
+  } catch (e) {
+    console.error('class-image error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/ai/scan-image — Gemini vision: extract text or explain image ──
+router.post('/scan-image', auth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    const { character, subject, mode } = req.body;
+    const ch = AI[character] || AI.ken;
+    const base64Image = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+
+    const prompt = mode === 'extract_text'
+      ? `Read this image carefully and extract all readable text, notes, or questions exactly as written. If it is a textbook page or handwritten notes, transcribe the content clearly so a teacher can use it to build a lesson. Subject context: ${subject || 'General'}.`
+      : `You are ${ch.name}, a teacher at Peace Mindset Private School, Zambia. Look at this image (likely a diagram, question, or student's work for ${subject || 'a GCE subject'}) and explain it simply to a Zambian student in under 60 words. Speak as a real teacher, never mention AI.`;
+
+    const result = await callGeminiVision(prompt, base64Image, mimeType);
+    res.json({ result: result.trim() });
+  } catch (e) {
+    console.error('scan-image error:', e.message);
+    res.status(500).json({ result: '', error: 'Could not scan image. Please try again.' });
+  }
+});
+
+module.exports = router;
+

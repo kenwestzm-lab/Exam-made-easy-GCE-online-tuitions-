@@ -3,8 +3,12 @@
   "version": "5.0.0",
   "description": "Peace Mindset Private School - Live Classroom API",
   "main": "server.js",
-  "engines": { "node": ">=18.0.0" },
-  "scripts": { "start": "node server.js" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
@@ -14,6 +18,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.1",
     "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^2.4.5",
     "socket.io": "^4.7.5"
   }
 }

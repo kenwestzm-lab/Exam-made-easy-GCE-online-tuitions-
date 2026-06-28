@@ -3822,7 +3822,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
       React.createElement('button',{onClick:sendMsg,style:{background:LC.gold,border:'none',borderRadius:9,padding:'8px 13px',cursor:'pointer',color:'#000',fontSize:15,flexShrink:0,fontWeight:700}},'Send'),
       isPresenter&&React.createElement('label',{style:{background:scanningImg?LC.goldl:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.white,fontSize:13,flexShrink:0},title:'Share image'},
         scanningImg?'Wait...':'Image',
-        React.createElement('input',{type:'file',accept:'image/*',disabled:scanningImg,style:{display:'none'},onChange:async e=>{const file=e.target.files?.[0];if(!file||scanningImg)return;setScanningImg(true);const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);try{const r=await fetch('/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Diagram'});const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',sn());fd2.append('mode','explain');const r2=await fetch('/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();if(isAI)say(d2.result||'Look carefully at this diagram.');else addMsg('ai',d2.result||'Look carefully at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}setScanningImg(false);}})
+        React.createElement('input',{type:'file',accept:'image/*',disabled:scanningImg,style:{display:'none'},onChange:async e=>{const file=e.target.files?.[0];if(!file||scanningImg)return;setScanningImg(true);const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);try{const r=await fetch(BACKEND+'/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Diagram'});const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',sn());fd2.append('mode','explain');const r2=await fetch(BACKEND+'/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();if(isAI)say(d2.result||'Look carefully at this diagram.');else addMsg('ai',d2.result||'Look carefully at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}setScanningImg(false);}})
       ),
       isPresenter&&React.createElement('button',{onClick:endClass,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.red,fontSize:11,flexShrink:0,fontWeight:600}},'End')
     ),
@@ -6949,7 +6949,7 @@ function ScheduleClass({
         const fd = new FormData(); fd.append('file', file);
         try {
           set('lesson_script', 'Reading file...');
-          const r = await fetch('/api/ai/extract-pdf', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body:fd });
+          const r = await fetch(BACKEND+'/api/ai/extract-pdf', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body:fd });
           const d = await r.json();
           if (d.text) { set('lesson_script', d.text); }
           else set('lesson_script', 'Could not read file. Please paste notes manually.');
@@ -6969,10 +6969,10 @@ function ScheduleClass({
       setScanningPhoto(true);
       try {
         const fd1 = new FormData(); fd1.append('image', file); fd1.append('classId', 'preview'); fd1.append('caption', 'Lesson photo');
-        const r1 = await fetch('/api/ai/class-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd1 });
+        const r1 = await fetch(BACKEND+'/api/ai/class-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd1 });
         const d1 = await r1.json();
         const fd2 = new FormData(); fd2.append('image', file); fd2.append('character', form.ai_character); fd2.append('subject', ''); fd2.append('mode', 'extract_text');
-        const r2 = await fetch('/api/ai/scan-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd2 });
+        const r2 = await fetch(BACKEND+'/api/ai/scan-image', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body: fd2 });
         const d2 = await r2.json();
         if (d1.url) set('lesson_image_url', d1.url);
         if (d2.result) {
