@@ -16,7 +16,7 @@ router.post('/messages/direct', auth, upload.single('image'), async (req, res) =
   try {
     const { receiver_id, content } = req.body;
     let image_url = '';
-    if (req.file) { const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', 'image'); image_url = r.secure_url; }
+    if (req.file) { const rType = req.file.mimetype && req.file.mimetype.startsWith('audio') ? 'video' : 'image'; const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', rType); image_url = r.secure_url; }
     const m = await Message.create({ sender_id: req.user._id, receiver_id, content, image_url, type: 'direct' });
     // Emit via socket if available
     req.app.get('io')?.to(`user_${receiver_id}`).emit('new_direct_message', m);
@@ -35,7 +35,7 @@ router.post('/messages/group', auth, upload.single('image'), async (req, res) =>
   try {
     const { subject_id, content } = req.body;
     let image_url = '';
-    if (req.file) { const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', 'image'); image_url = r.secure_url; }
+    if (req.file) { const rType = req.file.mimetype && req.file.mimetype.startsWith('audio') ? 'video' : 'image'; const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', rType); image_url = r.secure_url; }
     const m = await Message.create({ sender_id: req.user._id, subject_id: Number(subject_id), content, image_url, type: 'group' });
     req.app.get('io')?.to(`group_${subject_id}`).emit('new_group_message', { ...m.toObject(), sender_id: req.user._id.toString() });
     res.status(201).json(m);
