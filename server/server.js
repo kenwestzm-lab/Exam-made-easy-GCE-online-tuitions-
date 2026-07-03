@@ -41,6 +41,8 @@ app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/tests', require('./routes/tests'));
 app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api/ai-tokens', require('./routes/ai_tokens'));
+app.use('/api/groups', require('./routes/groups'));
+app.use('/api/users', require('./routes/user_prefs'));
 app.use('/api', require('./routes/misc'));
 
 // ── Socket.IO Real-time ───────────────────────────────

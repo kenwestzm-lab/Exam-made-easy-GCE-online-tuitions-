@@ -12,6 +12,8 @@ const UserSchema = new Schema({
   avatar: String, avatarUrl: String,
   is_online: { type: Boolean, default: false },
   last_seen: { type: Date, default: Date.now },
+  blocked_users: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  notifications_enabled: { type: Boolean, default: true },
 }, { timestamps: true });
 
 // SUBSCRIPTION
@@ -117,6 +119,16 @@ const AnnSchema = new Schema({
   author_id: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+// GROUP CHAT
+const GroupSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  bio: { type: String, default: '' },
+  photo: { type: String, default: '' },
+  members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  admins: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  pending_requests: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  created_by: { type: Schema.Types.ObjectId, ref: 'User' },
+}, { timestamps: true });
 // AI Token Schema
 const AITokenSchema = new Schema({
   student_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -153,4 +165,5 @@ module.exports = {
   Announcement: mongoose.model('Announcement', AnnSchema),
   AIToken: mongoose.model('AIToken', AITokenSchema),
   AIPayment: mongoose.model('AIPayment', AIPaySchema),
+  Group: mongoose.model('Group', GroupSchema),
 };
