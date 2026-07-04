@@ -3847,6 +3847,7 @@ function ChatPage() {
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [unread, setUnread] = useState({});
+  const [lastMsg, setLastMsg] = useState({});
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -3865,6 +3866,8 @@ function ChatPage() {
     if (!socket) return;
     const onDirect = msg => {
       const relevant = tab==='direct' && sel && (msg.receiver_id===sel._id || msg.sender_id===sel._id);
+      const otherId = msg.sender_id === profile?._id ? msg.receiver_id : msg.sender_id;
+      setLastMsg(p => ({...p, [otherId]: {text: msg.content||'📎 Media', time: msg.createdAt}}));
       if (relevant) {
         setMsgs(p => p.find(m=>m._id===msg._id) ? p : [...p, msg]);
         setTimeout(() => cRef.current?.scrollTo(0,99999), 100);
@@ -3874,6 +3877,7 @@ function ChatPage() {
     };
     const onGroup = msg => {
       const relevant = tab==='group' && msg.subject_id===selG;
+      setLastMsg(p => ({...p, ['g'+msg.subject_id]: {text: msg.content||'📎 Media', time: msg.createdAt}}));
       if (relevant) {
         setMsgs(p => p.find(m=>m._id===msg._id) ? p : [...p, msg]);
         setTimeout(() => cRef.current?.scrollTo(0,99999), 100);
@@ -3943,6 +3947,10 @@ function ChatPage() {
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
       const mr = new MediaRecorder(stream, {mimeType});
       mr.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.current.push(e.data); };
+      const waveInterval = setInterval(() => {
+        setWaveVals([...Array(10)].map(()=>Math.floor(Math.random()*14)+3));
+      }, 150);
+      mr.addEventListener('stop', () => clearInterval(waveInterval));
       mr.onstop = () => {
         const blob = new Blob(audioChunks.current, {type: mr.mimeType || mimeType});
         setAudioBlob(blob);
@@ -3987,9 +3995,16 @@ function ChatPage() {
 
   // Chat list view
   if (!sel && selG===null) {
-    const filtered = tab==='direct'
+    const filtered = (tab==='direct'
       ? others.filter(u=>(u.name||'').toLowerCase().includes(srch.toLowerCase()))
-      : groups.filter(g=>g.n.toLowerCase().includes(srch.toLowerCase()));
+      : groups.filter(g=>g.n.toLowerCase().includes(srch.toLowerCase()))
+    ).sort((a,b) => {
+      const keyA = tab==='direct' ? a._id : 'g'+a.id;
+      const keyB = tab==='direct' ? b._id : 'g'+b.id;
+      const tA = lastMsg[keyA]?.time ? new Date(lastMsg[keyA].time) : new Date(0);
+      const tB = lastMsg[keyB]?.time ? new Date(lastMsg[keyB].time) : new Date(0);
+      return tB - tA;
+    });
 
     return React.createElement('div', {style:{height:'100%',display:'flex',flexDirection:'column',background:'#f0f2f5'}},
       // Header
@@ -4026,8 +4041,11 @@ function ChatPage() {
             ),
             React.createElement('div',{style:{flex:1,minWidth:0}},
               React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
-                React.createElement('div',{style:{fontWeight:600,fontSize:15,color:'#111'}},tab==='direct'?item.name:item.n)),
-              React.createElement('div',{style:{fontSize:12,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},tab==='direct'?'Tap to message':'Tap to open group')
+                React.createElement('div',{style:{fontWeight:600,fontSize:15,color:'#111'}},tab==='direct'?item.name:item.n),
+                lastMsg[key]?.time && React.createElement('div',{style:{fontSize:11,color:'#999',flexShrink:0}},ftime(lastMsg[key].time))
+              ),
+              React.createElement('div',{style:{fontSize:12,color:unread[key]>0?'#111':'#666',fontWeight:unread[key]>0?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
+                lastMsg[key]?.text || (tab==='direct'?'Tap to message':'Tap to open group'))
             ),
             ucount>0 && React.createElement('div',{style:{background:'#25D366',color:'#fff',borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}},ucount>9?'9+':ucount)
           );
