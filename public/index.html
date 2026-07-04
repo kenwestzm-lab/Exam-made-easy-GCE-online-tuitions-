@@ -40,6 +40,7 @@ canvas{touch-action:none;display:block}
 <body class="auth-mode">
 <div id="root"></div>
 
+
 <script>
 const {
   useState,
@@ -3871,7 +3872,35 @@ function ChatPage() {
   const recTimer = useRef(null);
 
   const others = users.filter(u => u._id !== profile?._id);
-  const groups = [{id:0,n:'General Chat',i:'school'}, ...SUBJECTS.map(s=>({id:s.id,n:s.n,i:s.i}))];
+  const subjectGroups = [{id:0,n:'General Chat',i:'school'}, ...SUBJECTS.map(s=>({id:s.id,n:s.n,i:s.i}))];
+  const groups = [
+    ...subjectGroups,
+    ...myGroups.map(g => ({id: g._id, n: g.name, i: 'custom', _custom: true, _data: g}))
+  ];
+
+  // Load custom groups on mount
+  useEffect(() => {
+    if (!profile) return;
+    apiFetch('GET', '/groups', null, tok()).then(d => {
+      if (Array.isArray(d)) setMyGroups(d);
+    }).catch(() => {});
+  }, [profile?._id]);
+
+  // Listen for real-time group events
+  useEffect(() => {
+    if (!socket) return;
+    const onCreated = g => setMyGroups(p => [g, ...p.filter(x => x._id !== g._id)]);
+    const onUpdated = g => setMyGroups(p => p.map(x => x._id === g._id ? g : x));
+    const onDeleted = ({groupId}) => setMyGroups(p => p.filter(x => x._id !== groupId));
+    socket.on('group_created', onCreated);
+    socket.on('group_updated', onUpdated);
+    socket.on('group_deleted', onDeleted);
+    return () => {
+      socket.off('group_created', onCreated);
+      socket.off('group_updated', onUpdated);
+      socket.off('group_deleted', onDeleted);
+    };
+  }, [socket]);
 
   // Real-time messages
   useEffect(() => {
