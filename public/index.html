@@ -4005,6 +4005,38 @@ function ChatPage() {
   const waBg = 'rgba(0,0,0,0.04)';
   const waGreen = '#075E54'; const waLightGreen = '#DCF8C6'; const waMsg = '#fff';
 
+  const createGroup = async () => {
+    if(!ngName.trim()){setNgErr('Please enter a group name');return;}
+    setNgBusy(true); setNgErr('');
+    try {
+      const fd = new FormData();
+      fd.append('name', ngName.trim()); fd.append('bio', ngBio);
+      ngPicks.forEach(id => fd.append('member_ids', id));
+      if(ngPhoto) fd.append('photo', ngPhoto);
+      const r = await fetch(BACKEND+'/api/groups',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
+      const g = await r.json();
+      if(!r.ok) throw new Error(g.error||'Failed');
+      setMyGroups(p=>[g,...p.filter(x=>x._id!==g._id)]); setShowNewGroup(false);
+      setNgName(''); setNgBio(''); setNgPicks([]); setNgPhoto(null);
+    } catch(e){setNgErr(e.message);} finally{setNgBusy(false);}
+  };
+
+  const toggleNotif = async () => {
+    const next = !notifOn; setNotifOn(next);
+    try { await apiFetch('PUT','/users/prefs/notifications',{enabled:next},tok()); } catch(e) {}
+  };
+
+  const unblock = async (uid) => {
+    try { await apiFetch('DELETE','/users/block/'+uid,null,tok()); setBlocked(p=>p.filter(b=>b._id!==uid)); } catch(e) {}
+  };
+
+  const clearChat = async (uid, name) => {
+    if(!confirm('Clear all messages with '+name+'?')) return;
+    setSettsBusy(true);
+    try { await apiFetch('DELETE','/users/clear-chat/'+uid,null,tok()); alert('Chat cleared!'); } catch(e) { alert(e.message); }
+    finally { setSettsBusy(false); }
+  };
+
   if (showNewGroup) {
     return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column',background:'#f0f2f5'}},
       React.createElement('div',{style:{background:'#075E54',color:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexShrink:0}},
