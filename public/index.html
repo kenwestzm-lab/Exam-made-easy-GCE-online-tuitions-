@@ -6102,12 +6102,28 @@ function AssignmentsPage({
   } = useToast();
   const {
     data: asns,
-    loading
+    loading,
+    setData: setAsns
   } = useApiData('/assignments');
   const {
     data: mysubs,
     refetch
   } = useApiData('/assignments/my-submissions', [profile?._id]);
+  const { socket } = useAuth();
+  useEffect(() => {
+    if (!socket) return;
+    const onNew = a => {
+      setAsns(p => Array.isArray(p) ? [a, ...p.filter(x=>x._id!==a._id)] : [a]);
+      add({ title: 'New Assignment!', body: a.title, icon: '📝', type: 'i' });
+    };
+    const onGraded = (data) => {
+      add({ title: 'Assignment Graded!', body: (data.assignment_title||'Assignment') + ' - ' + (data.marks||data.grade||''), icon: '✅', type: 'i' });
+      refetch();
+    };
+    socket.on('new_assignment', onNew);
+    socket.on('assignment_graded', onGraded);
+    return () => { socket.off('new_assignment', onNew); socket.off('assignment_graded', onGraded); };
+  }, [socket]);
   const [sub, setSub] = useState(null);
   const txtRef = useRef();
   const [fi, setFi] = useState(null);
