@@ -3881,11 +3881,20 @@ function ChatPage() {
     ...myGroups.map(g => ({id: g._id, n: g.name, i: 'custom', _custom: true, _data: g}))
   ];
 
-  // Load custom groups on mount
+  // Load custom groups + seed lastMsg on mount
   useEffect(() => {
     if (!profile) return;
     apiFetch('GET', '/groups', null, tok()).then(d => {
       if (Array.isArray(d)) setMyGroups(d);
+    }).catch(() => {});
+    apiFetch('GET', '/messages/recent', null, tok()).then(d => {
+      if (!Array.isArray(d)) return;
+      const map = {};
+      d.forEach(m => {
+        const otherId = m.sender_id === profile._id ? m.receiver_id : m.sender_id;
+        if (!map[otherId]) map[otherId] = {text: m.image_url ? (m.content||'Voice message') : m.content||'', time: m.createdAt};
+      });
+      setLastMsg(p => ({...p, ...map}));
     }).catch(() => {});
   }, [profile?._id]);
 
@@ -3961,7 +3970,14 @@ function ChatPage() {
         const isCustom = tab==='group' && typeof selG==='string' && selG.length===24;
         const path = tab==='direct' ? '/messages/direct/'+sel?._id : isCustom ? '/messages/custom-group/'+selG : '/messages/group/'+selG;
         const d = await apiFetch('GET', path, null, tok());
-        setMsgs(Array.isArray(d) ? d : []);
+        const msgs = Array.isArray(d) ? d : [];
+        setMsgs(msgs);
+        // Update lastMsg from history
+        if (msgs.length > 0) {
+          const last = msgs[msgs.length-1];
+          const key = tab==='direct' ? sel?._id : (typeof selG==='string'&&selG.length===24?'cg'+selG:'g'+selG);
+          setLastMsg(p=>({...p,[key]:{text:last.image_url?(last.content||'Voice message'):last.content||'',time:last.createdAt}}));
+        }
         // Clear unread
         const key = tab==='direct' ? sel?._id : 'g'+selG;
         setUnread(p => ({...p, [key]: 0}));
@@ -3995,8 +4011,11 @@ function ChatPage() {
       const path = tab==='direct' ? '/messages/direct' : isCustomGroup ? '/messages/custom-group' : '/messages/group';
       const r = await fetch(BACKEND+'/api'+path, {method:'POST', headers:{Authorization:'Bearer '+tok()}, body:fd});
       const saved = await r.json().catch(()=>null);
-      if (saved?._id) setMsgs(p=>p.map(m=>m._id===tempId?saved:m));
-      else setMsgs(p=>p.filter(m=>m._id!==tempId));
+      if (saved?._id) {
+        setMsgs(p=>p.map(m=>m._id===tempId?saved:m));
+        const lkey = tab==='direct'?sel?._id:(typeof selG==='string'&&selG.length===24?'cg'+selG:'g'+selG);
+        setLastMsg(p=>({...p,[lkey]:{text:saved.image_url?(saved.content||'Voice message'):saved.content||'',time:saved.createdAt}}));
+      } else setMsgs(p=>p.filter(m=>m._id!==tempId));
     } catch(e) { setMsgs(p=>p.filter(m=>m._id!==tempId)); }
     setBusy(false);
   };
