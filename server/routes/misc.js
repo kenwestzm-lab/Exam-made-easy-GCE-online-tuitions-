@@ -29,6 +29,19 @@ router.get('/messages/direct/:userId', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Mark direct messages as read
+router.put('/messages/direct/:userId/read', auth, async (req, res) => {
+  try {
+    await Message.updateMany(
+      { type: 'direct', sender_id: req.params.userId, receiver_id: req.user._id, is_read: false },
+      { is_read: true, read_at: new Date() }
+    );
+    // Notify sender their messages were read
+    req.app.get('io')?.to(`user_${req.params.userId}`).emit('messages_read', { by: req.user._id, from: req.params.userId });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/messages/direct', auth, upload.single('image'), async (req, res) => {
   try {
     const { receiver_id, content } = req.body;

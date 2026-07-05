@@ -3947,10 +3947,15 @@ function ChatPage() {
         setUnread(p => ({...p, ['cg'+msg.group_id]: (p['cg'+msg.group_id]||0)+1}));
       }
     };
+    const onRead = ({by, from}) => {
+      // When recipient reads our messages, update their read status
+      setMsgs(p => p.map(m => m.sender_id===profile?._id && m.receiver_id===by ? {...m, is_read:true} : m));
+    };
     socket.on('new_direct_message', onDirect);
     socket.on('new_group_message', onGroup);
     socket.on('new_custom_group_message', onCustomGroup);
-    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); socket.off('new_custom_group_message', onCustomGroup); };
+    socket.on('messages_read', onRead);
+    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); socket.off('new_custom_group_message', onCustomGroup); socket.off('messages_read', onRead); };
   }, [socket, sel, selG, tab, profile]);
 
   // Join group rooms
@@ -3978,9 +3983,12 @@ function ChatPage() {
           const key = tab==='direct' ? sel?._id : (typeof selG==='string'&&selG.length===24?'cg'+selG:'g'+selG);
           setLastMsg(p=>({...p,[key]:{text:last.image_url?(last.content||'Voice message'):last.content||'',time:last.createdAt}}));
         }
-        // Clear unread
+        // Mark as read + clear unread badge
         const key = tab==='direct' ? sel?._id : 'g'+selG;
         setUnread(p => ({...p, [key]: 0}));
+        if (tab==='direct' && sel?._id) {
+          apiFetch('PUT', '/messages/direct/'+sel._id+'/read', null, tok()).catch(()=>{});
+        }
         setTimeout(() => cRef.current?.scrollTo(0,99999), 200);
       } catch(e) { setMsgs([]); }
     })();
