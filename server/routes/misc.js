@@ -140,8 +140,14 @@ router.post('/live-classes', auth, tutorOrAdmin, async (req, res) => {
 });
 
 router.put('/live-classes/:id', auth, tutorOrAdmin, async (req, res) => {
-  try { res.json(await LiveClass.findByIdAndUpdate(req.params.id, req.body, { new: true })); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  try {
+    const updated = await LiveClass.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const io = req.app.get('io');
+    if (io && req.body.status === 'live') {
+      io.emit('class_went_live', { _id: updated._id, title: updated.title, subject_id: updated.subject_id, tutor_id: updated.tutor_id });
+    }
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/live-classes/:id', auth, tutorOrAdmin, async (req, res) => {

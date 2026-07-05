@@ -8937,7 +8937,10 @@ function AdminApp() {
   useEffect(() => {
     if (socket) {
       socket.emit('join_admin');
-      socket.on('new_payment', (data) => {
+      socket.on('assignment_submitted', (data) => {
+      add({ title: 'New Submission!', body: (data.student_name||'A student') + ' submitted: ' + (data.assignment_title||''), icon: '📝', type: 'i' });
+    });
+    socket.on('new_payment', (data) => {
         add({ title: '💳 New Payment!', body: data.student + ' paid ZMW ' + data.amount + ' for ' + data.subject, icon: '💰', type: 'i' });
         window.pmNotify?.('New Payment!', data.student + ' paid ZMW ' + data.amount);
       });
