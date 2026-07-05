@@ -4322,7 +4322,7 @@ function ChatPage() {
             ),
             React.createElement('div',{style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:3,marginTop:2}},
               React.createElement('span',{style:{fontSize:10,color:'#666'}},ftime(m.createdAt)),
-              mine && React.createElement('span',{style:{fontSize:11,color:m._pending?'#999':'#53bdeb'}},m._pending?'\u2713':'\u2713\u2713')
+              mine && React.createElement('span',{style:{fontSize:11,color:m._pending?'#999':m.is_read?'#53bdeb':'rgba(0,0,0,0.45)'}},m._pending?'\u2713':'\u2713\u2713')
             )
           )
         );
