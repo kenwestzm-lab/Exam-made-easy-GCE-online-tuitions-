@@ -3989,7 +3989,29 @@ function ChatPage() {
       if (isCustomGroup) fd.append('group_id', selG);
       if (text) fd.append('content', text);
       if (curMedia) fd.append('image', curMedia);
-      if (curAudio) fd.append('image', new File([curAudio], 'voice.webm', {type: curAudio.type || 'audio/webm'}));
+      if (curAudio) {
+        // Fix WebM duration metadata so browser shows correct length
+        const fixedAudio = await new Promise(resolve => {
+          const audioEl = new Audio();
+          const url = URL.createObjectURL(curAudio);
+          audioEl.src = url;
+          audioEl.addEventListener('loadedmetadata', () => {
+            if (audioEl.duration === Infinity || isNaN(audioEl.duration)) {
+              audioEl.currentTime = 1e101;
+              audioEl.addEventListener('timeupdate', () => {
+                audioEl.currentTime = 0;
+                URL.revokeObjectURL(url);
+                resolve(curAudio);
+              }, {once: true});
+            } else {
+              URL.revokeObjectURL(url);
+              resolve(curAudio);
+            }
+          });
+          audioEl.load();
+        });
+        fd.append('image', new File([fixedAudio], 'voice.webm', {type: fixedAudio.type || 'audio/webm'}));
+      }
       const path = tab==='direct' ? '/messages/direct' : isCustomGroup ? '/messages/custom-group' : '/messages/group';
       const r = await fetch(BACKEND+'/api'+path, {method:'POST', headers:{Authorization:'Bearer '+tok()}, body:fd});
       const saved = await r.json().catch(()=>null);

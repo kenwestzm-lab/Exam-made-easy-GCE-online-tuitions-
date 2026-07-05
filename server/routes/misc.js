@@ -19,7 +19,7 @@ router.post('/messages/direct', auth, upload.single('image'), async (req, res) =
     if (req.file) { const rType = req.file.mimetype && (req.file.mimetype.startsWith('audio') || req.file.mimetype.startsWith('video')) ? 'video' : 'image'; const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', rType); image_url = r.secure_url; }
     const m = await Message.create({ sender_id: req.user._id, receiver_id, content, image_url, type: 'direct' });
     // Emit via socket if available
-    req.app.get('io')?.to(`user_${receiver_id}`).emit('new_direct_message', m);
+    req.app.get('io')?.to(`user_${receiver_id}`).emit('new_direct_message', { ...m.toObject(), sender_id: req.user._id.toString() });
     res.status(201).json(m);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
