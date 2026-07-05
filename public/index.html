@@ -4127,6 +4127,78 @@ function ChatPage() {
     finally { setSettsBusy(false); }
   };
 
+  if (showGroupInfo) {
+    const gData = myGroups.find(g=>g._id===selG);
+    const isAdmin = gData?.admins?.some(a=>(a._id||a)?.toString()===profile?._id?.toString());
+    const [giName,setGiName] = React.useState(gData?.name||'');
+    const [giBusy,setGiBusy] = React.useState(false);
+    const [giErr,setGiErr] = React.useState('');
+    const [giPhoto,setGiPhoto] = React.useState(null);
+    const saveInfo = async () => {
+      setGiBusy(true); setGiErr('');
+      try {
+        const fd = new FormData(); fd.append('name', giName.trim());
+        if(giPhoto) fd.append('photo', giPhoto);
+        const r = await fetch(BACKEND+'/api/groups/'+selG,{method:'PUT',headers:{Authorization:'Bearer '+tok()},body:fd});
+        const g = await r.json(); if(!r.ok) throw new Error(g.error||'Failed');
+        setMyGroups(p=>p.map(x=>x._id===selG?g:x)); setShowGroupInfo(false);
+      } catch(e){setGiErr(e.message);} finally{setGiBusy(false);}
+    };
+    const removeMember = async (uid) => {
+      if(!confirm('Remove this member?')) return;
+      try { await apiFetch('DELETE','/groups/'+selG+'/members/'+uid,null,tok()); setMyGroups(p=>p.map(x=>x._id===selG?{...x,members:x.members.filter(m=>(m._id||m)?.toString()!==uid?.toString())}:x)); } catch(e){alert(e.message);}
+    };
+    const leaveGroup = async () => {
+      if(!confirm('Leave this group?')) return;
+      try { await apiFetch('DELETE','/groups/'+selG+'/members/'+profile._id,null,tok()); setMyGroups(p=>p.filter(x=>x._id!==selG)); setSelG(null); setShowGroupInfo(false); } catch(e){alert(e.message);}
+    };
+    const deleteGroup = async () => {
+      if(!confirm('Delete this group for everyone?')) return;
+      try { await apiFetch('DELETE','/groups/'+selG,null,tok()); setMyGroups(p=>p.filter(x=>x._id!==selG)); setSelG(null); setShowGroupInfo(false); } catch(e){alert(e.message);}
+    };
+    return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column',background:'#f0f2f5'}},
+      React.createElement('div',{style:{background:'#075E54',color:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexShrink:0}},
+        React.createElement('button',{onClick:()=>setShowGroupInfo(false),style:{background:'none',border:'none',color:'#fff',fontSize:22,cursor:'pointer',padding:0}},'←'),
+        React.createElement('div',{style:{fontWeight:700,fontSize:17}},'Group Info')
+      ),
+      React.createElement('div',{style:{flex:1,overflowY:'auto',padding:16}},
+        React.createElement('div',{style:{background:'#fff',borderRadius:14,padding:16,marginBottom:14,textAlign:'center'}},
+          React.createElement('div',{style:{width:70,height:70,borderRadius:'50%',background:'#075E54',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 12px',overflow:'hidden'}},
+            gData?.photo?React.createElement('img',{src:gData.photo,style:{width:'100%',height:'100%',objectFit:'cover'}}):'G'
+          ),
+          isAdmin?React.createElement(React.Fragment,null,
+            React.createElement('input',{value:giName,onChange:e=>setGiName(e.target.value),style:{width:'100%',padding:'8px 12px',borderRadius:10,border:'1.5px solid #e5e7eb',fontSize:16,fontWeight:700,textAlign:'center',outline:'none',marginBottom:8,boxSizing:'border-box'}}),
+            React.createElement('input',{type:'file',accept:'image/*',onChange:e=>setGiPhoto(e.target.files[0]),style:{fontSize:12,marginBottom:8}}),
+            giErr&&React.createElement('div',{style:{color:'#dc2626',fontSize:12,marginBottom:8}},giErr),
+            React.createElement('button',{onClick:saveInfo,disabled:giBusy,style:{background:'#075E54',border:'none',borderRadius:20,padding:'8px 20px',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}},giBusy?'Saving...':'Save Changes')
+          ):React.createElement('div',{style:{fontWeight:700,fontSize:18}},gData?.name)
+        ),
+        React.createElement('div',{style:{background:'#fff',borderRadius:14,padding:16,marginBottom:14}},
+          React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#075E54',marginBottom:12}},'Members (',gData?.members?.length||0,')'),
+          (gData?.members||[]).map(u=>{
+            const uid=u._id||u; const uname=u.name||'Unknown'; const uAvatar=u.avatarUrl;
+            const isMemberAdmin=gData?.admins?.some(a=>(a._id||a)?.toString()===uid?.toString());
+            return React.createElement('div',{key:String(uid),style:{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #f0f2f5'}},
+              React.createElement('div',{style:{width:38,height:38,borderRadius:'50%',background:'#075E54',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:16,overflow:'hidden',flexShrink:0}},
+                uAvatar?React.createElement('img',{src:uAvatar,style:{width:'100%',height:'100%',objectFit:'cover'}}):uname[0]
+              ),
+              React.createElement('div',{style:{flex:1}},
+                React.createElement('div',{style:{fontWeight:600,fontSize:14}},uname,(uid?.toString()===profile?._id?.toString()?' (You)':'')),
+                React.createElement('div',{style:{fontSize:11,color:isMemberAdmin?'#075E54':'#999'}},isMemberAdmin?'Admin':'Member')
+              ),
+              isAdmin&&uid?.toString()!==profile?._id?.toString()&&
+                React.createElement('button',{onClick:()=>removeMember(uid),style:{background:'#fef2f2',border:'none',borderRadius:20,padding:'5px 12px',color:'#dc2626',fontSize:12,cursor:'pointer'}},'Remove')
+            );
+          })
+        ),
+        React.createElement('div',{style:{background:'#fff',borderRadius:14,padding:16}},
+          React.createElement('button',{onClick:leaveGroup,style:{width:'100%',padding:'12px',background:'#fef2f2',border:'none',borderRadius:10,color:'#dc2626',fontSize:14,fontWeight:600,cursor:'pointer',marginBottom:10}},'Leave Group'),
+          isAdmin&&React.createElement('button',{onClick:deleteGroup,style:{width:'100%',padding:'12px',background:'#dc2626',border:'none',borderRadius:10,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}},'Delete Group for Everyone')
+        )
+      )
+    );
+  }
+
   if (showNewGroup) {
     return React.createElement('div',{style:{height:'100%',display:'flex',flexDirection:'column',background:'#f0f2f5'}},
       React.createElement('div',{style:{background:'#075E54',color:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexShrink:0}},
