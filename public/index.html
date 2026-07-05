@@ -3857,6 +3857,7 @@ function ChatPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [myGroups, setMyGroups] = useState([]);
   const [ngName, setNgName] = useState('');
   const [ngBio, setNgBio] = useState('');
@@ -4283,9 +4284,9 @@ function ChatPage() {
     React.createElement('div',{style:{background:waGreen,color:'#fff',padding:'10px 14px',display:'flex',alignItems:'center',gap:12,flexShrink:0}},
       React.createElement('button',{onClick:()=>{setSel(null);setSelG(null);},style:{background:'none',border:'none',color:'#fff',fontSize:22,cursor:'pointer',padding:0,lineHeight:1}},'\u2190'),
       React.createElement('div',{style:{width:38,height:38,borderRadius:'50%',background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:16,flexShrink:0}},avatar),
-      React.createElement('div',{style:{flex:1}},
+      React.createElement('div',{style:{flex:1},onClick:()=>tab==='group'&&typeof selG==='string'&&selG.length===24?setShowGroupInfo(true):null},
         React.createElement('div',{style:{fontWeight:700,fontSize:15}},cn),
-        React.createElement('div',{style:{fontSize:11,opacity:0.8}},tab==='direct'?(sel?.role||''):'Group chat')
+        React.createElement('div',{style:{fontSize:11,opacity:0.8}},tab==='direct'?(sel?.role||''):tab==='group'&&typeof selG==='string'&&selG.length===24?'Tap for group info':'Group chat')
       )
     ),
     // Messages
