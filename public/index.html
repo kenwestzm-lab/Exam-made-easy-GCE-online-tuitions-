@@ -3850,6 +3850,9 @@ function ChatPage() {
   const [unread, setUnread] = useState({});
   const [lastMsg, setLastMsg] = useState({});
   const [recording, setRecording] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const longPressTimer = useRef(null);
   const [audioBlob, setAudioBlob] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
@@ -3996,6 +3999,16 @@ function ChatPage() {
     setBusy(false);
   };
 
+  const deleteMsg = async (msg) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      const isCustomGroup = tab==='group' && typeof selG==='string' && selG.length===24;
+      const ep = isCustomGroup ? '/messages/custom-group/'+msg._id : '/messages/'+msg._id;
+      await apiFetch('DELETE', ep, null, tok());
+      setMsgs(p => p.filter(m => m._id !== msg._id));
+    } catch(e) { alert('Could not delete message'); }
+  };
+
   const startRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -4003,28 +4016,22 @@ function ChatPage() {
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
       const mr = new MediaRecorder(stream, {mimeType});
       mr.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.current.push(e.data); };
-      const waveInterval = setInterval(() => {
-        setWaveVals([...Array(10)].map(()=>Math.floor(Math.random()*14)+3));
-      }, 150);
-      mr.addEventListener('stop', () => clearInterval(waveInterval));
       mr.onstop = () => {
         const blob = new Blob(audioChunks.current, {type: mr.mimeType || mimeType});
         setAudioBlob(blob);
         stream.getTracks().forEach(t=>t.stop());
         clearInterval(recTimer.current);
+        clearInterval(waveTimerRef);
         setRecSecs(0);
       };
-      mr.start();
+      mr.start(250);
       mediaRec.current = mr;
       setRecording(true);
       setRecSecs(0);
-      recTimer.current = setInterval(()=>{
-        setRecSecs(p=>p+1);
-      }, 1000);
-      const waveTimer = setInterval(()=>{
+      recTimer.current = setInterval(()=>{ setRecSecs(p=>p+1); }, 1000);
+      const waveTimerRef = setInterval(()=>{
         setWaveVals(Array.from({length:10},()=>Math.floor(Math.random()*22)+3));
-      }, 150);
-      mr.addEventListener('stop', () => clearInterval(waveTimer));
+      }, 200);
     } catch(e) { alert('Please allow microphone access to send voice messages'); }
   };
 
@@ -4256,8 +4263,22 @@ function ChatPage() {
         const mine = m.sender_id===profile?._id || m.sender_id===profile?._id?.toString();
         const sender = gu(m.sender_id);
         const isLink = m.content && (m.content.includes('http://') || m.content.includes('https://') || m.content.includes('www.'));
-        return React.createElement('div',{key:m._id||i,style:{display:'flex',justifyContent:mine?'flex-end':'flex-start',marginBottom:2}},
-          React.createElement('div',{style:{maxWidth:'78%',background:mine?waLightGreen:waMsg,borderRadius:mine?'12px 12px 4px 12px':'12px 12px 12px 4px',padding:'6px 10px 4px',boxShadow:'0 1px 2px rgba(0,0,0,0.15)',opacity:m._pending?0.6:1}},
+        return React.createElement('div',{key:m._id||i,style:{display:'flex',justifyContent:mine?'flex-end':'flex-start',marginBottom:2,position:'relative'}},
+          ctxMenu?.msg?._id===m._id && React.createElement('div',{
+            style:{position:'fixed',top:ctxMenu.y,left:Math.min(ctxMenu.x,window.innerWidth-160),background:'#fff',borderRadius:10,boxShadow:'0 4px 20px rgba(0,0,0,0.25)',zIndex:1000,minWidth:150,overflow:'hidden'},
+            onClick:e=>e.stopPropagation()
+          },
+            React.createElement('div',{onClick:()=>{if(m.content)navigator.clipboard?.writeText(m.content).catch(()=>{});setCtxMenu(null);},style:{padding:'12px 16px',fontSize:14,cursor:'pointer',borderBottom:'1px solid #f0f0f0',display:'flex',alignItems:'center',gap:10}},'📋 Copy'),
+            React.createElement('div',{onClick:()=>{setReplyTo(m);setCtxMenu(null);},style:{padding:'12px 16px',fontSize:14,cursor:'pointer',borderBottom:'1px solid #f0f0f0',display:'flex',alignItems:'center',gap:10}},'↩ Reply'),
+            mine && !m._pending && React.createElement('div',{onClick:()=>{deleteMsg(m);setCtxMenu(null);},style:{padding:'12px 16px',fontSize:14,cursor:'pointer',color:'#dc2626',display:'flex',alignItems:'center',gap:10}},'🗑 Delete')
+          ),
+          React.createElement('div',{
+            style:{maxWidth:'78%',background:mine?waLightGreen:waMsg,borderRadius:mine?'12px 12px 4px 12px':'12px 12px 12px 4px',padding:'6px 10px 4px',boxShadow:'0 1px 2px rgba(0,0,0,0.15)',opacity:m._pending?0.6:1,cursor:'pointer'},
+            onContextMenu:e=>{e.preventDefault();setCtxMenu({msg:m,x:e.clientX,y:e.clientY});},
+            onTouchStart:e=>{const t=e.touches[0];longPressTimer.current=setTimeout(()=>setCtxMenu({msg:m,x:t.clientX,y:t.clientY}),500);},
+            onTouchEnd:()=>clearTimeout(longPressTimer.current),
+            onTouchMove:()=>clearTimeout(longPressTimer.current),
+          },
             !mine && tab==='group' && React.createElement('div',{style:{fontSize:11,fontWeight:700,color:waGreen,marginBottom:2}},sender?.name||'Unknown'),
             m.image_url && (m.image_url.includes('audio')||m.image_url.includes('.webm')||m.image_url.includes('.ogg')
               ? React.createElement('audio',{controls:true,src:m.image_url,style:{maxWidth:220,display:'block',marginBottom:m.content?4:0}})
@@ -4289,7 +4310,14 @@ function ChatPage() {
         )
       )
     ),
-    // Input bar
+    ctxMenu && React.createElement('div',{onClick:()=>setCtxMenu(null),style:{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:999}}),
+    replyTo && React.createElement('div',{style:{background:'#f0f2f5',padding:'6px 12px',borderLeft:'4px solid #075E54',margin:'0 10px 4px',borderRadius:6,display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      React.createElement('div',{style:{fontSize:12,color:'#075E54',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}},
+        React.createElement('div',{style:{fontWeight:700,marginBottom:2}},replyTo.sender_id===profile?._id?'You':gu(replyTo.sender_id)?.name||'Unknown'),
+        replyTo.content||'🎙 Voice message'
+      ),
+      React.createElement('button',{onClick:()=>setReplyTo(null),style:{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#666',padding:'0 4px'}},'×')
+    ),
     React.createElement('div',{style:{background:'#f0f2f5',padding:'6px 10px',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}},
       mediaPreview && React.createElement('div',{style:{position:'absolute',bottom:70,left:10,background:'#fff',borderRadius:12,padding:8,boxShadow:'0 2px 10px rgba(0,0,0,0.2)',zIndex:10}},
         React.createElement('img',{src:mediaPreview,style:{width:120,height:120,objectFit:'cover',borderRadius:8,display:'block'}}),

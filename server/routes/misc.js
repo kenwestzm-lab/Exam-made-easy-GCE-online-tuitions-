@@ -42,6 +42,42 @@ router.post('/messages/group', auth, upload.single('image'), async (req, res) =>
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Delete a message (sender only)
+router.delete('/messages/:id', auth, async (req, res) => {
+  try {
+    const m = await Message.findById(req.params.id);
+    if (!m) return res.status(404).json({ error: 'Message not found' });
+    if (m.sender_id.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'You can only delete your own messages' });
+    await Message.findByIdAndDelete(req.params.id);
+    const io = req.app.get('io');
+    if (io) {
+      if (m.type === 'direct') {
+        io.to('user_'+m.receiver_id).emit('message_deleted', { _id: req.params.id });
+        io.to('user_'+m.sender_id).emit('message_deleted', { _id: req.params.id });
+      } else if (m.type === 'group') {
+        io.to('group_'+m.subject_id).emit('message_deleted', { _id: req.params.id });
+      } else if (m.type === 'custom_group') {
+        io.to('cg_'+m.group_id).emit('message_deleted', { _id: req.params.id });
+      }
+    }
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/messages/custom-group/:id', auth, async (req, res) => {
+  try {
+    const m = await Message.findById(req.params.id);
+    if (!m) return res.status(404).json({ error: 'Message not found' });
+    if (m.sender_id.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'You can only delete your own messages' });
+    await Message.findByIdAndDelete(req.params.id);
+    const io = req.app.get('io');
+    if (io) io.to('cg_'+m.group_id).emit('message_deleted', { _id: req.params.id });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Custom group messages (MongoDB _id based, not subject_id)
 router.get('/messages/custom-group/:groupId', auth, async (req, res) => {
   try {
