@@ -42,6 +42,24 @@ router.post('/messages/group', auth, upload.single('image'), async (req, res) =>
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Custom group messages (MongoDB _id based, not subject_id)
+router.get('/messages/custom-group/:groupId', auth, async (req, res) => {
+  try {
+    const msgs = await Message.find({ type: 'custom_group', group_id: req.params.groupId }).sort('createdAt').limit(100);
+    res.json(msgs);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/messages/custom-group', auth, upload.single('image'), async (req, res) => {
+  try {
+    const { group_id, content } = req.body;
+    let image_url = '';
+    if (req.file) { const rType = req.file.mimetype && (req.file.mimetype.startsWith('audio') || req.file.mimetype.startsWith('video')) ? 'video' : 'image'; const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/chat', rType); image_url = r.secure_url; }
+    const m = await Message.create({ sender_id: req.user._id, group_id, content, image_url, type: 'custom_group' });
+    req.app.get('io')?.to('cg_'+group_id).emit('new_custom_group_message', { ...m.toObject(), sender_id: req.user._id.toString() });
+    res.status(201).json(m);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Live Classes
 router.get('/live-classes', auth, async (req, res) => {
   try { res.json(await LiveClass.find().sort('-createdAt')); }

@@ -96,6 +96,9 @@ io.on('connection', (socket) => {
   socket.on('join_group', (subjectId) => {
     socket.join(`group_${subjectId}`);
   });
+  socket.on('join_custom_group', (groupId) => {
+    socket.join('cg_'+groupId);
+  });
 
   socket.on('class_question', (data) => {
     socket.to(`class_${data.classId}`).emit('class_question', data);

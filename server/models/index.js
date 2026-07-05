@@ -107,6 +107,7 @@ const MsgSchema = new Schema({
   sender_id: { type: Schema.Types.ObjectId, ref: 'User' },
   receiver_id: { type: Schema.Types.ObjectId, ref: 'User' },
   subject_id: Number, content: String, image_url: String,
+  group_id: { type: String, default: null },
   type: { type: String, default: 'direct' },
   is_read: { type: Boolean, default: false },
   read_at: Date,

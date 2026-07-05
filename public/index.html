@@ -3926,9 +3926,19 @@ function ChatPage() {
         setUnread(p => ({...p, ['g'+msg.subject_id]: (p['g'+msg.subject_id]||0)+1}));
       }
     };
+    const onCustomGroup = msg => {
+      const relevant = tab==='group' && selG===msg.group_id;
+      if (relevant) {
+        setMsgs(p => p.find(m=>m._id===msg._id) ? p : [...p, msg]);
+        setTimeout(() => cRef.current?.scrollTo(0,99999), 100);
+      } else if (msg.sender_id !== profile?._id) {
+        setUnread(p => ({...p, ['cg'+msg.group_id]: (p['cg'+msg.group_id]||0)+1}));
+      }
+    };
     socket.on('new_direct_message', onDirect);
     socket.on('new_group_message', onGroup);
-    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); };
+    socket.on('new_custom_group_message', onCustomGroup);
+    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); socket.off('new_custom_group_message', onCustomGroup); };
   }, [socket, sel, selG, tab, profile]);
 
   // Join group rooms
@@ -3936,14 +3946,17 @@ function ChatPage() {
     if (!socket || !profile) return;
     socket.emit('join_user', profile._id);
     groups.forEach(g => socket.emit('join_group', g.id));
-  }, [socket, profile]);
+    // Join custom group rooms
+    myGroups.forEach(g => socket.emit('join_custom_group', g._id));
+  }, [socket, profile, myGroups]);
 
   // Load messages
   useEffect(() => {
     if (sel===null && selG===null) return;
     (async () => {
       try {
-        const path = tab==='direct' ? '/messages/direct/'+sel?._id : '/messages/group/'+selG;
+        const isCustom = tab==='group' && typeof selG==='string' && selG.length===24;
+        const path = tab==='direct' ? '/messages/direct/'+sel?._id : isCustom ? '/messages/custom-group/'+selG : '/messages/group/'+selG;
         const d = await apiFetch('GET', path, null, tok());
         setMsgs(Array.isArray(d) ? d : []);
         // Clear unread
@@ -3968,11 +3981,14 @@ function ChatPage() {
     try {
       const fd = new FormData();
       if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
-      if (tab==='group' && selG!==null) fd.append('subject_id', selG);
+      const isCustomGroup = tab==='group' && typeof selG==='string' && selG.length===24;
+      if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
+      if (tab==='group' && !isCustomGroup && selG!==null) fd.append('subject_id', selG);
+      if (isCustomGroup) fd.append('group_id', selG);
       if (text) fd.append('content', text);
       if (curMedia) fd.append('image', curMedia);
       if (curAudio) fd.append('image', new File([curAudio], 'voice.webm', {type: curAudio.type || 'audio/webm'}));
-      const path = tab==='direct' ? '/messages/direct' : '/messages/group';
+      const path = tab==='direct' ? '/messages/direct' : isCustomGroup ? '/messages/custom-group' : '/messages/group';
       const r = await fetch(BACKEND+'/api'+path, {method:'POST', headers:{Authorization:'Bearer '+tok()}, body:fd});
       const saved = await r.json().catch(()=>null);
       if (saved?._id) setMsgs(p=>p.map(m=>m._id===tempId?saved:m));
