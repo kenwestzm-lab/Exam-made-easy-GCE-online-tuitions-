@@ -4,6 +4,23 @@ const { Message, LiveClass, Announcement } = require('../models');
 const { auth, tutorOrAdmin, adminOnly } = require('../middleware/auth');
 const { upload, uploadToCloudinary } = require('../config/cloudinary');
 
+// GET most recent direct message per conversation (seeds chat list previews)
+router.get('/messages/recent', auth, async (req, res) => {
+  try {
+    const msgs = await Message.find({
+      type: 'direct',
+      $or: [{ sender_id: req.user._id }, { receiver_id: req.user._id }]
+    }).sort('-createdAt').limit(500);
+    const seen = new Set();
+    const recent = [];
+    for (const m of msgs) {
+      const otherId = m.sender_id.toString() === req.user._id.toString() ? m.receiver_id.toString() : m.sender_id.toString();
+      if (!seen.has(otherId)) { seen.add(otherId); recent.push(m); }
+    }
+    res.json(recent);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Messages
 router.get('/messages/direct/:userId', auth, async (req, res) => {
   try {
