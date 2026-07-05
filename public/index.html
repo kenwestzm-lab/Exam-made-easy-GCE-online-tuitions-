@@ -74,7 +74,13 @@ const apiFetch = async (method, path, body, token, fd) => {
 const tok = () => localStorage.getItem('pms_t');
 const openFile = (url, type) => {
   if (!url) return;
-  window.open(url, '_blank');
+  if (['pdf','word','pptx'].includes(type)) {
+    // Use backend proxy to serve with correct Content-Type headers
+    const proxyUrl = BACKEND + '/api/view-file?url=' + encodeURIComponent(url) + '&token=' + tok();
+    window.open(proxyUrl, '_blank');
+  } else {
+    window.open(url, '_blank');
+  }
 };
 // Zambian Grade System
 const GRADES = [

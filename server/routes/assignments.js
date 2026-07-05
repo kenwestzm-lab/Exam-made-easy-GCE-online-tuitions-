@@ -18,6 +18,7 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
       file_url = r.secure_url;
     }
     const a = await Assignment.create({ title, description, subject_id: Number(subject_id), due_date, max_marks: Number(max_marks) || 20, file_url, tutor_id: req.user._id });
+    req.app.get('io')?.emit('new_assignment', a);
     res.status(201).json(a);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
