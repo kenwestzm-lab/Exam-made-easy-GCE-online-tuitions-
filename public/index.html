@@ -3948,14 +3948,17 @@ function ChatPage() {
       }
     };
     const onRead = ({by, from}) => {
-      // When recipient reads our messages, update their read status
       setMsgs(p => p.map(m => m.sender_id===profile?._id && m.receiver_id===by ? {...m, is_read:true} : m));
+    };
+    const onDeleted = ({_id}) => {
+      setMsgs(p => p.filter(m => m._id !== _id));
     };
     socket.on('new_direct_message', onDirect);
     socket.on('new_group_message', onGroup);
     socket.on('new_custom_group_message', onCustomGroup);
     socket.on('messages_read', onRead);
-    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); socket.off('new_custom_group_message', onCustomGroup); socket.off('messages_read', onRead); };
+    socket.on('message_deleted', onDeleted);
+    return () => { socket.off('new_direct_message', onDirect); socket.off('new_group_message', onGroup); socket.off('new_custom_group_message', onCustomGroup); socket.off('messages_read', onRead); socket.off('message_deleted', onDeleted); };
   }, [socket, sel, selG, tab, profile]);
 
   // Join group rooms
