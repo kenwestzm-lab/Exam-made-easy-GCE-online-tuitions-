@@ -4019,14 +4019,17 @@ function ChatPage() {
       const mr = new MediaRecorder(stream, {mimeType});
       mr.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(audioChunks.current, {type: mr.mimeType || mimeType});
-        setAudioBlob(blob);
-        stream.getTracks().forEach(t=>t.stop());
-        clearInterval(recTimer.current);
-        clearInterval(waveTimerRef);
-        setRecSecs(0);
+        setTimeout(() => {
+          if (audioChunks.current.length === 0) return;
+          const blob = new Blob(audioChunks.current, {type: mr.mimeType || mimeType});
+          setAudioBlob(blob);
+          stream.getTracks().forEach(t=>t.stop());
+          clearInterval(recTimer.current);
+          clearInterval(waveTimerRef);
+          setRecSecs(0);
+        }, 300);
       };
-      mr.start(250);
+      mr.start(100);
       mediaRec.current = mr;
       setRecording(true);
       setRecSecs(0);
