@@ -3980,7 +3980,6 @@ function ChatPage() {
     setTimeout(()=>cRef.current?.scrollTo(0,99999),80);
     try {
       const fd = new FormData();
-      if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
       const isCustomGroup = tab==='group' && typeof selG==='string' && selG.length===24;
       if (tab==='direct' && sel) fd.append('receiver_id', sel._id);
       if (tab==='group' && !isCustomGroup && selG!==null) fd.append('subject_id', selG);
