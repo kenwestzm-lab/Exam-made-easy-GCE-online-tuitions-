@@ -183,10 +183,45 @@ io.on('connection', (socket) => {
   });
 });
 
+// ── Scheduled subscription expiry checker (runs every hour) ──────────────
+const scheduleExpiryChecks = (io) => {
+  const runCheck = async () => {
+    try {
+      const { Subscription } = require('./models');
+      const now = new Date();
+      const justExpired = await Subscription.find({
+        status: 'active',
+        expires_at: { $lt: now }
+      }).populate('student_id', 'name');
+      if (justExpired.length > 0) {
+        const ids = justExpired.map(s => s._id);
+        await Subscription.updateMany({ _id: { $in: ids } }, { status: 'expired', payment_status: 'expired' });
+        justExpired.forEach(s => {
+          io.to('user_'+s.student_id._id).emit('subscription_expired', { subject_id: s.subject_id });
+        });
+        console.log('⏰ Expired', justExpired.length, 'subscriptions');
+      }
+      const in3days = new Date(now);
+      in3days.setDate(in3days.getDate() + 3);
+      const expiringSoon = await Subscription.find({
+        status: 'active',
+        expires_at: { $gt: now, $lt: in3days }
+      });
+      expiringSoon.forEach(s => {
+        const daysLeft = Math.ceil((new Date(s.expires_at) - now) / 86400000);
+        io.to('user_'+s.student_id).emit('subscription_warning', { subject_id: s.subject_id, days_left: daysLeft });
+      });
+    } catch(e) { console.error('Expiry check error:', e.message); }
+  };
+  runCheck();
+  setInterval(runCheck, 60 * 60 * 1000);
+};
+
 // ── Start server ──────────────────────────────────────
 const PORT = process.env.PORT || 10000;
 connectDB().then(() => {
   server.listen(PORT, () => {
+    scheduleExpiryChecks(io);
     console.log(`✅ Peace Mindset Server v5 running on port ${PORT}`);
     console.log(`   Gemini: ${process.env.GEMINI_API_KEY ? '✅' : '❌ Missing'}`);
     console.log(`   Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? '✅' : '❌ Missing'}`);

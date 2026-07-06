@@ -154,7 +154,12 @@ const ftime = d => d ? new Date(d).toLocaleTimeString([], {
   hour: '2-digit',
   minute: '2-digit'
 }) : '';
-const isSub = (subs, pays, sid) => (subs || []).some(x => Number(x.subject_id) === Number(sid) && x.payment_status === 'approved' && x.status === 'active') || (pays || []).some(x => Number(x.subject_id) === Number(sid) && x.status === 'approved');
+const isSub = (subs, pays, sid) => {
+  const now = new Date();
+  const activeSub = (subs || []).some(x => Number(x.subject_id) === Number(sid) && x.payment_status === 'approved' && x.status === 'active' && (!x.expires_at || new Date(x.expires_at) > now));
+  const approvedPay = (pays || []).some(x => Number(x.subject_id) === Number(sid) && x.status === 'approved');
+  return activeSub || approvedPay;
+};
 const AI_CHARS = {
   ken: {
     name: 'Teacher Ken',
