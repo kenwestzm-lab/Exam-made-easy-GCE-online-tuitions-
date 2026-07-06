@@ -3889,11 +3889,18 @@ function ChatPage() {
     ...myGroups.map(g => ({id: g._id, n: g.name, i: 'custom', _custom: true, _data: g}))
   ];
 
-  // Load custom groups + seed lastMsg on mount
+  // Load custom groups + seed lastMsg + online users on mount
   useEffect(() => {
     if (!profile) return;
     apiFetch('GET', '/groups', null, tok()).then(d => {
       if (Array.isArray(d)) setMyGroups(d);
+    }).catch(() => {});
+    // Seed online users
+    apiFetch('GET', '/users', null, tok()).then(d => {
+      if (Array.isArray(d)) {
+        const online = new Set(d.filter(u=>u.is_online).map(u=>u._id));
+        setOnlineUsers(online);
+      }
     }).catch(() => {});
     apiFetch('GET', '/messages/recent', null, tok()).then(d => {
       if (!Array.isArray(d)) return;
