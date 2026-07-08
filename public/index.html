@@ -4621,8 +4621,8 @@ function QuestionsPage() {
         subject: selSub ? sn(selSub) : 'General',
         character: charKey,
         conversation_history: msgs.slice(-6).map(m => ({
-          role: 'user',
-          text: m.content
+          role: m.sender_id === 'ai' ? 'assistant' : 'user',
+          content: m.content || ''
         })),
         lesson_context: '',
         image_base64: qImage?.base64 || null
@@ -4788,7 +4788,7 @@ function QuestionsPage() {
       flexShrink: 0,
       borderBottom: '1px solid rgba(255,255,255,0.06)'
     }
-  }, [['chat', '💬 Discussion'], ['ask', '❓ Ask AI']].map(([t, l]) => /*#__PURE__*/React.createElement("button", {
+  }, [['chat', '💬 Discussion'], ['ask', '❓ Ask Tutor']].map(([t, l]) => /*#__PURE__*/React.createElement("button", {
     key: t,
     type: "button",
     onClick: () => setTab(t),

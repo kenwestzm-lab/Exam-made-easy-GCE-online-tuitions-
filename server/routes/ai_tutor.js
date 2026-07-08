@@ -140,12 +140,56 @@ async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 3
   throw new Error('GEMINI_FAILED');
 }
 
+// ── BACKUP 3: Together AI (free tier) ───────────────
+async function callTogether(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.TOGETHER_API_KEY;
+  if (!key) throw new Error('NO_TOGETHER_KEY');
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.slice(-6).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    { role: 'user', content: userMessage }
+  ];
+  const response = await fetch('https://api.together.xyz/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ model: 'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo', messages, max_tokens: maxTokens, temperature: 0.75 })
+  });
+  if (!response.ok) throw new Error('TOGETHER_FAILED');
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('TOGETHER_EMPTY');
+  return text;
+}
+
+// ── BACKUP 4: Mistral AI (free tier) ─────────────────
+async function callMistral(systemPrompt, userMessage, history = [], maxTokens = 300) {
+  const key = process.env.MISTRAL_API_KEY;
+  if (!key) throw new Error('NO_MISTRAL_KEY');
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.slice(-6).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    { role: 'user', content: userMessage }
+  ];
+  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ model: 'mistral-small-latest', messages, max_tokens: maxTokens, temperature: 0.75 })
+  });
+  if (!response.ok) throw new Error('MISTRAL_FAILED');
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('MISTRAL_EMPTY');
+  return text;
+}
+
 // ── MAIN: Try all providers in order ────────────────
 async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) {
   const providers = [
     { name: 'Groq', fn: callGroq },
     { name: 'OpenRouter', fn: callOpenRouter },
-    { name: 'Gemini', fn: callGemini }
+    { name: 'Gemini', fn: callGemini },
+    { name: 'Together', fn: callTogether },
+    { name: 'Mistral', fn: callMistral }
   ];
 
   for (const provider of providers) {
@@ -159,7 +203,7 @@ async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) 
     }
   }
 
-  return "Good question! I will explain this in our next class. Keep studying hard!";
+  return "That is a great question! Let me think about this carefully. Please ask again in a moment.";
 }
 
 // ── POST /api/ai/chat ────────────────────────────────
