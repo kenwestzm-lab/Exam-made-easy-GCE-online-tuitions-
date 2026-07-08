@@ -23,6 +23,22 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Proxy download assignment file with correct headers
+router.get('/:id/download', auth, async (req, res) => {
+  try {
+    const a = await Assignment.findById(req.params.id);
+    if (!a?.file_url) return res.status(404).json({ error: 'No file' });
+    const response = await fetch(a.file_url);
+    if (!response.ok) return res.status(502).json({ error: 'Could not fetch file' });
+    const ext = a.file_url.includes('.pdf') ? 'pdf' : a.file_url.includes('.docx') ? 'docx' : 'bin';
+    const filename = (a.title||'assignment').replace(/[^a-z0-9]/gi,'_') + '.' + ext;
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/:id', auth, tutorOrAdmin, async (req, res) => {
   try { await Assignment.findByIdAndDelete(req.params.id); res.json({ success: true }); }
   catch(e) { res.status(500).json({ error: e.message }); }

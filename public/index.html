@@ -6246,7 +6246,7 @@ function AssignmentsPage({
         lineHeight: 1.6
       }
     }, a.description), a.file_url && /*#__PURE__*/React.createElement("a", {
-      href: a.file_url,
+      href: BACKEND+'/api/assignments/'+a._id+'/download?token='+tok(),
       target: "_blank",
       rel: "noreferrer",
       style: {
