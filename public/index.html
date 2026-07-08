@@ -3909,12 +3909,20 @@ function ChatPage() {
     }).catch(() => {});
     apiFetch('GET', '/messages/recent', null, tok()).then(d => {
       if (!Array.isArray(d)) return;
-      const map = {};
+      const myId = profile._id?.toString();
+      const msgMap = {};
+      const unreadMap = {};
       d.forEach(m => {
-        const otherId = m.sender_id === profile._id ? m.receiver_id : m.sender_id;
-        if (!map[otherId]) map[otherId] = {text: m.image_url ? (m.content||'Voice message') : m.content||'', time: m.createdAt};
+        const sid = m.sender_id?.toString ? m.sender_id.toString() : m.sender_id;
+        const rid = m.receiver_id?.toString ? m.receiver_id.toString() : m.receiver_id;
+        const otherId = sid === myId ? rid : sid;
+        if (!msgMap[otherId]) msgMap[otherId] = {text: m.image_url ? (m.content||'Voice message') : (m.content||''), time: m.createdAt};
+        if (rid === myId && m.is_read !== true) {
+          unreadMap[sid] = (unreadMap[sid]||0) + 1;
+        }
       });
-      setLastMsg(p => ({...p, ...map}));
+      setLastMsg(p => ({...p, ...msgMap}));
+      setUnread(p => ({...p, ...unreadMap}));
     }).catch(() => {});
   }, [profile?._id]);
 
