@@ -1,0 +1,22 @@
+{
+  "name": "Peace Mindset Private School",
+  "short_name": "Peace Mindset",
+  "description": "GCE Online Learning — Mufulira, Zambia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#064d2c",
+  "theme_color": "#064d2c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23064d2c' rx='80'/><text y='340' x='256' font-size='300' text-anchor='middle'>🎓</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["education"],
+  "lang": "en",
+  "dir": "ltr"
+}
