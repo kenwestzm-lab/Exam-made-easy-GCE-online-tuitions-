@@ -3589,34 +3589,201 @@ function EnhancedAIClassRoom({
 const LC={dark:'#0a1a0f',card:'rgba(255,255,255,0.05)',border:'rgba(255,255,255,0.1)',gold:'#c9930a',goldl:'rgba(201,147,10,0.15)',goldb:'rgba(201,147,10,0.3)',red:'#ef4444',redl:'rgba(239,68,68,0.15)',redb:'rgba(239,68,68,0.3)',green:'#10b981',blue:'#3b82f6',white:'#fff',grey:'rgba(255,255,255,0.45)',lightgrey:'rgba(255,255,255,0.08)'};
 
 function LiveWhiteboard({classId,socket,isPresenter}){
-  const canvasRef=useRef();const drawing=useRef(false);const strokes=useRef([]);const cur=useRef([]);
-  const [tool,setTool]=useState('pen');const [color,setColor]=useState('#ffffff');const [size,setSize]=useState(3);
-  const colors=['#ffffff','#c9930a','#ef4444','#10b981','#3b82f6','#a855f7','#f97316','#000000'];
-  const getPos=(e,canvas)=>{const rect=canvas.getBoundingClientRect();const t=e.touches?.[0]||e;return{x:(t.clientX-rect.left)*(canvas.width/rect.width),y:(t.clientY-rect.top)*(canvas.height/rect.height)};};
-  const redraw=useCallback(()=>{const canvas=canvasRef.current;if(!canvas)return;const ctx=canvas.getContext('2d');ctx.fillStyle='#0a1a0f';ctx.fillRect(0,0,canvas.width,canvas.height);strokes.current.forEach(s=>{if(!s.points?.length)return;ctx.beginPath();if(s.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=(s.size||3)*4;}else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color||'#fff';ctx.lineWidth=s.size||3;}ctx.lineCap='round';ctx.lineJoin='round';ctx.moveTo(s.points[0].x,s.points[0].y);s.points.forEach(p=>ctx.lineTo(p.x,p.y));ctx.stroke();ctx.globalCompositeOperation='source-over';});},[]);
-  useEffect(()=>{const canvas=canvasRef.current;if(!canvas)return;const ro=new ResizeObserver(()=>{canvas.width=canvas.offsetWidth*window.devicePixelRatio;canvas.height=canvas.offsetHeight*window.devicePixelRatio;const ctx=canvas.getContext('2d');ctx.scale(window.devicePixelRatio,window.devicePixelRatio);redraw();});ro.observe(canvas);return()=>ro.disconnect();},[redraw]);
-  useEffect(()=>{if(!socket)return;socket.on('whiteboard_stroke',s=>{strokes.current.push(s);redraw();});socket.on('whiteboard_clear',()=>{strokes.current=[];redraw();});socket.on('whiteboard_full_sync',({strokes:s})=>{strokes.current=s;redraw();});if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{if(d?.strokes){strokes.current=d.strokes;redraw();}}).catch(()=>{});return()=>{socket.off('whiteboard_stroke');socket.off('whiteboard_clear');socket.off('whiteboard_full_sync');};},[socket,classId,redraw]);
-  const startDraw=e=>{if(!isPresenter)return;e.preventDefault();drawing.current=true;cur.current=[getPos(e,canvasRef.current)];};
-  const moveDraw=e=>{if(!drawing.current||!isPresenter)return;e.preventDefault();const canvas=canvasRef.current;const pos=getPos(e,canvas);cur.current.push(pos);const ctx=canvas.getContext('2d');const pts=cur.current;const len=pts.length;if(len<2)return;ctx.beginPath();if(tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=size*4;}else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=color;ctx.lineWidth=size;}ctx.lineCap='round';ctx.lineJoin='round';ctx.moveTo(pts[len-2].x,pts[len-2].y);ctx.lineTo(pts[len-1].x,pts[len-1].y);ctx.stroke();ctx.globalCompositeOperation='source-over';};
-  const endDraw=()=>{if(!drawing.current||!isPresenter)return;drawing.current=false;const stroke={points:cur.current,color,size,tool};strokes.current.push(stroke);if(socket&&classId)socket.emit('whiteboard_stroke',{classId,stroke});cur.current=[];};
-  const clearBoard=()=>{strokes.current=[];redraw();if(socket&&classId)socket.emit('whiteboard_clear',{classId});};
-  const saveBoard=()=>{apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current},tok()).catch(()=>{});};
-  const shareBoard=()=>{if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current});};
-  return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',background:'#0a1a0f'}},
-    isPresenter&&React.createElement('div',{style:{display:'flex',gap:6,padding:'8px 10px',background:'rgba(0,0,0,0.5)',borderBottom:'1px solid rgba(255,255,255,0.1)',flexWrap:'wrap',alignItems:'center',flexShrink:0}},
-      [['pen','Pen'],['eraser','Eraser']].map(([t,label])=>React.createElement('button',{key:t,onClick:()=>setTool(t),style:{background:tool===t?LC.gold:'rgba(255,255,255,0.08)',border:'none',borderRadius:6,padding:'5px 10px',cursor:'pointer',fontSize:12,color:tool===t?'#000':LC.white,fontWeight:600}},label)),
-      React.createElement('div',{style:{display:'flex',gap:3}},colors.map(c=>React.createElement('button',{key:c,onClick:()=>setColor(c),style:{width:20,height:20,borderRadius:'50%',background:c,border:color===c?'2px solid '+LC.gold:'2px solid transparent',cursor:'pointer'}}))),
-      React.createElement('input',{type:'range',min:1,max:12,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:60,accentColor:LC.gold}}),
-      React.createElement('span',{style:{fontSize:11,color:LC.grey}},size+'px'),
-      React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}},
-        React.createElement('button',{onClick:shareBoard,style:{background:'rgba(59,130,246,0.15)',border:'1px solid #3b82f6',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#3b82f6',fontSize:11,fontWeight:600}},'Share'),
-        React.createElement('button',{onClick:saveBoard,style:{background:'rgba(16,185,129,0.15)',border:'1px solid #10b981',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#10b981',fontSize:11,fontWeight:600}},'Save'),
-        React.createElement('button',{onClick:clearBoard,style:{background:'rgba(239,68,68,0.15)',border:'1px solid #ef4444',borderRadius:6,padding:'4px 9px',cursor:'pointer',color:'#ef4444',fontSize:11,fontWeight:600}},'Clear')
+  const canvasRef=useRef();const drawing=useRef(false);const strokes=useRef([]);
+  const cur=useRef([]);const history=useRef([]);
+  const [tool,setTool]=useState('pen');
+  const [color,setColor]=useState('#1a1a2e');
+  const [size,setSize]=useState(3);
+  const [texts,setTexts]=useState([]);
+  const [addingText,setAddingText]=useState(false);
+  const [textInput,setTextInput]=useState('');
+  const [textPos,setTextPos]=useState({x:50,y:50});
+  const [bgColor,setBgColor]=useState('#ffffff');
+  const [showColorPicker,setShowColorPicker]=useState(false);
+
+  const COLORS=['#1a1a2e','#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#6d6875','#0077b6','#ffffff','#000000'];
+  const STROKE_COLORS=['#000000','#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#6d6875','#0077b6','#ffffff','#6c757d'];
+
+  const getPos=(e,canvas)=>{
+    const rect=canvas.getBoundingClientRect();
+    const t=e.touches?.[0]||e;
+    return{x:(t.clientX-rect.left)*(canvas.width/rect.width),y:(t.clientY-rect.top)*(canvas.height/rect.height)};
+  };
+
+  const redraw=useCallback(()=>{
+    const canvas=canvasRef.current;if(!canvas)return;
+    const ctx=canvas.getContext('2d');
+    // White background
+    ctx.fillStyle=bgColor;ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Draw grid dots
+    ctx.fillStyle='rgba(0,0,0,0.06)';
+    for(let x=20;x<canvas.width;x+=20)for(let y=20;y<canvas.height;y+=20)
+      ctx.fillRect(x,y,1.5,1.5);
+    // Draw strokes
+    strokes.current.forEach(s=>{
+      if(!s.points?.length)return;
+      ctx.beginPath();
+      if(s.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=(s.size||3)*3;}
+      else if(s.tool==='highlighter'){ctx.globalCompositeOperation='multiply';ctx.strokeStyle=s.color||'rgba(255,255,0,0.4)';ctx.lineWidth=(s.size||8)*2;}
+      else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color||'#000';ctx.lineWidth=s.size||3;}
+      ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.moveTo(s.points[0].x,s.points[0].y);
+      s.points.forEach(p=>ctx.lineTo(p.x,p.y));
+      ctx.stroke();ctx.globalCompositeOperation='source-over';
+    });
+    // Draw shapes
+    strokes.current.forEach(s=>{
+      if(!s.shape)return;
+      ctx.strokeStyle=s.color||'#000';ctx.lineWidth=s.size||2;ctx.fillStyle=s.fill||'transparent';
+      ctx.beginPath();
+      if(s.shape==='rect'){ctx.rect(s.x,s.y,s.w,s.h);if(s.fill)ctx.fill();ctx.stroke();}
+      else if(s.shape==='circle'){ctx.arc(s.x+s.w/2,s.y+s.h/2,Math.abs(s.w/2),0,Math.PI*2);if(s.fill)ctx.fill();ctx.stroke();}
+      else if(s.shape==='line'){ctx.moveTo(s.x,s.y);ctx.lineTo(s.x+s.w,s.y+s.h);ctx.stroke();}
+    });
+    // Draw texts
+    texts.forEach(t=>{
+      ctx.font=(t.size||16)+'px inherit';ctx.fillStyle=t.color||'#000';
+      ctx.fillText(t.text,t.x,t.y);
+    });
+  },[bgColor,texts]);
+
+  useEffect(()=>{
+    const canvas=canvasRef.current;if(!canvas)return;
+    const ro=new ResizeObserver(()=>{
+      const w=canvas.offsetWidth*window.devicePixelRatio;
+      const h=canvas.offsetHeight*window.devicePixelRatio;
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
+      redraw();
+    });
+    ro.observe(canvas);return()=>ro.disconnect();
+  },[redraw]);
+
+  useEffect(()=>{
+    if(!socket)return;
+    socket.on('whiteboard_stroke',s=>{strokes.current.push(s);redraw();});
+    socket.on('whiteboard_clear',()=>{strokes.current=[];setTexts([]);redraw();});
+    socket.on('whiteboard_full_sync',({strokes:s,texts:t})=>{strokes.current=s||[];if(t)setTexts(t);redraw();});
+    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);});
+    if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{
+      if(d?.strokes){strokes.current=d.strokes;if(d.texts)setTexts(d.texts);redraw();}
+    }).catch(()=>{});
+    return()=>{['whiteboard_stroke','whiteboard_clear','whiteboard_full_sync','whiteboard_text'].forEach(e=>socket.off(e));};
+  },[socket,classId,redraw]);
+
+  const startDraw=e=>{
+    if(!isPresenter)return;e.preventDefault();
+    if(tool==='text'){
+      const pos=getPos(e,canvasRef.current);
+      setTextPos(pos);setAddingText(true);setTextInput('');return;
+    }
+    drawing.current=true;cur.current=[getPos(e,canvasRef.current)];
+  };
+
+  const moveDraw=e=>{
+    if(!drawing.current||!isPresenter)return;e.preventDefault();
+    const canvas=canvasRef.current;const pos=getPos(e,canvas);
+    cur.current.push(pos);
+    const ctx=canvas.getContext('2d');const pts=cur.current;const len=pts.length;
+    if(len<2)return;
+    ctx.beginPath();
+    if(tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=size*3;}
+    else if(tool==='highlighter'){ctx.globalCompositeOperation='multiply';ctx.strokeStyle=color+'80';ctx.lineWidth=size*2;}
+    else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=color;ctx.lineWidth=size;}
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.moveTo(pts[len-2].x,pts[len-2].y);ctx.lineTo(pts[len-1].x,pts[len-1].y);
+    ctx.stroke();ctx.globalCompositeOperation='source-over';
+  };
+
+  const endDraw=()=>{
+    if(!drawing.current||!isPresenter)return;
+    drawing.current=false;
+    const stroke={points:cur.current,color,size,tool};
+    strokes.current.push(stroke);history.current.push({type:'stroke',data:stroke});
+    if(socket&&classId)socket.emit('whiteboard_stroke',{classId,stroke});
+    cur.current=[];
+  };
+
+  const addText=()=>{
+    if(!textInput.trim()){setAddingText(false);return;}
+    const t={text:textInput,x:textPos.x,y:textPos.y,color,size:size*5+8};
+    setTexts(p=>[...p,t]);
+    if(socket&&classId)socket.emit('whiteboard_text',{classId,text:t});
+    setAddingText(false);setTextInput('');
+  };
+
+  const undo=()=>{
+    const last=history.current.pop();
+    if(!last)return;
+    if(last.type==='stroke')strokes.current=strokes.current.filter(s=>s!==last.data);
+    redraw();
+    if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts});
+  };
+
+  const clearBoard=()=>{
+    strokes.current=[];setTexts([]);history.current=[];redraw();
+    if(socket&&classId)socket.emit('whiteboard_clear',{classId});
+  };
+
+  const saveBoard=()=>{
+    apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current,texts},tok()).catch(()=>{});
+    // Also export as image
+    const canvas=canvasRef.current;if(!canvas)return;
+    const link=document.createElement('a');link.download='whiteboard.png';link.href=canvas.toDataURL();link.click();
+  };
+
+  const shareBoard=()=>{
+    if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts});
+  };
+
+  const TOOLS=[
+    {id:'pen',icon:'✏️',label:'Pen'},
+    {id:'highlighter',icon:'🖊️',label:'Highlight'},
+    {id:'text',icon:'T',label:'Text'},
+    {id:'eraser',icon:'⬜',label:'Erase'},
+  ];
+
+  return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',background:'#f8f9fa'}},
+    // Toolbar
+    isPresenter&&React.createElement('div',{style:{display:'flex',gap:4,padding:'6px 8px',background:'#fff',borderBottom:'1px solid #e9ecef',flexWrap:'wrap',alignItems:'center',flexShrink:0,boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}},
+      // Tools
+      React.createElement('div',{style:{display:'flex',gap:3,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
+        TOOLS.map(t=>React.createElement('button',{key:t.id,onClick:()=>setTool(t.id),title:t.label,style:{background:tool===t.id?'#e9c46a':'#f8f9fa',border:'1px solid '+(tool===t.id?'#d97706':'#dee2e6'),borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:t.id==='text'?13:15,fontWeight:tool===t.id?700:400,color:tool===t.id?'#92400e':'#495057'}},t.icon))
+      ),
+      // Colors
+      React.createElement('div',{style:{display:'flex',gap:2,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
+        STROKE_COLORS.slice(0,7).map(c=>React.createElement('button',{key:c,onClick:()=>setColor(c),style:{width:18,height:18,borderRadius:'50%',background:c,border:color===c?'2px solid #f59e0b':'1.5px solid #dee2e6',cursor:'pointer',flexShrink:0}}))
+      ),
+      // Size
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
+        React.createElement('input',{type:'range',min:1,max:10,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:50,accentColor:'#f59e0b'}}),
+        React.createElement('span',{style:{fontSize:10,color:'#6c757d',minWidth:20}},size)
+      ),
+      // Actions
+      React.createElement('div',{style:{display:'flex',gap:3,marginLeft:'auto'}},
+        React.createElement('button',{onClick:undo,title:'Undo',style:{background:'#f8f9fa',border:'1px solid #dee2e6',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:12,color:'#495057'}},'↩'),
+        React.createElement('button',{onClick:shareBoard,style:{background:'#dbeafe',border:'1px solid #93c5fd',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#1d4ed8',fontWeight:600}},'Share'),
+        React.createElement('button',{onClick:saveBoard,style:{background:'#dcfce7',border:'1px solid #86efac',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#166534',fontWeight:600}},'Save'),
+        React.createElement('button',{onClick:clearBoard,style:{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#991b1b',fontWeight:600}},'Clear')
       )
     ),
-    React.createElement('canvas',{ref:canvasRef,style:{flex:1,width:'100%',cursor:isPresenter?(tool==='eraser'?'cell':'crosshair'):'default',touchAction:'none'},onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw})
+    // Read-only label for students
+    !isPresenter&&React.createElement('div',{style:{padding:'4px 10px',background:'#fff',borderBottom:'1px solid #e9ecef',fontSize:11,color:'#6c757d',textAlign:'center'}},'👁 Watching live board'),
+    // Text input overlay
+    addingText&&React.createElement('div',{style:{position:'absolute',zIndex:100,top:textPos.y,left:textPos.x,display:'flex',gap:4}},
+      React.createElement('input',{autoFocus:true,value:textInput,onChange:e=>setTextInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter')addText();if(e.key==='Escape'){setAddingText(false);}},placeholder:'Type here...',style:{border:'2px solid #f59e0b',borderRadius:6,padding:'4px 8px',fontSize:size*5+8,color,outline:'none',minWidth:120,fontFamily:'inherit'}}),
+      React.createElement('button',{onClick:addText,style:{background:'#f59e0b',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontWeight:700,color:'#000'}},'Add'),
+      React.createElement('button',{onClick:()=>setAddingText(false),style:{background:'#fee2e2',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer'}},'×')
+    ),
+    React.createElement('canvas',{
+      ref:canvasRef,
+      style:{flex:1,width:'100%',cursor:isPresenter?(tool==='eraser'?'cell':tool==='text'?'text':'crosshair'):'default',touchAction:'none',background:'#fff'},
+      onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,
+      onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw
+    })
   );
 }
+
 
 function AITextBoard({msgs,aiSpk,chAvatar,currentQ,waitingAnswer}){
   const lastAI=msgs.filter(m=>m.role==='ai').slice(-1)[0];
