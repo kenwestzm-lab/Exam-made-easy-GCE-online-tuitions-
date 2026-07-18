@@ -3589,20 +3589,19 @@ function EnhancedAIClassRoom({
 const LC={dark:'#0a1a0f',card:'rgba(255,255,255,0.05)',border:'rgba(255,255,255,0.1)',gold:'#c9930a',goldl:'rgba(201,147,10,0.15)',goldb:'rgba(201,147,10,0.3)',red:'#ef4444',redl:'rgba(239,68,68,0.15)',redb:'rgba(239,68,68,0.3)',green:'#10b981',blue:'#3b82f6',white:'#fff',grey:'rgba(255,255,255,0.45)',lightgrey:'rgba(255,255,255,0.08)'};
 
 function LiveWhiteboard({classId,socket,isPresenter}){
-  const canvasRef=useRef();const drawing=useRef(false);const strokes=useRef([]);
-  const cur=useRef([]);const history=useRef([]);
+  const canvasRef=useRef();const drawing=useRef(false);
+  const strokes=useRef([]);const cur=useRef([]);const history=useRef([]);
   const [tool,setTool]=useState('pen');
-  const [color,setColor]=useState('#1a1a2e');
-  const [size,setSize]=useState(3);
+  const [color,setColor]=useState('#000000');
+  const [size,setSize]=useState(4);
   const [texts,setTexts]=useState([]);
   const [addingText,setAddingText]=useState(false);
-  const [textInput,setTextInput]=useState('');
-  const [textPos,setTextPos]=useState({x:50,y:50});
-  const [bgColor,setBgColor]=useState('#ffffff');
-  const [showColorPicker,setShowColorPicker]=useState(false);
+  const [textVal,setTextVal]=useState('');
+  const [textPos,setTextPos]=useState({x:100,y:100});
+  const [showTools,setShowTools]=useState(true);
+  const [activePalette,setActivePalette]=useState(null); // 'color'|'size'|null
 
-  const COLORS=['#1a1a2e','#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#6d6875','#0077b6','#ffffff','#000000'];
-  const STROKE_COLORS=['#000000','#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#6d6875','#0077b6','#ffffff','#6c757d'];
+  const COLORS=['#000000','#ffffff','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#6b7280'];
 
   const getPos=(e,canvas)=>{
     const rect=canvas.getBoundingClientRect();
@@ -3613,48 +3612,44 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   const redraw=useCallback(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
     const ctx=canvas.getContext('2d');
-    // White background
-    ctx.fillStyle=bgColor;ctx.fillRect(0,0,canvas.width,canvas.height);
-    // Draw grid dots
-    ctx.fillStyle='rgba(0,0,0,0.06)';
-    for(let x=20;x<canvas.width;x+=20)for(let y=20;y<canvas.height;y+=20)
-      ctx.fillRect(x,y,1.5,1.5);
-    // Draw strokes
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Dot grid
+    ctx.fillStyle='rgba(0,0,0,0.08)';
+    const dpr=window.devicePixelRatio||1;
+    const spacing=20*dpr;
+    for(let x=spacing;x<canvas.width;x+=spacing)
+      for(let y=spacing;y<canvas.height;y+=spacing)
+        ctx.fillRect(x,y,1.5,1.5);
     strokes.current.forEach(s=>{
       if(!s.points?.length)return;
-      ctx.beginPath();
-      if(s.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=(s.size||3)*3;}
-      else if(s.tool==='highlighter'){ctx.globalCompositeOperation='multiply';ctx.strokeStyle=s.color||'rgba(255,255,0,0.4)';ctx.lineWidth=(s.size||8)*2;}
-      else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color||'#000';ctx.lineWidth=s.size||3;}
+      ctx.save();
+      if(s.tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=(s.size||4)*4;}
+      else if(s.tool==='highlighter'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=(s.color||'#eab308')+'55';ctx.lineWidth=(s.size||8)*3;}
+      else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=s.color||'#000';ctx.lineWidth=s.size||4;}
       ctx.lineCap='round';ctx.lineJoin='round';
-      ctx.moveTo(s.points[0].x,s.points[0].y);
-      s.points.forEach(p=>ctx.lineTo(p.x,p.y));
-      ctx.stroke();ctx.globalCompositeOperation='source-over';
-    });
-    // Draw shapes
-    strokes.current.forEach(s=>{
-      if(!s.shape)return;
-      ctx.strokeStyle=s.color||'#000';ctx.lineWidth=s.size||2;ctx.fillStyle=s.fill||'transparent';
       ctx.beginPath();
-      if(s.shape==='rect'){ctx.rect(s.x,s.y,s.w,s.h);if(s.fill)ctx.fill();ctx.stroke();}
-      else if(s.shape==='circle'){ctx.arc(s.x+s.w/2,s.y+s.h/2,Math.abs(s.w/2),0,Math.PI*2);if(s.fill)ctx.fill();ctx.stroke();}
-      else if(s.shape==='line'){ctx.moveTo(s.x,s.y);ctx.lineTo(s.x+s.w,s.y+s.h);ctx.stroke();}
+      ctx.moveTo(s.points[0].x,s.points[0].y);
+      for(let i=1;i<s.points.length-1;i++){
+        const mx=(s.points[i].x+s.points[i+1].x)/2;
+        const my=(s.points[i].y+s.points[i+1].y)/2;
+        ctx.quadraticCurveTo(s.points[i].x,s.points[i].y,mx,my);
+      }
+      if(s.points.length>1)ctx.lineTo(s.points[s.points.length-1].x,s.points[s.points.length-1].y);
+      ctx.stroke();ctx.restore();
     });
-    // Draw texts
     texts.forEach(t=>{
-      ctx.font=(t.size||16)+'px inherit';ctx.fillStyle=t.color||'#000';
+      ctx.font=`bold ${(t.size||16)*(window.devicePixelRatio||1)}px sans-serif`;
+      ctx.fillStyle=t.color||'#000';
       ctx.fillText(t.text,t.x,t.y);
     });
-  },[bgColor,texts]);
+  },[texts]);
 
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
     const ro=new ResizeObserver(()=>{
-      const w=canvas.offsetWidth*window.devicePixelRatio;
-      const h=canvas.offsetHeight*window.devicePixelRatio;
-      canvas.width=w;canvas.height=h;
-      const ctx=canvas.getContext('2d');ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
-      redraw();
+      const dpr=window.devicePixelRatio||1;
+      canvas.width=canvas.offsetWidth*dpr;canvas.height=canvas.offsetHeight*dpr;
+      const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);redraw();
     });
     ro.observe(canvas);return()=>ro.disconnect();
   },[redraw]);
@@ -3663,19 +3658,24 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     if(!socket)return;
     socket.on('whiteboard_stroke',s=>{strokes.current.push(s);redraw();});
     socket.on('whiteboard_clear',()=>{strokes.current=[];setTexts([]);redraw();});
-    socket.on('whiteboard_full_sync',({strokes:s,texts:t})=>{strokes.current=s||[];if(t)setTexts(t);redraw();});
-    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);});
+    socket.on('whiteboard_full_sync',({strokes:s,texts:t})=>{strokes.current=s||[];if(t)setTexts(t);setTimeout(redraw,50);});
+    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);setTimeout(redraw,50);});
     if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{
-      if(d?.strokes){strokes.current=d.strokes;if(d.texts)setTexts(d.texts);redraw();}
+      if(d?.strokes){strokes.current=d.strokes;if(d.texts)setTexts(d.texts);setTimeout(redraw,100);}
     }).catch(()=>{});
-    return()=>{['whiteboard_stroke','whiteboard_clear','whiteboard_full_sync','whiteboard_text'].forEach(e=>socket.off(e));};
+    return()=>['whiteboard_stroke','whiteboard_clear','whiteboard_full_sync','whiteboard_text'].forEach(e=>socket.off(e));
   },[socket,classId,redraw]);
 
   const startDraw=e=>{
     if(!isPresenter)return;e.preventDefault();
+    setActivePalette(null);
     if(tool==='text'){
       const pos=getPos(e,canvasRef.current);
-      setTextPos(pos);setAddingText(true);setTextInput('');return;
+      const dpr=window.devicePixelRatio||1;
+      const rect=canvasRef.current.getBoundingClientRect();
+      const t=e.touches?.[0]||e;
+      setTextPos({x:t.clientX-rect.left,y:t.clientY-rect.top});
+      setAddingText(true);setTextVal('');return;
     }
     drawing.current=true;cur.current=[getPos(e,canvasRef.current)];
   };
@@ -3686,101 +3686,127 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     cur.current.push(pos);
     const ctx=canvas.getContext('2d');const pts=cur.current;const len=pts.length;
     if(len<2)return;
-    ctx.beginPath();
-    if(tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=size*3;}
-    else if(tool==='highlighter'){ctx.globalCompositeOperation='multiply';ctx.strokeStyle=color+'80';ctx.lineWidth=size*2;}
+    ctx.save();
+    if(tool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.strokeStyle='rgba(0,0,0,1)';ctx.lineWidth=size*4;}
+    else if(tool==='highlighter'){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=color+'55';ctx.lineWidth=size*3;}
     else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=color;ctx.lineWidth=size;}
-    ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.moveTo(pts[len-2].x,pts[len-2].y);ctx.lineTo(pts[len-1].x,pts[len-1].y);
-    ctx.stroke();ctx.globalCompositeOperation='source-over';
+    ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
+    if(len>=3){const mx=(pts[len-2].x+pts[len-1].x)/2;const my=(pts[len-2].y+pts[len-1].y)/2;ctx.moveTo((pts[len-3].x+pts[len-2].x)/2,(pts[len-3].y+pts[len-2].y)/2);ctx.quadraticCurveTo(pts[len-2].x,pts[len-2].y,mx,my);}
+    else{ctx.moveTo(pts[len-2].x,pts[len-2].y);ctx.lineTo(pts[len-1].x,pts[len-1].y);}
+    ctx.stroke();ctx.restore();
   };
 
   const endDraw=()=>{
     if(!drawing.current||!isPresenter)return;
     drawing.current=false;
+    if(cur.current.length<2){cur.current=[];return;}
     const stroke={points:cur.current,color,size,tool};
-    strokes.current.push(stroke);history.current.push({type:'stroke',data:stroke});
+    strokes.current.push(stroke);history.current.push({type:'stroke'});
     if(socket&&classId)socket.emit('whiteboard_stroke',{classId,stroke});
     cur.current=[];
   };
 
   const addText=()=>{
-    if(!textInput.trim()){setAddingText(false);return;}
-    const t={text:textInput,x:textPos.x,y:textPos.y,color,size:size*5+8};
+    if(!textVal.trim()){setAddingText(false);return;}
+    const dpr=window.devicePixelRatio||1;
+    const t={text:textVal,x:textPos.x*dpr,y:textPos.y*dpr,color,size:size*3+12};
     setTexts(p=>[...p,t]);
     if(socket&&classId)socket.emit('whiteboard_text',{classId,text:t});
-    setAddingText(false);setTextInput('');
+    setAddingText(false);setTextVal('');setTimeout(redraw,50);
   };
 
   const undo=()=>{
-    const last=history.current.pop();
-    if(!last)return;
-    if(last.type==='stroke')strokes.current=strokes.current.filter(s=>s!==last.data);
+    if(!history.current.length)return;
+    history.current.pop();
+    if(strokes.current.length)strokes.current.pop();
     redraw();
     if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts});
   };
 
-  const clearBoard=()=>{
-    strokes.current=[];setTexts([]);history.current=[];redraw();
-    if(socket&&classId)socket.emit('whiteboard_clear',{classId});
-  };
+  const clearBoard=()=>{strokes.current=[];setTexts([]);history.current=[];redraw();if(socket&&classId)socket.emit('whiteboard_clear',{classId});};
 
-  const saveBoard=()=>{
+  const saveImg=()=>{
     apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current,texts},tok()).catch(()=>{});
-    // Also export as image
     const canvas=canvasRef.current;if(!canvas)return;
-    const link=document.createElement('a');link.download='whiteboard.png';link.href=canvas.toDataURL();link.click();
-  };
-
-  const shareBoard=()=>{
-    if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts});
+    const a=document.createElement('a');a.download='board.png';a.href=canvas.toDataURL('image/png');a.click();
   };
 
   const TOOLS=[
     {id:'pen',icon:'✏️',label:'Pen'},
-    {id:'highlighter',icon:'🖊️',label:'Highlight'},
-    {id:'text',icon:'T',label:'Text'},
+    {id:'highlighter',icon:'🖍️',label:'Mark'},
+    {id:'text',icon:'Aa',label:'Text'},
     {id:'eraser',icon:'⬜',label:'Erase'},
   ];
 
-  return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',background:'#f8f9fa'}},
-    // Toolbar
-    isPresenter&&React.createElement('div',{style:{display:'flex',gap:4,padding:'6px 8px',background:'#fff',borderBottom:'1px solid #e9ecef',flexWrap:'wrap',alignItems:'center',flexShrink:0,boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}},
-      // Tools
-      React.createElement('div',{style:{display:'flex',gap:3,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
-        TOOLS.map(t=>React.createElement('button',{key:t.id,onClick:()=>setTool(t.id),title:t.label,style:{background:tool===t.id?'#e9c46a':'#f8f9fa',border:'1px solid '+(tool===t.id?'#d97706':'#dee2e6'),borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:t.id==='text'?13:15,fontWeight:tool===t.id?700:400,color:tool===t.id?'#92400e':'#495057'}},t.icon))
+  const BTN={background:'rgba(255,255,255,0.95)',border:'none',borderRadius:12,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,fontSize:10,fontWeight:600,color:'#374151',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',transition:'all 0.15s'};
+
+  return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',position:'relative',background:'#f3f4f6'}},
+    // Canvas
+    React.createElement('div',{style:{flex:1,position:'relative',overflow:'hidden'}},
+      React.createElement('canvas',{
+        ref:canvasRef,
+        style:{width:'100%',height:'100%',cursor:!isPresenter?'default':tool==='eraser'?'cell':tool==='text'?'text':'crosshair',touchAction:'none',display:'block'},
+        onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,
+        onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw
+      }),
+      // Text input floating
+      addingText&&React.createElement('div',{style:{position:'absolute',top:textPos.y,left:Math.min(textPos.x,window.innerWidth-200),zIndex:50,background:'#fff',borderRadius:12,padding:10,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',display:'flex',flexDirection:'column',gap:6,minWidth:180}},
+        React.createElement('input',{autoFocus:true,value:textVal,onChange:e=>setTextVal(e.target.value),onKeyDown:e=>{if(e.key==='Enter')addText();if(e.key==='Escape')setAddingText(false);},placeholder:'Type your text...',style:{border:'2px solid #f59e0b',borderRadius:8,padding:'6px 10px',fontSize:14,outline:'none',fontFamily:'inherit',color}}),
+        React.createElement('div',{style:{display:'flex',gap:6}},
+          React.createElement('button',{onClick:addText,style:{flex:1,background:'linear-gradient(135deg,#f59e0b,#d97706)',color:'#000',border:'none',borderRadius:8,padding:'6px',fontWeight:700,cursor:'pointer',fontSize:13}},'Add'),
+          React.createElement('button',{onClick:()=>setAddingText(false),style:{background:'#fee2e2',border:'none',borderRadius:8,padding:'6px 10px',cursor:'pointer',color:'#991b1b'}},'✕')
+        )
       ),
-      // Colors
-      React.createElement('div',{style:{display:'flex',gap:2,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
-        STROKE_COLORS.slice(0,7).map(c=>React.createElement('button',{key:c,onClick:()=>setColor(c),style:{width:18,height:18,borderRadius:'50%',background:c,border:color===c?'2px solid #f59e0b':'1.5px solid #dee2e6',cursor:'pointer',flexShrink:0}}))
-      ),
-      // Size
-      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4,borderRight:'1px solid #e9ecef',paddingRight:6,marginRight:2}},
-        React.createElement('input',{type:'range',min:1,max:10,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:50,accentColor:'#f59e0b'}}),
-        React.createElement('span',{style:{fontSize:10,color:'#6c757d',minWidth:20}},size)
-      ),
-      // Actions
-      React.createElement('div',{style:{display:'flex',gap:3,marginLeft:'auto'}},
-        React.createElement('button',{onClick:undo,title:'Undo',style:{background:'#f8f9fa',border:'1px solid #dee2e6',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:12,color:'#495057'}},'↩'),
-        React.createElement('button',{onClick:shareBoard,style:{background:'#dbeafe',border:'1px solid #93c5fd',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#1d4ed8',fontWeight:600}},'Share'),
-        React.createElement('button',{onClick:saveBoard,style:{background:'#dcfce7',border:'1px solid #86efac',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#166534',fontWeight:600}},'Save'),
-        React.createElement('button',{onClick:clearBoard,style:{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#991b1b',fontWeight:600}},'Clear')
+      // Student label
+      !isPresenter&&React.createElement('div',{style:{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.6)',color:'#fff',borderRadius:20,padding:'4px 12px',fontSize:11,pointerEvents:'none'}},'👁 Live Board')
+    ),
+    // Color palette popup
+    activePalette==='color'&&React.createElement('div',{style:{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:16,padding:12,boxShadow:'0 8px 32px rgba(0,0,0,0.15)',display:'flex',flexWrap:'wrap',gap:8,zIndex:50,width:220}},
+      COLORS.map(c=>React.createElement('button',{key:c,onClick:()=>{setColor(c);setActivePalette(null);},style:{width:32,height:32,borderRadius:8,background:c,border:color===c?'3px solid #f59e0b':'2px solid #e5e7eb',cursor:'pointer',boxShadow:color===c?'0 0 0 2px #f59e0b':'none',transition:'all 0.1s'}}))
+    ),
+    // Size popup
+    activePalette==='size'&&React.createElement('div',{style:{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:16,padding:'12px 16px',boxShadow:'0 8px 32px rgba(0,0,0,0.15)',zIndex:50,width:200}},
+      React.createElement('div',{style:{fontSize:12,color:'#6b7280',marginBottom:8,fontWeight:600}},'Brush Size: '+size+'px'),
+      React.createElement('input',{type:'range',min:1,max:16,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:'100%',accentColor:'#f59e0b'}}),
+      React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginTop:6}},
+        [1,4,8,12,16].map(s=>React.createElement('button',{key:s,onClick:()=>{setSize(s);setActivePalette(null);},style:{width:28,height:28,borderRadius:'50%',background:size===s?'#f59e0b':'#f3f4f6',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}},
+          React.createElement('div',{style:{width:s,height:s,borderRadius:'50%',background:size===s?'#000':'#6b7280',maxWidth:16,maxHeight:16}})
+        ))
       )
     ),
-    // Read-only label for students
-    !isPresenter&&React.createElement('div',{style:{padding:'4px 10px',background:'#fff',borderBottom:'1px solid #e9ecef',fontSize:11,color:'#6c757d',textAlign:'center'}},'👁 Watching live board'),
-    // Text input overlay
-    addingText&&React.createElement('div',{style:{position:'absolute',zIndex:100,top:textPos.y,left:textPos.x,display:'flex',gap:4}},
-      React.createElement('input',{autoFocus:true,value:textInput,onChange:e=>setTextInput(e.target.value),onKeyDown:e=>{if(e.key==='Enter')addText();if(e.key==='Escape'){setAddingText(false);}},placeholder:'Type here...',style:{border:'2px solid #f59e0b',borderRadius:6,padding:'4px 8px',fontSize:size*5+8,color,outline:'none',minWidth:120,fontFamily:'inherit'}}),
-      React.createElement('button',{onClick:addText,style:{background:'#f59e0b',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontWeight:700,color:'#000'}},'Add'),
-      React.createElement('button',{onClick:()=>setAddingText(false),style:{background:'#fee2e2',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer'}},'×')
-    ),
-    React.createElement('canvas',{
-      ref:canvasRef,
-      style:{flex:1,width:'100%',cursor:isPresenter?(tool==='eraser'?'cell':tool==='text'?'text':'crosshair'):'default',touchAction:'none',background:'#fff'},
-      onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,
-      onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw
-    })
+    // Bottom toolbar - only for presenter
+    isPresenter&&React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'8px 10px',background:'rgba(249,250,251,0.97)',borderTop:'1px solid #e5e7eb',backdropFilter:'blur(8px)',flexShrink:0}},
+      // Tool buttons
+      TOOLS.map(t=>React.createElement('button',{key:t.id,onClick:()=>{setTool(t.id);setActivePalette(null);},style:{...BTN,padding:'7px 10px',minWidth:44,background:tool===t.id?'linear-gradient(135deg,#f59e0b,#d97706)':'rgba(255,255,255,0.95)',color:tool===t.id?'#000':'#374151',transform:tool===t.id?'scale(1.08)':'scale(1)',boxShadow:tool===t.id?'0 4px 12px rgba(245,158,11,0.4)':'0 2px 8px rgba(0,0,0,0.08)'}},
+        React.createElement('span',{style:{fontSize:16}},t.icon),
+        t.label
+      )),
+      React.createElement('div',{style:{width:1,height:36,background:'#e5e7eb',margin:'0 2px'}}),
+      // Color button
+      React.createElement('button',{onClick:()=>setActivePalette(activePalette==='color'?null:'color'),style:{...BTN,padding:'7px 10px',minWidth:44,border:activePalette==='color'?'2px solid #f59e0b':'2px solid transparent'}},
+        React.createElement('div',{style:{width:22,height:22,borderRadius:6,background:color,border:'2px solid #e5e7eb',boxShadow:'0 1px 4px rgba(0,0,0,0.15)'}}),
+        'Color'
+      ),
+      // Size button
+      React.createElement('button',{onClick:()=>setActivePalette(activePalette==='size'?null:'size'),style:{...BTN,padding:'7px 10px',minWidth:44,border:activePalette==='size'?'2px solid #f59e0b':'2px solid transparent'}},
+        React.createElement('div',{style:{width:size+4,height:size+4,borderRadius:'50%',background:'#374151',maxWidth:20,maxHeight:20}}),
+        'Size'
+      ),
+      React.createElement('div',{style:{flex:1}}),
+      // Action buttons
+      React.createElement('button',{onClick:undo,title:'Undo',style:{...BTN,padding:'7px 10px',minWidth:40}},
+        React.createElement('span',{style:{fontSize:16}},'↩'),'Undo'
+      ),
+      React.createElement('button',{onClick:()=>{if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts});},style:{...BTN,padding:'7px 10px',minWidth:44,color:'#1d4ed8'}},
+        React.createElement('span',{style:{fontSize:16}},'📤'),'Share'
+      ),
+      React.createElement('button',{onClick:saveImg,style:{...BTN,padding:'7px 10px',minWidth:44,color:'#166534'}},
+        React.createElement('span',{style:{fontSize:16}},'💾'),'Save'
+      ),
+      React.createElement('button',{onClick:clearBoard,style:{...BTN,padding:'7px 10px',minWidth:44,color:'#991b1b'}},
+        React.createElement('span',{style:{fontSize:16}},'🗑️'),'Clear'
+      )
+    )
   );
 }
 
