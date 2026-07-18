@@ -3765,82 +3765,305 @@ function ClassLobby({cls,profile,onJoin,onStart,onBack}){
 function LiveClassRoom({classData,onExit,profile,socket}){
   const ck=classData?.ai_character||'ken';
   const isAI=classData?.presenter_type==='ai';
-  const ch={ken:{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫'},msimbi:{name:"Mis M'simbi",gender:'female',avatar:'👩‍🏫'}}[ck]||{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫'};
+  const ch={ken:{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'},msimbi:{name:"Mis M'simbi",gender:'female',avatar:'👩‍🏫',color:'#a78bfa'}}[ck]||{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'};
   const isPresenter=profile?.role==='tutor'||profile?.role==='admin';
-  const sn=()=>classData?.subject_name||classData?.subject_id||'General';
-  const [msgs,setMsgs]=useState([]);const [students,setStudents]=useState([]);const [hands,setHands]=useState([]);
-  const [handUp,setHandUp]=useState(false);const [listening,setListening]=useState(false);const [scanningImg,setScanningImg]=useState(false);
-  const [aiSpk,setAiSpk]=useState(false);const [progress,setProgress]=useState(0);const [ended,setEnded]=useState(false);
-  const [quiz,setQuiz]=useState(null);const [input,setInput]=useState('');const [panel,setPanel]=useState('board');
-  const [waitingAnswer,setWaitingAnswer]=useState(false);const [currentQ,setCurrentQ]=useState('');
-  const [calledStudent,setCalledStudent]=useState(null);const [breath,setBreath]=useState(1);
-  const spkQ=useRef([]);const isspk=useRef(false);const chunks=useRef([]);const chunkIdx=useRef(0);
-  const done=useRef(false);const msgsEnd=useRef();const curQ=useRef('');const waiting=useRef(false);const autoTimer=useRef(null);
+  const subName=()=>classData?.subject_name||SUBJECTS.find(s=>s.id===Number(classData?.subject_id))?.n||'General';
 
-  useEffect(()=>{if(!aiSpk){setBreath(1);return;}let p=0;const t=setInterval(()=>{p=(p+1)%4;setBreath([1,1.05,1.09,1.05][p]);},380);return()=>clearInterval(t);},[aiSpk]);
+  // State
+  const [msgs,setMsgs]=useState([]);
+  const [students,setStudents]=useState([]);
+  const [aiSpk,setAiSpk]=useState(false);
+  const [progress,setProgress]=useState(0);
+  const [ended,setEnded]=useState(false);
+  const [quiz,setQuiz]=useState(null);
+  const [input,setInput]=useState('');
+  const [panel,setPanel]=useState('board');
+  const [waitingAnswer,setWaitingAnswer]=useState(false);
+  const [currentQ,setCurrentQ]=useState('');
+  const [listening,setListening]=useState(false);
+  const [breath,setBreath]=useState(1);
+  const [quizReady,setQuizReady]=useState(false);
+  const [scanImg,setScanImg]=useState(false);
+  const [lessonReady,setLessonReady]=useState(false);
 
-  const addMsg=useCallback((role,text,meta={})=>{setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role,text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),...meta}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);},[]);
+  const spkQ=useRef([]);const isspk=useRef(false);
+  const chunks=useRef([]);const chunkIdx=useRef(0);
+  const done=useRef(false);const msgsEnd=useRef();
+  const curQ=useRef('');const waiting=useRef(false);
+  const autoTimer=useRef(null);
 
-  const processSpk=useCallback(()=>{if(isspk.current||!spkQ.current.length)return;const{text,cb}=spkQ.current.shift();isspk.current=true;setAiSpk(true);setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role:'ai',text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);if(socket&&classData?._id)socket.emit('ai_speaking',{classId:classData._id,text,character:ck});ZambianVoice.speak(text,ch.gender,null,()=>{isspk.current=false;setAiSpk(false);if(socket&&classData?._id)socket.emit('ai_done_speaking',{classId:classData._id});if(cb)cb();else setTimeout(processSpk,300);});},[socket,classData,ck,ch.gender]);
+  // Gold theme
+  const G={
+    bg:'linear-gradient(160deg,#0a0a0a,#1a1200,#0d0a00)',
+    gold:'#f59e0b',goldl:'rgba(245,158,11,0.15)',goldb:'rgba(245,158,11,0.3)',
+    white:'#fff',grey:'rgba(255,255,255,0.5)',
+    dark:'rgba(0,0,0,0.6)',card:'rgba(255,255,255,0.04)',
+    border:'rgba(245,158,11,0.15)',red:'#ef4444',green:'#10b981'
+  };
 
-  const say=useCallback((text,cb=null)=>{if(!text?.trim())return;spkQ.current.push({text,cb});if(!isspk.current)processSpk();},[processSpk]);
+  // Breathing animation when AI speaks
+  useEffect(()=>{
+    if(!aiSpk){setBreath(1);return;}
+    let p=0;
+    const t=setInterval(()=>{p=(p+1)%4;setBreath([1,1.04,1.08,1.04][p]);},400);
+    return()=>clearInterval(t);
+  },[aiSpk]);
 
-  const next=useCallback(async()=>{if(done.current||chunkIdx.current>=chunks.current.length){if(!done.current){done.current=true;setProgress(100);say('Excellent work today class! We have completed our lesson. A quiz is now being prepared. Well done everyone!');try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:sn(),topic:classData?.lesson_topic||sn(),count:5,type:'mcq',character:ck},tok());if(qr?.questions){setQuiz({questions:qr.questions,pending:true});if(socket)socket.emit('ai_quiz_ready',{classId:classData._id,questions:qr.questions});}}catch(e){}}return;}const chunk=chunks.current[chunkIdx.current++];setProgress(Math.round(chunkIdx.current/chunks.current.length*100));if(chunk.type==='question'){curQ.current=chunk.question||chunk.text;setCurrentQ(curQ.current);waiting.current=true;setWaitingAnswer(true);say(curQ.current,()=>{autoTimer.current=setTimeout(()=>{if(!waiting.current)return;waiting.current=false;setWaitingAnswer(false);say('Let me explain that. Think carefully about what we just covered.',()=>setTimeout(next,800));},12000);});}else{say(chunk.text,()=>setTimeout(next,600));}},[say,classData,ck,socket,sn]);
+  const addMsg=useCallback((role,text,meta={})=>{
+    setMsgs(p=>[...p.slice(-100),{id:Date.now()+Math.random(),role,text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),...meta}]);
+    setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);
+  },[]);
 
-  const callStudent=useCallback(async(name)=>{if(autoTimer.current)clearTimeout(autoTimer.current);waiting.current=false;setWaitingAnswer(false);setCalledStudent(name);try{const r=await apiFetch('POST','/ai/call-student',{student_name:name,question:curQ.current,subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300)},tok());if(r.reply)say(r.reply);}catch(e){say('Yes '+name+'! Please share your answer with the class.');}},[say,ck,classData,sn]);
+  const processSpk=useCallback(()=>{
+    if(isspk.current||!spkQ.current.length)return;
+    const{text,cb}=spkQ.current.shift();
+    isspk.current=true;setAiSpk(true);
+    addMsg('ai',text);
+    if(socket&&classData?._id)socket.emit('ai_speaking',{classId:classData._id,text,character:ck});
+    ZambianVoice.speak(text,ch.gender,null,()=>{
+      isspk.current=false;setAiSpk(false);
+      if(socket&&classData?._id)socket.emit('ai_done_speaking',{classId:classData._id});
+      if(cb)cb();else setTimeout(processSpk,400);
+    });
+  },[socket,classData,ck,ch.gender,addMsg]);
 
-  const voiceAnswer=useCallback(()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){addMsg('system','Voice not supported. Please type your answer.');return;}ZambianVoice.stop();const rec=new SR();rec.lang='en-US';rec.continuous=false;rec.interimResults=false;setListening(true);addMsg('system','Listening... speak your answer now.');rec.onresult=async(e)=>{const ans=e.results[0][0].transcript;setListening(false);setHandUp(false);setCalledStudent(null);if(socket&&classData?._id){socket.emit('hand_raise',{classId:classData._id,userId:profile?._id,name:profile?.name,raised:false});socket.emit('class_question',{classId:classData._id,question:ans,studentName:profile?.name});}addMsg('me',ans,{name:profile?.name});try{const r=await apiFetch('POST','/ai/check-answer',{student_name:profile?.name,student_answer:ans,question:curQ.current||'the lesson',subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300)},tok());if(r.reply)say(r.reply,()=>{waiting.current=false;setWaitingAnswer(false);setTimeout(next,1000);});}catch(e){waiting.current=false;setWaitingAnswer(false);next();}}; rec.onerror=()=>{setListening(false);addMsg('system','Could not hear. Please type.');};rec.onend=()=>setListening(false);rec.start();},[socket,classData,profile,ck,say,next,addMsg,sn]);
+  const say=useCallback((text,cb=null)=>{
+    if(!text?.trim())return;
+    spkQ.current.push({text,cb});
+    if(!isspk.current)processSpk();
+  },[processSpk]);
 
-  useEffect(()=>{if(!classData?._id)return;let gone=false;if(socket)socket.emit('join_class',{classId:classData._id,user:{_id:profile?._id,name:profile?.name,role:profile?.role}});if(!isAI)return;(async()=>{let intro='Good day class! I am '+ch.name+'. Welcome to today lesson. Get ready to think deeply!';try{const r=await apiFetch('POST','/ai/lesson-intro',{subject:sn(),topic:classData?.lesson_topic||'',character:ck,lesson_script:classData?.lesson_script||''},tok());if(r.intro)intro=r.intro;}catch(e){}if(gone)return;if(classData?.lesson_script){try{const lb=await apiFetch('POST','/ai/build-lesson',{subject:sn(),topic:classData?.lesson_topic||sn(),notes:classData.lesson_script,character:ck},tok());if(lb?.chunks?.length)chunks.current=lb.chunks;}catch(e){chunks.current=classData.lesson_script.split(/[.!?]+/).map(c=>c.trim()).filter(c=>c.length>10).map((text,i)=>({text,type:i%4===3?'question':'teach',question:i%4===3?text+' What do you think?':null}));}}if(gone)return;if(classData?.lesson_image_url){say(intro,()=>{if(gone)return;addMsg('ai','Take a look at this, class.',{image:classData.lesson_image_url});if(socket)socket.emit('class_image',{classId:classData._id,url:classData.lesson_image_url,caption:'Lesson photo'});say(classData.lesson_image_explanation||'Now class, look carefully at this image. It will help you understand today lesson.',()=>{if(!gone)setTimeout(next,800);});});}else{say(intro,()=>{if(!gone)setTimeout(next,800);});}})();return()=>{gone=true;};},[classData?._id]);
+  // AI asks question and WAITS for student answer
+  const askQuestion=useCallback((question)=>{
+    curQ.current=question;
+    setCurrentQ(question);
+    waiting.current=true;
+    setWaitingAnswer(true);
+    setPanel('board');
+    say(question,()=>{
+      // Wait 20 seconds for student answer before continuing
+      autoTimer.current=setTimeout(()=>{
+        if(!waiting.current)return;
+        waiting.current=false;
+        setWaitingAnswer(false);
+        say('Let me explain the answer. Listen carefully.',()=>setTimeout(next,600));
+      },20000);
+    });
+  },[say]);
 
-  useEffect(()=>{if(!socket)return;const onJoin=({user})=>{setStudents(p=>[...p.filter(s=>s._id!==user?._id),user].filter(Boolean));addMsg('system',(user?.name||'A student')+' joined the class.');};const onLeft=({userId})=>setStudents(p=>p.filter(s=>s._id!==userId));const onQ=({question,studentName})=>{addMsg('student',question,{name:studentName});if(!waiting.current&&isAI)apiFetch('POST','/ai/chat',{message:'Student '+studentName+' asks: '+question,subject:sn(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,300),conversation_history:[]},tok()).then(r=>{if(r.reply)say(r.reply);}).catch(()=>{});};const onHand=({userId,name,raised})=>{if(raised){setHands(p=>[...p.filter(h=>h.userId!==userId),{userId,name}]);if(waiting.current&&isAI)setTimeout(()=>callStudent(name),800);}else setHands(p=>p.filter(h=>h.userId!==userId));};const onStatus=({status})=>{if(status==='ended'){setEnded(true);ZambianVoice.stop();done.current=true;}};const onQuiz=q=>{setQuiz(q);setPanel('quiz');addMsg('system','Quiz received! Go to Quiz tab.');};const onAIQuiz=({questions})=>{if(isPresenter){setQuiz({questions,pending:true});setPanel('quiz');addMsg('system','AI generated a quiz. Please review and post.');}};const onImg=({url,caption})=>{setMsgs(p=>[...p.slice(-80),{id:Date.now()+Math.random(),role:'ai',text:caption||'',image:url,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}]);setTimeout(()=>msgsEnd.current?.scrollIntoView({behavior:'smooth'}),80);};const onAISpk=({text})=>{if(!isAI)addMsg('ai',text);};socket.on('student_joined',onJoin);socket.on('student_left',onLeft);socket.on('class_question',onQ);socket.on('hand_raise',onHand);socket.on('class_status_change',onStatus);socket.on('class_quiz',onQuiz);socket.on('ai_quiz_ready',onAIQuiz);socket.on('class_image',onImg);socket.on('ai_speaking',onAISpk);return()=>{['student_joined','student_left','class_question','hand_raise','class_status_change','class_quiz','ai_quiz_ready','class_image','ai_speaking'].forEach(e=>socket.off(e));};},[socket,callStudent,isPresenter,isAI,say,ck,classData]);
+  const next=useCallback(async()=>{
+    if(done.current||chunkIdx.current>=chunks.current.length){
+      if(!done.current){
+        done.current=true;setProgress(100);
+        say('Excellent work today! We have finished our lesson. I am now preparing a quiz for you. Well done everyone!',async()=>{
+          try{
+            const qr=await apiFetch('POST','/ai/generate-test',{subject:subName(),topic:classData?.lesson_topic||subName(),count:10,type:'mcq',character:ck},tok());
+            if(qr?.questions){
+              setQuiz({questions:qr.questions,pending:true});
+              setQuizReady(true);
+              if(socket)socket.emit('ai_quiz_ready',{classId:classData._id,questions:qr.questions});
+              addMsg('system','Quiz ready! Go to Quiz tab.');
+            }
+          }catch(e){}
+        });
+      }return;
+    }
+    const chunk=chunks.current[chunkIdx.current++];
+    setProgress(Math.round(chunkIdx.current/chunks.current.length*100));
+    if(chunk.type==='question'){
+      askQuestion(chunk.question||chunk.text+' What do you think?');
+    }else{
+      say(chunk.text,()=>setTimeout(next,500));
+    }
+  },[say,askQuestion,classData,ck,socket,subName,addMsg]);
 
-  const sendMsg=async()=>{if(!input.trim())return;const q=input.trim();setInput('');addMsg('me',q,{name:profile?.name});if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:q,studentName:profile?.name});};
-  const raiseHand=()=>{const n=!handUp;setHandUp(n);if(socket&&classData?._id)socket.emit('hand_raise',{classId:classData._id,userId:profile?._id,name:profile?.name,raised:n});if(n)addMsg('system','You raised your hand. Wait for Teacher to call on you.');};
-  const endClass=async()=>{ZambianVoice.stop();done.current=true;try{await apiFetch('PUT','/live-classes/'+classData._id,{status:'ended'},tok());}catch(e){}if(socket)socket.emit('class_status_change',{classId:classData._id,status:'ended'});setEnded(true);};
+  // Student submits answer (text or voice)
+  const submitAnswer=useCallback(async(ans)=>{
+    if(!ans?.trim())return;
+    if(autoTimer.current)clearTimeout(autoTimer.current);
+    waiting.current=false;setWaitingAnswer(false);
+    addMsg('me',ans,{name:profile?.name});
+    if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:ans,studentName:profile?.name});
+    try{
+      const r=await apiFetch('POST','/ai/check-answer',{student_name:profile?.name,student_answer:ans,question:curQ.current||'the lesson',subject:subName(),character:ck,lesson_context:(classData?.lesson_script||'').substring(0,400)},tok());
+      if(r.reply)say(r.reply,()=>setTimeout(next,800));
+    }catch(e){next();}
+  },[socket,classData,profile,ck,say,next,addMsg,subName]);
 
-  if(ended)return React.createElement('div',{style:{minHeight:'100vh',background:'linear-gradient(160deg,#07160a,#0d2b17)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:LC.white}},React.createElement('div',{style:{fontSize:64,marginBottom:16}},'END'),React.createElement('h2',{style:{color:LC.gold,fontFamily:"'Playfair Display',serif",marginBottom:8}},'Class Ended'),React.createElement('p',{style:{color:LC.grey,marginBottom:24}},'Thank you for attending!'),React.createElement('button',{onClick:onExit,style:{background:LC.gold,color:'#000',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:700,cursor:'pointer',fontSize:15}},'Back to Classes'));
+  const voiceAnswer=useCallback(()=>{
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){addMsg('system','Voice not supported. Please type.');return;}
+    ZambianVoice.stop();
+    const rec=new SR();rec.lang='en-US';rec.continuous=false;rec.interimResults=false;
+    setListening(true);
+    addMsg('system','🎤 Listening... speak now');
+    rec.onresult=e=>{const ans=e.results[0][0].transcript;setListening(false);submitAnswer(ans);};
+    rec.onerror=()=>{setListening(false);addMsg('system','Could not hear. Please type.');};
+    rec.onend=()=>setListening(false);
+    rec.start();
+  },[submitAnswer,addMsg]);
 
-  const nav=[{id:'board',label:isAI?'Board':'Whiteboard',icon:'B'},{id:'chat',label:'Chat',icon:'C'},{id:'participants',label:'People',icon:'P'},{id:'quiz',label:'Quiz',icon:'Q'},{id:'materials',label:'Files',icon:'F'}];
+  // Init class
+  useEffect(()=>{
+    if(!classData?._id)return;
+    let gone=false;
+    if(socket)socket.emit('join_class',{classId:classData._id,user:{_id:profile?._id,name:profile?.name,role:profile?.role}});
+    if(!isAI)return;
+    (async()=>{
+      let intro='Good day, class! I am '+ch.name+'. Welcome. Today we study '+subName()+'. Pay attention!';
+      try{
+        const r=await apiFetch('POST','/ai/lesson-intro',{subject:subName(),topic:classData?.lesson_topic||'',character:ck,lesson_script:classData?.lesson_script||''},tok());
+        if(r.intro)intro=r.intro;
+      }catch(e){}
+      if(gone)return;
+      if(classData?.lesson_script){
+        try{
+          const lb=await apiFetch('POST','/ai/build-lesson',{subject:subName(),topic:classData?.lesson_topic||subName(),notes:classData.lesson_script,character:ck},tok());
+          if(lb?.chunks?.length){chunks.current=lb.chunks;setLessonReady(true);}
+        }catch(e){
+          chunks.current=classData.lesson_script.split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:i%5===4?'question':'teach',question:i%5===4?text.trim()+' Can you explain this?':null}));
+          setLessonReady(true);
+        }
+      }
+      if(gone)return;
+      say(intro,()=>{if(!gone)setTimeout(next,600);});
+    })();
+    return()=>{gone=true;};
+  },[classData?._id]);
 
-  return React.createElement('div',{style:{height:'100vh',display:'flex',flexDirection:'column',background:'linear-gradient(160deg,#07160a,#0d2b17)',color:LC.white,overflow:'hidden'}},
-    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(0,0,0,0.5)',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}},
-      React.createElement('button',{onClick:()=>{ZambianVoice.stop();onExit();},style:{background:'none',border:'none',color:LC.grey,fontSize:18,cursor:'pointer',padding:4}},'Back'),
-      isAI&&React.createElement('div',{style:{fontSize:20,flexShrink:0,filter:aiSpk?'drop-shadow(0 0 8px '+LC.gold+')':'none',transition:'filter 0.4s'}},ch.avatar),
+  // Socket events
+  useEffect(()=>{
+    if(!socket)return;
+    const onJoin=({user})=>{setStudents(p=>[...p.filter(s=>s._id!==user?._id),user].filter(Boolean));addMsg('system',(user?.name||'Student')+' joined.');};
+    const onLeft=({userId})=>setStudents(p=>p.filter(s=>s._id!==userId));
+    const onQ=({question,studentName})=>{
+      addMsg('student',question,{name:studentName});
+      // AI responds to questions from students even when not waiting
+      if(isAI&&!waiting.current){
+        apiFetch('POST','/ai/chat',{message:studentName+' asks: '+question,subject:subName(),character:ck,conversation_history:[],lesson_context:(classData?.lesson_script||'').substring(0,300)},tok())
+          .then(r=>{if(r.reply)say(r.reply);}).catch(()=>{});
+      }
+    };
+    const onStatus=({status})=>{if(status==='ended'){setEnded(true);ZambianVoice.stop();done.current=true;}};
+    const onQuiz=q=>{setQuiz(q);setPanel('quiz');addMsg('system','Quiz received!');};
+    const onAIQuiz=({questions})=>{if(isPresenter){setQuiz({questions,pending:true});setPanel('quiz');addMsg('system','AI quiz ready. Review and post.');}};
+    const onImg=({url,caption})=>{addMsg('ai',caption||'',{image:url});};
+    const onAISpk=({text})=>{if(!isAI)addMsg('ai',text);};
+    socket.on('student_joined',onJoin);socket.on('student_left',onLeft);socket.on('class_question',onQ);
+    socket.on('class_status_change',onStatus);socket.on('class_quiz',onQuiz);
+    socket.on('ai_quiz_ready',onAIQuiz);socket.on('class_image',onImg);socket.on('ai_speaking',onAISpk);
+    return()=>['student_joined','student_left','class_question','class_status_change','class_quiz','ai_quiz_ready','class_image','ai_speaking'].forEach(e=>socket.off(e));
+  },[socket,isAI,isPresenter,say,ck,classData,subName,addMsg]);
+
+  const sendMsg=()=>{
+    if(!input.trim())return;
+    const q=input.trim();setInput('');
+    if(waitingAnswer){submitAnswer(q);return;}
+    addMsg('me',q,{name:profile?.name});
+    if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:q,studentName:profile?.name});
+  };
+
+  const endClass=async()=>{
+    ZambianVoice.stop();done.current=true;
+    try{await apiFetch('PUT','/live-classes/'+classData._id,{status:'ended'},tok());}catch(e){}
+    if(socket)socket.emit('class_status_change',{classId:classData._id,status:'ended'});
+    setEnded(true);
+  };
+
+  if(ended)return React.createElement('div',{style:{minHeight:'100vh',background:G.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:G.white}},
+    React.createElement('div',{style:{fontSize:64,marginBottom:12}},'🎓'),
+    React.createElement('h2',{style:{color:G.gold,fontSize:24,marginBottom:8}},'Class Completed!'),
+    React.createElement('p',{style:{color:G.grey,marginBottom:24}},'Well done for attending today.'),
+    quizReady&&React.createElement('p',{style:{color:G.green,marginBottom:16,fontWeight:600}},'✅ Quiz has been sent to your tutor for review'),
+    React.createElement('button',{onClick:onExit,style:{background:'linear-gradient(135deg,'+G.gold+',#d97706)',color:'#000',border:'none',borderRadius:12,padding:'12px 32px',fontWeight:700,cursor:'pointer',fontSize:15}},'← Back to Classes')
+  );
+
+  const navItems=[
+    {id:'board',icon:'📋',label:isAI?'Lesson':'Board'},
+    {id:'chat',icon:'💬',label:'Chat'},
+    {id:'participants',icon:'👥',label:'People'+(students.length?'('+students.length+')':'')},
+    {id:'quiz',icon:'📝',label:'Quiz'+(quizReady?'🟡':'')},
+    {id:'materials',icon:'📁',label:'Files'}
+  ];
+
+  // BOARD PANEL - AI lesson display
+  const BoardPanel=()=>React.createElement('div',{style:{flex:1,overflow:'auto',padding:'12px 14px'}},
+    msgs.filter(m=>m.role==='ai'||m.role==='system'||m.role==='student'||m.role==='me').map((m,i)=>
+      React.createElement('div',{key:m.id||i,style:{marginBottom:10,display:'flex',flexDirection:m.role==='me'?'row-reverse':'row',gap:8,alignItems:'flex-start'}},
+        m.role==='ai'&&React.createElement('div',{style:{width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,'+G.gold+',#d97706)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,transform:'scale('+breath+')',transition:'transform 0.4s'}},[ch.avatar]),
+        React.createElement('div',{style:{maxWidth:'82%'}},
+          m.role!=='me'&&m.role!=='system'&&React.createElement('div',{style:{fontSize:10,color:G.gold,fontWeight:600,marginBottom:3}},m.role==='ai'?ch.name:m.name||'Student'),
+          m.image&&React.createElement('img',{src:m.image,alt:'',style:{maxWidth:220,borderRadius:10,display:'block',marginBottom:4,border:'1px solid '+G.goldb}}),
+          m.text&&React.createElement('div',{style:{background:m.role==='me'?'linear-gradient(135deg,'+G.gold+',#d97706)':m.role==='system'?'rgba(255,255,255,0.05)':G.card,color:m.role==='me'?'#000':G.white,borderRadius:m.role==='me'?'14px 14px 4px 14px':'14px 14px 14px 4px',padding:'9px 13px',fontSize:13,lineHeight:1.5,border:m.role==='ai'?'1px solid '+G.goldb:'none'}},m.text),
+          React.createElement('div',{style:{fontSize:10,color:G.grey,marginTop:2,textAlign:m.role==='me'?'right':'left'}},m.time)
+        )
+      )
+    ),
+    waitingAnswer&&React.createElement('div',{style:{background:'linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.06))',border:'2px solid '+G.goldb,borderRadius:14,padding:'14px 16px',margin:'10px 0',textAlign:'center'}},
+      React.createElement('div',{style:{fontSize:18,marginBottom:6}},'✋'),
+      React.createElement('div',{style:{color:G.gold,fontWeight:700,fontSize:14,marginBottom:4}},'Your Turn to Answer!'),
+      React.createElement('div',{style:{color:G.grey,fontSize:12,marginBottom:10}},currentQ),
+      React.createElement('button',{onClick:voiceAnswer,disabled:listening,style:{background:listening?G.goldb:'linear-gradient(135deg,'+G.gold+',#d97706)',color:listening?G.white:'#000',border:'none',borderRadius:10,padding:'10px 20px',fontWeight:700,cursor:'pointer',fontSize:13}},listening?'🎤 Listening...':'🎤 Speak Answer')
+    ),
+    React.createElement('div',{ref:msgsEnd})
+  );
+
+  return React.createElement('div',{style:{height:'100vh',display:'flex',flexDirection:'column',background:G.bg,color:G.white,overflow:'hidden'}},
+    // Header
+    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(0,0,0,0.7)',borderBottom:'1px solid '+G.goldb,flexShrink:0,backdropFilter:'blur(10px)'}},
+      React.createElement('button',{onClick:()=>{ZambianVoice.stop();onExit();},style:{background:'none',border:'1px solid rgba(255,255,255,0.1)',color:G.white,fontSize:13,cursor:'pointer',padding:'5px 10px',borderRadius:8,flexShrink:0}},'← Back'),
+      isAI&&React.createElement('div',{style:{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,'+G.gold+',#d97706)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0,transform:'scale('+breath+')',transition:'transform 0.4s ease',boxShadow:aiSpk?'0 0 16px '+G.gold:'none'}},ch.avatar),
       React.createElement('div',{style:{flex:1,minWidth:0}},
-        React.createElement('div',{style:{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},classData?.title||'Live Class'),
-        React.createElement('div',{style:{fontSize:11,color:aiSpk?LC.gold:LC.grey}},isAI?(aiSpk?'Speaking...':'Live'):'Live - '+students.length+' students')
+        React.createElement('div',{style:{fontWeight:700,fontSize:13,color:G.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},classData?.title||'Live Class'),
+        React.createElement('div',{style:{fontSize:11,color:aiSpk?G.gold:G.grey,fontWeight:aiSpk?600:400}},aiSpk?'✨ '+ch.name+' is speaking...':'Live · '+subName())
       ),
-      isAI&&React.createElement('div',{style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:20,padding:'2px 9px',fontSize:11,color:LC.gold,fontWeight:600,flexShrink:0}},progress+'%'),
-      React.createElement('div',{style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:20,padding:'2px 9px',fontSize:11,color:LC.red,display:'flex',alignItems:'center',gap:3,flexShrink:0}},
-        React.createElement('span',{style:{width:5,height:5,borderRadius:'50%',background:LC.red,display:'inline-block',animation:'pulse 1.5s infinite'}}),
+      isAI&&React.createElement('div',{style:{background:G.goldl,border:'1px solid '+G.goldb,borderRadius:20,padding:'3px 10px',fontSize:11,color:G.gold,fontWeight:700}},progress+'%'),
+      React.createElement('div',{style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.4)',borderRadius:20,padding:'3px 10px',fontSize:11,color:G.red,display:'flex',alignItems:'center',gap:4,flexShrink:0}},
+        React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:G.red,display:'inline-block',animation:'pulse 1.2s infinite'}}),
         'LIVE'
       )
     ),
-    isAI&&React.createElement('div',{style:{height:2,background:'rgba(255,255,255,0.06)',flexShrink:0}},React.createElement('div',{style:{height:'100%',width:progress+'%',background:'linear-gradient(90deg,'+LC.gold+',#f0b429)',transition:'width 0.9s ease'}})),
-    React.createElement('div',{style:{flex:1,overflow:'hidden'}},
-      panel==='board'&&(isAI?React.createElement(AITextBoard,{msgs,aiSpk,chAvatar:ch.avatar,currentQ,waitingAnswer}):React.createElement(LiveWhiteboard,{classId:classData._id,socket,isPresenter})),
+    // Progress bar
+    isAI&&React.createElement('div',{style:{height:3,background:'rgba(255,255,255,0.05)',flexShrink:0}},
+      React.createElement('div',{style:{height:'100%',width:progress+'%',background:'linear-gradient(90deg,'+G.gold+',#fbbf24)',transition:'width 1s ease',boxShadow:'0 0 8px '+G.gold}})
+    ),
+    // Content panels
+    React.createElement('div',{style:{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}},
+      panel==='board'&&(isAI?React.createElement(BoardPanel):React.createElement(LiveWhiteboard,{classId:classData._id,socket,isPresenter})),
       panel==='chat'&&React.createElement(ChatPanel,{msgs,input,setInput,onSend:sendMsg,chAvatar:ch.avatar}),
-      panel==='participants'&&React.createElement(ParticipantsPanel,{students,hands,isPresenter,onCallStudent:callStudent}),
+      panel==='participants'&&React.createElement(ParticipantsPanel,{students,hands:[],isPresenter,onCallStudent:()=>{}}),
       panel==='quiz'&&React.createElement(QuizPanel,{quiz,setQuiz,socket,classId:classData._id,isPresenter,character:ck}),
       panel==='materials'&&React.createElement(MaterialsPanel,null)
     ),
-    calledStudent===profile?.name&&React.createElement('div',{style:{background:'rgba(16,185,129,0.12)',borderTop:'1px solid rgba(16,185,129,0.3)',padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}},
-      React.createElement('div',{style:{flex:1,fontSize:13,color:'#34d399',fontWeight:700}},ch.name+' called on you! Speak your answer.'),
-      React.createElement('button',{onClick:voiceAnswer,disabled:listening,style:{background:listening?'rgba(16,185,129,0.3)':'#10b981',color:LC.white,border:'none',borderRadius:10,padding:'8px 16px',fontWeight:700,cursor:'pointer',fontSize:13}},listening?'Listening...':'Speak Answer')
+    // Answer bar - shows when AI is waiting
+    waitingAnswer&&panel!=='board'&&React.createElement('div',{style:{background:'rgba(245,158,11,0.1)',borderTop:'1px solid '+G.goldb,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexShrink:0}},
+      React.createElement('div',{style:{flex:1,fontSize:12,color:G.gold,fontWeight:600}},'⏳ '+ch.name+' is waiting for your answer...'),
+      React.createElement('button',{onClick:voiceAnswer,disabled:listening,style:{background:G.gold,color:'#000',border:'none',borderRadius:9,padding:'8px 14px',fontWeight:700,cursor:'pointer',fontSize:12}},listening?'🎤 Listening...':'🎤 Answer')
     ),
-    React.createElement('div',{style:{padding:'6px 8px',background:'rgba(0,0,0,0.5)',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:5,alignItems:'center',flexShrink:0}},
-      !isPresenter&&React.createElement('button',{onClick:raiseHand,style:{background:handUp?LC.gold:'rgba(255,255,255,0.07)',border:'1px solid '+(handUp?LC.gold:'rgba(255,255,255,0.1)'),borderRadius:9,padding:'7px 10px',cursor:'pointer',color:handUp?'#000':LC.white,fontSize:16,flexShrink:0}},listening?'MIC':handUp?'HAND':'RAISE'),
-      React.createElement('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&sendMsg(),placeholder:isPresenter?'Send to class...':'Ask or answer...',style:{flex:1,background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'8px 11px',color:LC.white,fontSize:13,outline:'none'}}),
-      React.createElement('button',{onClick:sendMsg,style:{background:LC.gold,border:'none',borderRadius:9,padding:'8px 13px',cursor:'pointer',color:'#000',fontSize:15,flexShrink:0,fontWeight:700}},'Send'),
-      isPresenter&&React.createElement('label',{style:{background:scanningImg?LC.goldl:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.white,fontSize:13,flexShrink:0},title:'Share image'},
-        scanningImg?'Wait...':'Image',
-        React.createElement('input',{type:'file',accept:'image/*',disabled:scanningImg,style:{display:'none'},onChange:async e=>{const file=e.target.files?.[0];if(!file||scanningImg)return;setScanningImg(true);const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);try{const r=await fetch(BACKEND+'/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Diagram'});const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',sn());fd2.append('mode','explain');const r2=await fetch(BACKEND+'/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();if(isAI)say(d2.result||'Look carefully at this diagram.');else addMsg('ai',d2.result||'Look carefully at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}setScanningImg(false);}})
+    // Input bar
+    React.createElement('div',{style:{padding:'8px 10px',background:'rgba(0,0,0,0.7)',borderTop:'1px solid '+G.goldb,display:'flex',gap:6,alignItems:'center',flexShrink:0,backdropFilter:'blur(10px)'}},
+      React.createElement('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&sendMsg(),placeholder:waitingAnswer?'Type your answer here...':isPresenter?'Send announcement...':'Ask a question...',style:{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid '+(waitingAnswer?G.goldb:'rgba(255,255,255,0.1)'),borderRadius:10,padding:'9px 13px',color:G.white,fontSize:13,outline:'none',fontFamily:'inherit'}}),
+      React.createElement('button',{onClick:sendMsg,style:{background:'linear-gradient(135deg,'+G.gold+',#d97706)',border:'none',borderRadius:10,padding:'9px 16px',cursor:'pointer',color:'#000',fontWeight:700,fontSize:14,flexShrink:0}},'➤'),
+      isPresenter&&React.createElement('label',{style:{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,padding:'9px 12px',cursor:'pointer',color:G.white,fontSize:13,flexShrink:0}},
+        scanImg?'⏳':'📷',
+        React.createElement('input',{type:'file',accept:'image/*',disabled:scanImg,style:{display:'none'},onChange:async e=>{
+          const file=e.target.files?.[0];if(!file||scanImg)return;setScanImg(true);
+          const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);
+          try{const r=await fetch(BACKEND+'/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();
+            if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Lesson image'});
+              const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',subName());fd2.append('mode','explain');
+              const r2=await fetch(BACKEND+'/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();
+              if(isAI)say(d2.result||'Look at this carefully.');else addMsg('ai',d2.result||'Look at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}
+          setScanImg(false);}})
       ),
-      isPresenter&&React.createElement('button',{onClick:endClass,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:9,padding:'7px 10px',cursor:'pointer',color:LC.red,fontSize:11,flexShrink:0,fontWeight:600}},'End')
+      isPresenter&&React.createElement('button',{onClick:endClass,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:10,padding:'9px 12px',cursor:'pointer',color:G.red,fontSize:12,flexShrink:0,fontWeight:600}},'End')
     ),
-    React.createElement('div',{style:{display:'flex',background:'rgba(0,0,0,0.6)',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}},
-      nav.map(item=>React.createElement('button',{key:item.id,onClick:()=>setPanel(item.id),style:{flex:1,padding:'7px 2px',background:'none',border:'none',color:panel===item.id?LC.gold:LC.grey,fontSize:10,fontWeight:panel===item.id?700:400,borderTop:'2px solid '+(panel===item.id?LC.gold:'transparent'),cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2}},React.createElement('span',{style:{fontSize:15}},item.icon),item.label))
+    // Bottom nav - gold themed
+    React.createElement('div',{style:{display:'flex',background:'rgba(0,0,0,0.8)',borderTop:'1px solid '+G.goldb,flexShrink:0}},
+      navItems.map(item=>React.createElement('button',{key:item.id,onClick:()=>setPanel(item.id),style:{flex:1,padding:'8px 2px',background:'none',border:'none',color:panel===item.id?G.gold:G.grey,fontSize:9,fontWeight:panel===item.id?700:400,borderTop:'2px solid '+(panel===item.id?G.gold:'transparent'),cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,transition:'all 0.2s'}},
+        React.createElement('span',{style:{fontSize:16}},[item.icon]),
+        item.label
+      ))
     )
   );
 }

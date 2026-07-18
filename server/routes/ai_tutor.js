@@ -404,3 +404,102 @@ router.post('/scan-image', auth, upload.single('image'), async (req, res) => {
 
 module.exports = router;
 
+
+// ── POST /api/ai/lesson-intro ─────────────────────────
+router.post('/lesson-intro', auth, async (req, res) => {
+  try {
+    const { subject, topic, character, lesson_script } = req.body;
+    const ch = AI[character] || AI.ken;
+    const prompt = `You are ${ch.name}, a professional teacher at Peace Mindset Private School, Mufulira, Zambia.
+Write a SHORT, warm, professional class introduction (2-3 sentences only).
+Subject: ${subject}. Topic: ${topic || subject}.
+${lesson_script ? 'Lesson overview: ' + lesson_script.substring(0, 200) : ''}
+Rules: No strange words. Sound human and warm. End with "Let us begin."
+Respond with ONLY the introduction text, nothing else.`;
+    const intro = await callAI(prompt, 'Write introduction', [], 150);
+    res.json({ intro });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/ai/build-lesson ─────────────────────────
+router.post('/build-lesson', auth, async (req, res) => {
+  try {
+    const { subject, topic, notes, character } = req.body;
+    const ch = AI[character] || AI.ken;
+    const prompt = `You are ${ch.name}, a professional GCE teacher in Zambia.
+Convert these lesson notes into a structured lesson with teaching segments and questions.
+
+Notes: ${notes.substring(0, 1500)}
+Subject: ${subject}. Topic: ${topic}.
+
+Create 8-12 chunks. Rules:
+- "teach" chunks: clear explanation in simple English, 2-3 sentences max
+- "question" chunks: ONE clear question that requires thinking
+- Questions should wait for student response
+- No strange words like "jamani" or informal slang
+- Sound professional and encouraging
+- Use Zambian examples where relevant
+
+Respond with ONLY valid JSON:
+{"chunks":[
+  {"type":"teach","text":"explanation here"},
+  {"type":"question","text":"question text","question":"full question to ask student"},
+  {"type":"teach","text":"more explanation"}
+]}`;
+    const raw = await callAI(prompt, 'Build lesson chunks', [], 2000);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    res.json(parsed);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/ai/check-answer ─────────────────────────
+router.post('/check-answer', auth, async (req, res) => {
+  try {
+    const { student_name, student_answer, question, subject, character, lesson_context } = req.body;
+    const ch = AI[character] || AI.ken;
+    const prompt = `You are ${ch.name}, a professional teacher at Peace Mindset Private School, Zambia.
+A student just answered your question. Respond professionally and encouragingly.
+
+Question asked: ${question}
+Student (${student_name}) answered: ${student_answer}
+Subject: ${subject}
+Lesson context: ${(lesson_context || '').substring(0, 300)}
+
+Rules:
+- Check if the answer is correct or partially correct
+- If correct: praise them specifically, add one more insight
+- If wrong: gently correct, explain the right answer, encourage them
+- Keep response to 3-4 sentences max
+- Sound warm and professional
+- No strange words
+- End with encouragement`;
+    const reply = await callAI(prompt, student_answer, [], 200);
+    res.json({ reply, character: ch.name });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/ai/class-image ──────────────────────────
+router.post('/class-image', auth, tutorOrAdmin, async (req, res) => {
+  try {
+    const { classId, character } = req.body;
+    const { uploadToCloudinary, upload } = require('../config/cloudinary');
+    // Image handled by multer
+    res.json({ url: '', message: 'Use scan-image endpoint' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/ai/scan-image ───────────────────────────
+router.post('/scan-image', auth, async (req, res) => {
+  try {
+    const { character, subject, mode } = req.body;
+    const ch = AI[character] || AI.ken;
+    const prompt = `You are ${ch.name}, a professional teacher. 
+A student shared an image in class. Describe what you see and explain it clearly for GCE ${subject} students.
+Be professional, clear and educational. Maximum 3 sentences.`;
+    const result = await callAI(prompt, 'Explain this classroom image for students', [], 200);
+    res.json({ result });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
