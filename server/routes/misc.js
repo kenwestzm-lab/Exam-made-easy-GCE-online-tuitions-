@@ -158,7 +158,20 @@ router.delete('/live-classes/:id', auth, tutorOrAdmin, async (req, res) => {
 router.get('/live-classes/:id/whiteboard', auth, async (req, res) => {
   try {
     const cls = await LiveClass.findById(req.params.id);
-    res.json({ strokes: cls?.whiteboard_data?.strokes || [] });
+    res.json({
+      strokes: cls?.whiteboard_data?.strokes || [],
+      texts: cls?.whiteboard_data?.texts || [],
+      images: cls?.whiteboard_data?.images || []
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/live-classes/:id/whiteboard-upload', auth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+    const isPdf = req.file.mimetype === 'application/pdf';
+    const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/whiteboard', isPdf ? 'raw' : 'image');
+    res.json({ url: r.secure_url, type: isPdf ? 'pdf' : 'image' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
