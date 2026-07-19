@@ -3655,11 +3655,16 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     });
   },[texts,images]);
 
+  const lastSize=useRef({w:0,h:0});
   useEffect(()=>{
     const canvas=canvasRef.current;const wrap=wrapRef.current;if(!canvas||!wrap)return;
     const resize=()=>{
       const dpr=window.devicePixelRatio||1;
-      const w=wrap.clientWidth,h=wrap.clientHeight;
+      const w=Math.round(wrap.clientWidth),h=Math.round(wrap.clientHeight);
+      if(w<=0||h<=0)return;
+      // Skip if size did not actually change (avoids wiping board on scroll/keyboard events)
+      if(lastSize.current.w===w&&lastSize.current.h===h)return;
+      lastSize.current={w,h};
       canvas.width=w*dpr;canvas.height=h*dpr;
       canvas.style.width=w+'px';canvas.style.height=h+'px';
       redraw();

@@ -112,12 +112,20 @@ io.on('connection', (socket) => {
     socket.to(`class_${classId}`).emit('whiteboard_stroke', stroke);
   });
 
+  socket.on('whiteboard_text', ({ classId, text }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_text', text);
+  });
+
+  socket.on('whiteboard_image', (data) => {
+    socket.to(`class_${data.classId}`).emit('whiteboard_image', data);
+  });
+
   socket.on('whiteboard_clear', ({ classId }) => {
     socket.to(`class_${classId}`).emit('whiteboard_clear');
   });
 
-  socket.on('whiteboard_full_sync', ({ classId, strokes }) => {
-    socket.to(`class_${classId}`).emit('whiteboard_full_sync', { strokes });
+  socket.on('whiteboard_full_sync', ({ classId, strokes, texts, images }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_full_sync', { strokes, texts, images });
   });
 
   socket.on('ai_speaking', (data) => {
