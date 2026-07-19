@@ -3603,25 +3603,35 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   const [size,setSize]=useState(4);
   const [texts,setTexts]=useState([]);
   const [images,setImages]=useState([]);
+  const [selectedImg,setSelectedImg]=useState(null); // index of selected image
   const [addingText,setAddingText]=useState(false);
   const [textVal,setTextVal]=useState('');
   const [textPos,setTextPos]=useState({x:100,y:100});
   const [activePalette,setActivePalette]=useState(null);
   const [uploading,setUploading]=useState(false);
 
-  const COLORS=['#000000','#ffffff','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#6b7280'];
+  const dragRef=useRef(null); // {type:'move'|'resize', idx, startX, startY, orig}
 
-  // Returns CSS-pixel coordinates relative to canvas (matches ctx which is dpr-scaled)
+  const COLORS=['#000000','#ffffff','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#6b7280'];
+  const HANDLE=12;
+
   const getPos=(e,canvas)=>{
     const rect=canvas.getBoundingClientRect();
     const t=e.touches?.[0]||e.changedTouches?.[0]||e;
     return{x:t.clientX-rect.left,y:t.clientY-rect.top};
   };
 
-  const drawImages=(ctx)=>{
-    images.forEach(im=>{
-      if(im._el){ctx.drawImage(im._el,im.x,im.y,im.w,im.h);}
-    });
+  const hitImage=(pos)=>{
+    for(let i=images.length-1;i>=0;i--){
+      const im=images[i];
+      if(pos.x>=im.x&&pos.x<=im.x+im.w&&pos.y>=im.y&&pos.y<=im.y+im.h)return i;
+    }
+    return -1;
+  };
+  const hitResizeHandle=(pos,im)=>{
+    if(!im)return false;
+    const hx=im.x+im.w,hy=im.y+im.h;
+    return Math.abs(pos.x-hx)<HANDLE*1.5&&Math.abs(pos.y-hy)<HANDLE*1.5;
   };
 
   const redraw=useCallback(()=>{
@@ -3633,7 +3643,17 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cssW,cssH);
     ctx.fillStyle='rgba(0,0,0,0.08)';
     for(let x=20;x<cssW;x+=20)for(let y=20;y<cssH;y+=20)ctx.fillRect(x,y,1.5,1.5);
-    drawImages(ctx);
+    images.forEach((im,i)=>{
+      if(im._el&&im._el.complete)ctx.drawImage(im._el,im.x,im.y,im.w,im.h);
+      if(tool==='select'&&selectedImg===i){
+        ctx.strokeStyle='#f59e0b';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+        ctx.strokeRect(im.x,im.y,im.w,im.h);ctx.setLineDash([]);
+        // resize handle bottom-right
+        ctx.fillStyle='#f59e0b';
+        ctx.beginPath();ctx.arc(im.x+im.w,im.y+im.h,HANDLE/2,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+      }
+    });
     strokes.current.forEach(s=>{
       if(!s.points?.length)return;
       ctx.save();
@@ -3653,25 +3673,39 @@ function LiveWhiteboard({classId,socket,isPresenter}){
       ctx.font=`bold ${t.size||16}px sans-serif`;ctx.fillStyle=t.color||'#000';
       ctx.fillText(t.text,t.x,t.y);
     });
-  },[texts,images]);
+  },[texts,images,tool,selectedImg]);
 
   const lastSize=useRef({w:0,h:0});
+  const resizeTimer=useRef(null);
   useEffect(()=>{
     const canvas=canvasRef.current;const wrap=wrapRef.current;if(!canvas||!wrap)return;
-    const resize=()=>{
+    const doResize=()=>{
       const dpr=window.devicePixelRatio||1;
       const w=Math.round(wrap.clientWidth),h=Math.round(wrap.clientHeight);
       if(w<=0||h<=0)return;
-      // Skip if size did not actually change (avoids wiping board on scroll/keyboard events)
-      if(lastSize.current.w===w&&lastSize.current.h===h)return;
+      const prev=lastSize.current;
+      const widthChanged=Math.abs(prev.w-w)>5;
+      const bigHeightJump=Math.abs(prev.h-h)>150;
+      if(prev.w!==0&&!widthChanged&&!bigHeightJump)return;
       lastSize.current={w,h};
       canvas.width=w*dpr;canvas.height=h*dpr;
       canvas.style.width=w+'px';canvas.style.height=h+'px';
       redraw();
     };
-    const ro=new ResizeObserver(resize);ro.observe(wrap);resize();
-    return()=>ro.disconnect();
+    const resize=()=>{clearTimeout(resizeTimer.current);resizeTimer.current=setTimeout(doResize,150);};
+    doResize();
+    const ro=new ResizeObserver(resize);ro.observe(wrap);
+    return()=>{ro.disconnect();clearTimeout(resizeTimer.current);};
   },[redraw]);
+
+  useEffect(()=>{redraw();},[images,texts,selectedImg,redraw]);
+
+  const loadImgObj=(i)=>{
+    const el=new Image();el.crossOrigin='anonymous';el.src=i.url;
+    const obj={...i,_el:el};
+    el.onload=()=>redraw();
+    return obj;
+  };
 
   useEffect(()=>{
     if(!socket)return;
@@ -3680,41 +3714,42 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     socket.on('whiteboard_full_sync',({strokes:s,texts:t,images:im})=>{
       strokes.current=s||[];
       if(t)setTexts(t);
-      if(im){
-        const loaded=im.map(i=>{
-          if(i._el)return i;
-          const el=new Image();el.src=i.url;
-          const obj={...i,_el:el};
-          el.onload=()=>redraw();
-          return obj;
-        });
-        setImages(loaded);
-      }
+      if(im)setImages(im.map(loadImgObj));
       setTimeout(redraw,50);
     });
-    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);setTimeout(redraw,50);});
-    socket.on('whiteboard_image',im=>{
-      const el=new Image();el.src=im.url;
-      const obj={...im,_el:el};
-      el.onload=()=>redraw();
-      setImages(p=>[...p,obj]);
+    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);});
+    socket.on('whiteboard_image',im=>{setImages(p=>[...p,loadImgObj(im)]);});
+    socket.on('whiteboard_image_update',upd=>{
+      setImages(p=>p.map((im,i)=>i===upd.idx?{...im,x:upd.x,y:upd.y,w:upd.w,h:upd.h}:im));
     });
     if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{
       if(d?.strokes)strokes.current=d.strokes;
       if(d?.texts)setTexts(d.texts);
-      if(d?.images?.length){
-        const loaded=d.images.map(i=>{const el=new Image();el.src=i.url;const obj={...i,_el:el};el.onload=()=>redraw();return obj;});
-        setImages(loaded);
-      }
+      if(d?.images?.length)setImages(d.images.map(loadImgObj));
       setTimeout(redraw,100);
     }).catch(()=>{});
-    return()=>['whiteboard_stroke','whiteboard_clear','whiteboard_full_sync','whiteboard_text','whiteboard_image'].forEach(e=>socket.off(e));
+    return()=>['whiteboard_stroke','whiteboard_clear','whiteboard_full_sync','whiteboard_text','whiteboard_image','whiteboard_image_update'].forEach(e=>socket.off(e));
   },[socket,classId,redraw]);
 
   const startDraw=e=>{
     if(!isPresenter)return;e.preventDefault();
     setActivePalette(null);
     const pos=getPos(e,canvasRef.current);
+
+    if(tool==='select'){
+      if(selectedImg!=null&&hitResizeHandle(pos,images[selectedImg])){
+        dragRef.current={type:'resize',idx:selectedImg,startX:pos.x,startY:pos.y,orig:{...images[selectedImg]}};
+        return;
+      }
+      const hit=hitImage(pos);
+      if(hit>=0){
+        setSelectedImg(hit);
+        dragRef.current={type:'move',idx:hit,startX:pos.x,startY:pos.y,orig:{...images[hit]}};
+      }else{
+        setSelectedImg(null);
+      }
+      return;
+    }
     if(tool==='text'){
       setTextPos(pos);setAddingText(true);setTextVal('');return;
     }
@@ -3722,6 +3757,21 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   };
 
   const moveDraw=e=>{
+    if(dragRef.current){
+      e.preventDefault();
+      const pos=getPos(e,canvasRef.current);
+      const d=dragRef.current;const dx=pos.x-d.startX,dy=pos.y-d.startY;
+      setImages(p=>p.map((im,i)=>{
+        if(i!==d.idx)return im;
+        if(d.type==='move')return{...im,x:d.orig.x+dx,y:d.orig.y+dy};
+        if(d.type==='resize'){
+          const newW=Math.max(30,d.orig.w+dx),newH=Math.max(30,d.orig.h+dy);
+          return{...im,w:newW,h:newH};
+        }
+        return im;
+      }));
+      return;
+    }
     if(!drawing.current||!isPresenter)return;e.preventDefault();
     const canvas=canvasRef.current;const pos=getPos(e,canvas);
     cur.current.push(pos);
@@ -3739,7 +3789,15 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     ctx.stroke();ctx.restore();
   };
 
-  const endDraw=e=>{
+  const endDraw=()=>{
+    if(dragRef.current){
+      const d=dragRef.current;
+      const im=images[d.idx];
+      if(im&&socket&&classId)socket.emit('whiteboard_image_update',{classId,idx:d.idx,x:im.x,y:im.y,w:im.w,h:im.h});
+      dragRef.current=null;
+      apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current,texts,images:images.map(({_el,...r})=>r)},tok()).catch(()=>{});
+      return;
+    }
     if(!drawing.current||!isPresenter)return;
     drawing.current=false;
     if(cur.current.length<2){cur.current=[];redraw();return;}
@@ -3755,7 +3813,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     const t={text:textVal,x:textPos.x,y:textPos.y,color,size:size*3+12};
     setTexts(p=>[...p,t]);
     if(socket&&classId)socket.emit('whiteboard_text',{classId,text:t});
-    setAddingText(false);setTextVal('');setTimeout(redraw,50);
+    setAddingText(false);setTextVal('');
   };
 
   const undo=()=>{
@@ -3767,7 +3825,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   };
 
   const clearBoard=()=>{
-    strokes.current=[];setTexts([]);setImages([]);history.current=[];redraw();
+    strokes.current=[];setTexts([]);setImages([]);setSelectedImg(null);history.current=[];redraw();
     if(socket&&classId)socket.emit('whiteboard_clear',{classId});
   };
 
@@ -3781,22 +3839,26 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     if(!file)return;
     setUploading(true);
     try{
-      const isPdf=file.type==='application/pdf';
       const fd=new FormData();fd.append('file',file);fd.append('classId',classId);
       const r=await fetch(BACKEND+'/api/live-classes/'+classId+'/whiteboard-upload',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
       const d=await r.json();
       if(d.url){
         const canvas=canvasRef.current;
-        const maxW=(canvas?.clientWidth||400)*0.6;
-        const el=new Image();
-        el.crossOrigin='anonymous';
+        const maxW=(canvas?.clientWidth||400)*0.7;
+        const el=new Image();el.crossOrigin='anonymous';
         el.onload=()=>{
-          const ratio=el.naturalHeight/el.naturalWidth;
-          const w=Math.min(maxW,el.naturalWidth);const h=w*ratio;
-          const im={url:d.url,x:40,y:40,w,h,_el:el};
-          setImages(p=>[...p,im]);
-          if(socket&&classId)socket.emit('whiteboard_image',{classId,url:d.url,x:40,y:40,w,h});
-          setTimeout(redraw,80);
+          const ratio=el.naturalHeight/el.naturalWidth||1;
+          const w=Math.min(maxW,el.naturalWidth||maxW);const h=w*ratio;
+          const imData={url:d.url,x:30,y:30,w,h};
+          const im={...imData,_el:el};
+          setImages(p=>{
+            const newList=[...p,im];
+            if(socket&&classId)socket.emit('whiteboard_image',{classId,...imData});
+            apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current,texts,images:newList.map(({_el,...r})=>r)},tok()).catch(()=>{});
+            return newList;
+          });
+          setTool('select');
+          setTimeout(()=>setSelectedImg(p=>images.length),100);
         };
         el.src=d.url;
       }
@@ -3808,6 +3870,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     {id:'pen',icon:'✏️',label:'Pen'},
     {id:'highlighter',icon:'🖍️',label:'Mark'},
     {id:'text',icon:'Aa',label:'Text'},
+    {id:'select',icon:'👆',label:'Select'},
     {id:'eraser',icon:'⬜',label:'Erase'},
   ];
 
@@ -3817,7 +3880,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     React.createElement('div',{ref:wrapRef,style:{flex:1,position:'relative',overflow:'hidden',minHeight:0}},
       React.createElement('canvas',{
         ref:canvasRef,
-        style:{cursor:!isPresenter?'default':tool==='eraser'?'cell':tool==='text'?'text':'crosshair',touchAction:'none',display:'block'},
+        style:{cursor:!isPresenter?'default':tool==='eraser'?'cell':tool==='text'?'text':tool==='select'?'default':'crosshair',touchAction:'none',display:'block'},
         onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,
         onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw
       }),
@@ -3838,8 +3901,15 @@ function LiveWhiteboard({classId,socket,isPresenter}){
       React.createElement('div',{style:{fontSize:12,color:'#6b7280',marginBottom:8,fontWeight:600}},'Brush Size: '+size+'px'),
       React.createElement('input',{type:'range',min:1,max:16,value:size,onChange:e=>setSize(Number(e.target.value)),style:{width:'100%',accentColor:'#f59e0b'}})
     ),
+    isPresenter&&selectedImg!=null&&React.createElement('div',{style:{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:14,padding:'8px 12px',boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:50,fontSize:12,color:'#374151',display:'flex',gap:8,alignItems:'center'}},
+      React.createElement('span',null,'📐 Drag corner to resize · Drag to move'),
+      React.createElement('button',{onClick:()=>{
+        setImages(p=>p.filter((_,i)=>i!==selectedImg));setSelectedImg(null);
+        if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts,images:images.filter((_,i)=>i!==selectedImg).map(({_el,...r})=>r)});
+      },style:{background:'#fee2e2',border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer',color:'#991b1b',fontWeight:700}},'🗑️ Remove')
+    ),
     isPresenter&&React.createElement('div',{style:{display:'flex',alignItems:'center',gap:5,padding:'8px 8px',background:'rgba(249,250,251,0.97)',borderTop:'1px solid #e5e7eb',backdropFilter:'blur(8px)',flexShrink:0,overflowX:'auto'}},
-      TOOLS.map(t=>React.createElement('button',{key:t.id,onClick:()=>{setTool(t.id);setActivePalette(null);},style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,background:tool===t.id?'linear-gradient(135deg,#f59e0b,#d97706)':'rgba(255,255,255,0.95)',color:tool===t.id?'#000':'#374151',transform:tool===t.id?'scale(1.05)':'scale(1)'}},
+      TOOLS.map(t=>React.createElement('button',{key:t.id,onClick:()=>{setTool(t.id);setActivePalette(null);if(t.id!=='select')setSelectedImg(null);},style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,background:tool===t.id?'linear-gradient(135deg,#f59e0b,#d97706)':'rgba(255,255,255,0.95)',color:tool===t.id?'#000':'#374151',transform:tool===t.id?'scale(1.05)':'scale(1)'}},
         React.createElement('span',{style:{fontSize:15}},t.icon),t.label
       )),
       React.createElement('div',{style:{width:1,height:32,background:'#e5e7eb',flexShrink:0}}),

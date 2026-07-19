@@ -120,6 +120,10 @@ io.on('connection', (socket) => {
     socket.to(`class_${data.classId}`).emit('whiteboard_image', data);
   });
 
+  socket.on('whiteboard_image_update', (data) => {
+    socket.to(`class_${data.classId}`).emit('whiteboard_image_update', data);
+  });
+
   socket.on('whiteboard_clear', ({ classId }) => {
     socket.to(`class_${classId}`).emit('whiteboard_clear');
   });
