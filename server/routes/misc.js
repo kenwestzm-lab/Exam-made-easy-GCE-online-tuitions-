@@ -170,8 +170,26 @@ router.post('/live-classes/:id/whiteboard-upload', auth, upload.single('file'), 
   try {
     if (!req.file) return res.status(400).json({ error: 'No file' });
     const isPdf = req.file.mimetype === 'application/pdf';
-    const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/whiteboard', isPdf ? 'raw' : 'image');
-    res.json({ url: r.secure_url, type: isPdf ? 'pdf' : 'image' });
+
+    if (isPdf) {
+      // Upload as raw but force .pdf extension so it opens/renders correctly
+      const cloudinary = require('../config/cloudinary').cloudinary;
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'peace-mindset/whiteboard', resource_type: 'raw', format: 'pdf', public_id: 'pdf_' + Date.now() },
+          (err, res2) => err ? reject(err) : resolve(res2)
+        );
+        stream.end(req.file.buffer);
+      });
+      // Cloudinary can render page 1 of a PDF as a JPG thumbnail via image/upload with .jpg on the same public_id
+      const thumbUrl = result.secure_url
+        .replace('/raw/upload/', '/image/upload/pg_1,w_600,q_auto,f_jpg/')
+        .replace(/\.pdf$/, '.jpg');
+      return res.json({ url: result.secure_url, thumbUrl, type: 'pdf' });
+    }
+
+    const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/whiteboard', 'image');
+    res.json({ url: r.secure_url, type: 'image' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

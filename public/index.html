@@ -3650,17 +3650,33 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     for(let x=20;x<cssW;x+=20)for(let y=20;y<cssH;y+=20)ctx.fillRect(x,y,1.5,1.5);
     images.forEach((im,i)=>{
       if(im.isPdf){
-        ctx.fillStyle='#fef2f2';ctx.strokeStyle='#ef4444';ctx.lineWidth=2;
-        ctx.beginPath();ctx.roundRect?ctx.roundRect(im.x,im.y,im.w,im.h,10):ctx.rect(im.x,im.y,im.w,im.h);
-        ctx.fill();ctx.stroke();
-        ctx.fillStyle='#ef4444';ctx.font='bold '+Math.min(im.w*0.18,32)+'px sans-serif';
-        ctx.textAlign='center';ctx.fillText('📄',im.x+im.w/2,im.y+im.h*0.42);
-        ctx.fillStyle='#7f1d1d';ctx.font='bold '+Math.min(im.w*0.09,14)+'px sans-serif';
-        const label=(im.name||'PDF Document').slice(0,22);
-        ctx.fillText(label,im.x+im.w/2,im.y+im.h*0.7);
-        ctx.font=Math.min(im.w*0.07,11)+'px sans-serif';ctx.fillStyle='#b91c1c';
-        ctx.fillText('Tap to open',im.x+im.w/2,im.y+im.h*0.85);
-        ctx.textAlign='left';
+        if(im._el&&im._el.complete&&im._el.naturalWidth>0){
+          ctx.save();
+          ctx.shadowColor='rgba(0,0,0,0.25)';ctx.shadowBlur=10;ctx.shadowOffsetY=3;
+          ctx.drawImage(im._el,im.x,im.y,im.w,im.h);
+          ctx.restore();
+          ctx.strokeStyle='#ef4444';ctx.lineWidth=2;ctx.strokeRect(im.x,im.y,im.w,im.h);
+          // small PDF badge bottom-left
+          const bw=Math.min(im.w*0.5,80),bh=22;
+          ctx.fillStyle='#ef4444';
+          ctx.beginPath();ctx.roundRect?ctx.roundRect(im.x+6,im.y+im.h-bh-6,bw,bh,6):ctx.rect(im.x+6,im.y+im.h-bh-6,bw,bh);
+          ctx.fill();
+          ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='left';
+          ctx.fillText('📄 PDF · Tap to open',im.x+12,im.y+im.h-bh/2-6+4);
+          ctx.textAlign='left';
+        }else{
+          ctx.fillStyle='#fef2f2';ctx.strokeStyle='#ef4444';ctx.lineWidth=2;
+          ctx.beginPath();ctx.roundRect?ctx.roundRect(im.x,im.y,im.w,im.h,10):ctx.rect(im.x,im.y,im.w,im.h);
+          ctx.fill();ctx.stroke();
+          ctx.fillStyle='#ef4444';ctx.font='bold '+Math.min(im.w*0.18,32)+'px sans-serif';
+          ctx.textAlign='center';ctx.fillText('📄',im.x+im.w/2,im.y+im.h*0.42);
+          ctx.fillStyle='#7f1d1d';ctx.font='bold '+Math.min(im.w*0.09,14)+'px sans-serif';
+          const label=(im.name||'PDF Document').slice(0,22);
+          ctx.fillText(label,im.x+im.w/2,im.y+im.h*0.7);
+          ctx.font=Math.min(im.w*0.07,11)+'px sans-serif';ctx.fillStyle='#b91c1c';
+          ctx.fillText('Tap to open',im.x+im.w/2,im.y+im.h*0.85);
+          ctx.textAlign='left';
+        }
       }else if(im._el&&im._el.complete){
         ctx.drawImage(im._el,im.x,im.y,im.w,im.h);
       }
@@ -3724,7 +3740,15 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   useEffect(()=>{redraw();},[images,texts,selectedImg,redraw]);
 
   const loadImgObj=(i)=>{
-    if(i.isPdf)return{...i};
+    if(i.isPdf){
+      if(!i.thumbUrl)return{...i};
+      const el=new Image();el.crossOrigin='anonymous';
+      const obj={...i,_el:el};
+      el.onload=()=>redraw();
+      el.onerror=()=>redraw();
+      el.src=i.thumbUrl;
+      return obj;
+    }
     const el=new Image();el.crossOrigin='anonymous';el.src=i.url;
     const obj={...i,_el:el};
     el.onload=()=>redraw();
@@ -3886,8 +3910,16 @@ function LiveWhiteboard({classId,socket,isPresenter}){
 
       if(isPdf||d.type==='pdf'){
         const canvas=canvasRef.current;
-        const w=Math.min((canvas?.clientWidth||400)*0.5,220);const h=w*1.2;
-        finish({url:d.url,x:30,y:30,w,h,isPdf:true,name:file.name});
+        const w=Math.min((canvas?.clientWidth||400)*0.5,220);const h=w*1.35;
+        const imData={url:d.url,x:30,y:30,w,h,isPdf:true,name:file.name,thumbUrl:d.thumbUrl||''};
+        if(d.thumbUrl){
+          const el=new Image();el.crossOrigin='anonymous';
+          el.onload=()=>finish(imData,el);
+          el.onerror=()=>finish(imData,null);
+          el.src=d.thumbUrl;
+        }else{
+          finish(imData,null);
+        }
       }else{
         const canvas=canvasRef.current;
         const maxW=(canvas?.clientWidth||400)*0.7;
