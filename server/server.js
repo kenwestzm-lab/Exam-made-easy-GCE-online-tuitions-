@@ -128,8 +128,8 @@ io.on('connection', (socket) => {
     socket.to(`class_${classId}`).emit('whiteboard_clear');
   });
 
-  socket.on('whiteboard_full_sync', ({ classId, strokes, texts, images }) => {
-    socket.to(`class_${classId}`).emit('whiteboard_full_sync', { strokes, texts, images });
+  socket.on('whiteboard_full_sync', ({ classId, strokes, texts, images, boardH }) => {
+    socket.to(`class_${classId}`).emit('whiteboard_full_sync', { strokes, texts, images, boardH });
   });
 
   socket.on('ai_speaking', (data) => {
