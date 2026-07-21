@@ -3614,6 +3614,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   const [boardH,setBoardH]=useState(1400);
 
   const dragRef=useRef(null);
+  const panRef=useRef(null); // two-finger scroll/pan tracking
   const livePos=useRef(null); // {idx,x,y,w,h} - live drag/resize preview, bypasses React state for smoothness
   const rafPending=useRef(false);
 
@@ -3735,24 +3736,29 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     requestAnimationFrame(()=>{rafPending.current=false;redraw();});
   },[redraw]);
 
-  // Canvas sizing: width from wrap, height is independent of viewport wobble - only grows for content
-  const lastW=useRef(0);
+  // Canvas sizing: height ALWAYS applies immediately when board grows (fixes upload/draw flicker).
+  // Width changes (device rotation) are debounced and skipped mid-gesture.
+  const lastDims=useRef({w:0,h:0});
   useEffect(()=>{
     const canvas=canvasRef.current;const wrap=wrapRef.current;if(!canvas||!wrap)return;
     const dpr=window.devicePixelRatio||1;
     const w=Math.round(wrap.clientWidth)||300;
-    if(Math.abs(lastW.current-w)>5||canvas.width===0){
-      lastW.current=w;
-      canvas.width=w*dpr;canvas.height=boardH*dpr;
-      canvas.style.width=w+'px';canvas.style.height=boardH+'px';
-      redraw();
-    }
+    if(lastDims.current.w===w&&lastDims.current.h===boardH)return;
+    lastDims.current={w,h:boardH};
+    canvas.width=w*dpr;canvas.height=boardH*dpr;
+    canvas.style.width=w+'px';canvas.style.height=boardH+'px';
+    redraw();
+  },[boardH,redraw]);
+
+  useEffect(()=>{
+    const canvas=canvasRef.current;const wrap=wrapRef.current;if(!canvas||!wrap)return;
+    const dpr=window.devicePixelRatio||1;
     let t=null;
     const onResize=()=>{clearTimeout(t);t=setTimeout(()=>{
-      if(drawing.current||dragRef.current)return; // never resize mid-gesture
+      if(drawing.current||dragRef.current||panRef.current)return; // never resize mid-gesture
       const w2=Math.round(wrap.clientWidth)||300;
-      if(Math.abs(lastW.current-w2)>5){
-        lastW.current=w2;
+      if(Math.abs(lastDims.current.w-w2)>5){
+        lastDims.current={w:w2,h:boardH};
         canvas.width=w2*dpr;canvas.height=boardH*dpr;
         canvas.style.width=w2+'px';canvas.style.height=boardH+'px';
         redraw();
@@ -3805,6 +3811,12 @@ function LiveWhiteboard({classId,socket,isPresenter}){
 
   const startDraw=e=>{
     if(!isPresenter)return;e.preventDefault();
+    if(e.touches&&e.touches.length>=2){
+      const t1=e.touches[0],t2=e.touches[1];
+      panRef.current={startY:(t1.clientY+t2.clientY)/2,scrollStart:wrapRef.current?.scrollTop||0};
+      drawing.current=false;dragRef.current=null;
+      return;
+    }
     setActivePalette(null);
     const pos=getPos(e,canvasRef.current);
 
@@ -3839,6 +3851,16 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   };
 
   const moveDraw=e=>{
+    if(panRef.current){
+      if(e.touches&&e.touches.length>=2){
+        e.preventDefault();
+        const t1=e.touches[0],t2=e.touches[1];
+        const curY=(t1.clientY+t2.clientY)/2;
+        const dy=panRef.current.startY-curY;
+        if(wrapRef.current)wrapRef.current.scrollTop=panRef.current.scrollStart+dy;
+      }
+      return;
+    }
     if(dragRef.current?.type==='crop-tl'||dragRef.current?.type==='crop-br'){
       e.preventDefault();
       const pos=getPos(e,canvasRef.current);
@@ -3893,6 +3915,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   };
 
   const endDraw=()=>{
+    if(panRef.current){panRef.current=null;return;}
     if(dragRef.current?.type==='crop-tl'||dragRef.current?.type==='crop-br'){
       dragRef.current=null;return;
     }
@@ -4021,7 +4044,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     React.createElement('div',{ref:wrapRef,style:{flex:1,position:'relative',overflowY:'auto',overflowX:'hidden',minHeight:0,WebkitOverflowScrolling:'touch'}},
       React.createElement('canvas',{
         ref:canvasRef,
-        style:{cursor:!isPresenter?'default':tool==='eraser'?'cell':tool==='text'?'text':tool==='select'?'default':'crosshair',touchAction:tool==='select'||cropMode?'none':'pan-y',display:'block'},
+        style:{cursor:!isPresenter?'default':tool==='eraser'?'cell':tool==='text'?'text':tool==='select'?'default':'crosshair',touchAction:isPresenter?'none':'pan-y',display:'block'},
         onMouseDown:startDraw,onMouseMove:moveDraw,onMouseUp:endDraw,onMouseLeave:endDraw,
         onTouchStart:startDraw,onTouchMove:moveDraw,onTouchEnd:endDraw
       }),
