@@ -3611,7 +3611,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   const [textPos,setTextPos]=useState({x:100,y:100});
   const [activePalette,setActivePalette]=useState(null);
   const [uploading,setUploading]=useState(false);
-  const [boardH,setBoardH]=useState(1400);
+  const [boardH,setBoardH]=useState(2000);
 
   const dragRef=useRef(null);
   const panRef=useRef(null); // two-finger scroll/pan tracking
@@ -3741,6 +3741,7 @@ function LiveWhiteboard({classId,socket,isPresenter}){
   const lastDims=useRef({w:0,h:0});
   useEffect(()=>{
     const canvas=canvasRef.current;const wrap=wrapRef.current;if(!canvas||!wrap)return;
+    if(drawing.current||dragRef.current||panRef.current)return;
     const dpr=window.devicePixelRatio||1;
     const w=Math.round(wrap.clientWidth)||300;
     if(lastDims.current.w===w&&lastDims.current.h===boardH)return;
@@ -3779,8 +3780,6 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     if(!socket)return;
     socket.on('whiteboard_stroke',s=>{
       strokes.current.push(s);
-      const maxY=Math.max(...s.points.map(p=>p.y),0);
-      ensureHeight(maxY);
       scheduleRedraw();
     });
     socket.on('whiteboard_clear',()=>{strokes.current=[];setTexts([]);setImages([]);setBoardH(1400);redraw();});
@@ -3791,11 +3790,10 @@ function LiveWhiteboard({classId,socket,isPresenter}){
       if(bh)setBoardH(h=>Math.max(h,bh));
       setTimeout(redraw,50);
     });
-    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);ensureHeight(t.y);});
-    socket.on('whiteboard_image',im=>{setImages(p=>[...p,loadImgObj(im)]);ensureHeight(im.y+im.h);});
+    socket.on('whiteboard_text',t=>{setTexts(p=>[...p,t]);});
+    socket.on('whiteboard_image',im=>{setImages(p=>[...p,loadImgObj(im)]);});
     socket.on('whiteboard_image_update',upd=>{
       setImages(p=>p.map((im,i)=>i===upd.idx?{...im,...upd}:im));
-      ensureHeight(upd.y+upd.h);
     });
     if(classId)apiFetch('GET','/live-classes/'+classId+'/whiteboard',null,tok()).then(d=>{
       if(d?.strokes)strokes.current=d.strokes;
@@ -3892,14 +3890,12 @@ function LiveWhiteboard({classId,socket,isPresenter}){
       }else if(d.type==='resize'){
         livePos.current={idx:d.idx,x:d.orig.x,y:d.orig.y,w:Math.max(30,d.orig.w+dx),h:Math.max(30,d.orig.h+dy)};
       }
-      ensureHeight(livePos.current.y+livePos.current.h);
       scheduleRedraw();
       return;
     }
     if(!drawing.current||!isPresenter)return;e.preventDefault();
     const canvas=canvasRef.current;const pos=getPos(e,canvas);
     cur.current.push(pos);
-    ensureHeight(pos.y);
     const ctx=canvas.getContext('2d');
     const dpr=window.devicePixelRatio||1;
     ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -3935,7 +3931,6 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     strokes.current.push(stroke);history.current.push({type:'stroke'});
     if(socket&&classId)socket.emit('whiteboard_stroke',{classId,stroke});
     cur.current=[];
-    redraw();
   };
 
   const startCrop=()=>{
@@ -3973,7 +3968,6 @@ function LiveWhiteboard({classId,socket,isPresenter}){
     if(!textVal.trim()){setAddingText(false);return;}
     const t={text:textVal,x:textPos.x,y:textPos.y,color,size:size*3+12};
     setTexts(p=>[...p,t]);
-    ensureHeight(t.y);
     if(socket&&classId)socket.emit('whiteboard_text',{classId,text:t});
     setAddingText(false);setTextVal('');
   };
@@ -4017,7 +4011,6 @@ function LiveWhiteboard({classId,socket,isPresenter}){
         setImages(p=>{
           const newList=[...p,im];
           if(socket&&classId)socket.emit('whiteboard_image',{classId,...imData});
-          ensureHeight(imData.y+imData.h);
           apiFetch('POST','/live-classes/'+classId+'/whiteboard',{strokes:strokes.current,texts,boardH,images:newList.map(({_el,...r})=>r)},tok()).catch(()=>{});
           setTool('select');
           setSelectedImg(newList.length-1);
@@ -4097,6 +4090,13 @@ function LiveWhiteboard({classId,socket,isPresenter}){
       React.createElement('button',{onClick:undo,style:{...BTN,padding:'7px 9px',minWidth:36,flexShrink:0}},React.createElement('span',{style:{fontSize:15}},'↩'),'Undo'),
       React.createElement('button',{onClick:()=>{if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts,boardH,images:images.map(({_el,...r})=>r)});},style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,color:'#1d4ed8'}},React.createElement('span',{style:{fontSize:15}},'📤'),'Share'),
       React.createElement('button',{onClick:saveImg,style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,color:'#166534'}},React.createElement('span',{style:{fontSize:15}},'💾'),'Save'),
+      React.createElement('button',{onClick:()=>{
+        if(drawing.current||dragRef.current||panRef.current)return;
+        const newH=boardH+1200;
+        setBoardH(newH);
+        if(socket&&classId)socket.emit('whiteboard_full_sync',{classId,strokes:strokes.current,texts,boardH:newH,images:images.map(({_el,...r})=>r)});
+        setTimeout(()=>wrapRef.current?.scrollTo({top:wrapRef.current.scrollHeight,behavior:'smooth'}),200);
+      },style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,color:'#166534'}},React.createElement('span',{style:{fontSize:15}},'⬇️'),'More'),
       React.createElement('button',{onClick:clearBoard,style:{...BTN,padding:'7px 9px',minWidth:40,flexShrink:0,color:'#991b1b'}},React.createElement('span',{style:{fontSize:15}},'🗑️'),'Clear')
     )
   );
