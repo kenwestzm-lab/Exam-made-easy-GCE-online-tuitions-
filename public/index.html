@@ -986,12 +986,14 @@ function DraggableWhatsApp({ profile }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  const waLink = "https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform"));
+
   return React.createElement('a', {
     ref: btnRef,
-    href: moved.current ? undefined : ("https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform"))),
+    href: waLink,
     target: "_blank",
     rel: "noreferrer",
-    onClick: e => { if (moved.current) e.preventDefault(); },
+    onClick: e => { if (moved.current) { e.preventDefault(); moved.current = false; } },
     onMouseDown: start, onMouseMove: move, onMouseUp: end, onMouseLeave: end,
     onTouchStart: start, onTouchMove: move, onTouchEnd: end,
     style: {
