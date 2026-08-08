@@ -944,6 +944,76 @@ function AuthScreen() {
 }
 
 // LAYOUT
+function DraggableWhatsApp({ profile }) {
+  const [pos, setPos] = useState(() => {
+    const saved = localStorage.getItem('wa_btn_pos');
+    if (saved) { try { return JSON.parse(saved); } catch(e) {} }
+    return { x: window.innerWidth - 66, y: window.innerHeight - 150 };
+  });
+  const dragging = useRef(false);
+  const moved = useRef(false);
+  const offset = useRef({ x: 0, y: 0 });
+  const btnRef = useRef();
+
+  const clamp = (x, y) => {
+    const size = 52, margin = 4;
+    const maxX = window.innerWidth - size - margin;
+    const maxY = window.innerHeight - size - margin;
+    return { x: Math.min(Math.max(margin, x), maxX), y: Math.min(Math.max(margin, y), maxY) };
+  };
+
+  const start = e => {
+    dragging.current = true; moved.current = false;
+    const t = e.touches ? e.touches[0] : e;
+    offset.current = { x: t.clientX - pos.x, y: t.clientY - pos.y };
+  };
+  const move = e => {
+    if (!dragging.current) return;
+    moved.current = true;
+    const t = e.touches ? e.touches[0] : e;
+    const next = clamp(t.clientX - offset.current.x, t.clientY - offset.current.y);
+    setPos(next);
+  };
+  const end = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setPos(p => { localStorage.setItem('wa_btn_pos', JSON.stringify(p)); return p; });
+  };
+
+  useEffect(() => {
+    const onResize = () => setPos(p => clamp(p.x, p.y));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  return React.createElement('a', {
+    ref: btnRef,
+    href: moved.current ? undefined : ("https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform"))),
+    target: "_blank",
+    rel: "noreferrer",
+    onClick: e => { if (moved.current) e.preventDefault(); },
+    onMouseDown: start, onMouseMove: move, onMouseUp: end, onMouseLeave: end,
+    onTouchStart: start, onTouchMove: move, onTouchEnd: end,
+    style: {
+      position: 'fixed',
+      left: pos.x, top: pos.y,
+      width: 52, height: 52,
+      borderRadius: '50%',
+      background: '#25D366',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 4px 16px rgba(37,211,102,0.5)',
+      zIndex: 90,
+      textDecoration: 'none',
+      fontSize: 26,
+      touchAction: 'none',
+      cursor: 'grab',
+      userSelect: 'none'
+    },
+    title: "Chat with us on WhatsApp - drag to move"
+  }, "\uD83D\uDCAC");
+}
+
+
 function Layout({
   nav,
   active,
@@ -1319,29 +1389,7 @@ function Layout({
       fontSize: 9
     }
   }, nav.slice(4).reduce((a, n) => a + (n.badge || 0), 0))))),
-  // Floating WhatsApp support button - real wa.me deep link
-  /*#__PURE__*/React.createElement("a", {
-    href: "https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform")),
-    target: "_blank",
-    rel: "noreferrer",
-    style: {
-      position: 'fixed',
-      bottom: 78,
-      right: 14,
-      width: 52,
-      height: 52,
-      borderRadius: '50%',
-      background: '#25D366',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 4px 16px rgba(37,211,102,0.5)',
-      zIndex: 90,
-      textDecoration: 'none',
-      fontSize: 26
-    },
-    title: "Chat with us on WhatsApp"
-  }, "\uD83D\uDCAC"),
+  React.createElement(DraggableWhatsApp, { profile }),
   /*#__PURE__*/React.createElement("style", null, '@media(min-width:768px){#sidebar{display:block!important}}'));
 }
 function SpeakingWaves({

@@ -291,21 +291,48 @@ router.get('/status', async (req, res) => {
 });
 
 // Alias for frontend compatibility
+function extractQuestionsJSON(raw) {
+  let clean = raw.replace(/```json|```/g, '').trim();
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (match) clean = match[0];
+  const parsed = JSON.parse(clean);
+  if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+    throw new Error('No questions in AI response');
+  }
+  parsed.questions = parsed.questions.map(q => ({
+    question: q.question || q.text || '',
+    type: q.type || 'mcq',
+    options: q.options || [],
+    answer: q.answer || q.correct_answer || '',
+    explanation: q.explanation || ''
+  }));
+  return parsed;
+}
+
 router.post('/generate-test', auth, tutorOrAdmin, async (req, res) => {
   try {
     const { subject, topic, count = 10, type = 'mcq' } = req.body;
     const prompt = `You are an expert GCE O-Level teacher in Zambia. Generate exactly ${count} ${type.toUpperCase()} questions about "${topic || subject}" for Zambian students.
+RESPOND WITH ONLY VALID JSON. No text before or after. No markdown code fences.
+Format: {"questions":[{"question":"question text","type":"${type}","options":["A. option1","B. option2","C. option3","D. option4"],"answer":"A","explanation":"brief explanation"}]}`;
 
-RESPOND WITH ONLY VALID JSON - no markdown, no explanation:
-{"questions":[{"question":"question text","type":"${type}","options":["A. option1","B. option2","C. option3","D. option4"],"correct_answer":"A","explanation":"brief explanation"}]}`;
-
-    const raw = await callAI(prompt, `Generate ${count} ${type} questions for ${subject}`, [], 1500);
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-    res.json(parsed);
+    let raw;
+    try {
+      raw = await callAI(prompt, `Generate ${count} ${type} questions for ${subject}`, [], 1800);
+      const parsed = extractQuestionsJSON(raw);
+      return res.json(parsed);
+    } catch (firstErr) {
+      console.warn('Generate-test first attempt failed:', firstErr.message, '| raw:', (raw || '').substring(0, 200));
+      const retryPrompt = `Output ONLY a JSON object, nothing else. No explanation, no markdown.
+Generate ${count} multiple choice questions about ${topic || subject} for Zambian GCE students.
+Format: {"questions":[{"question":"...","type":"mcq","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"A","explanation":"..."}]}`;
+      const raw2 = await callAI(retryPrompt, `${count} questions on ${subject}`, [], 1800);
+      const parsed2 = extractQuestionsJSON(raw2);
+      return res.json(parsed2);
+    }
   } catch (e) {
-    console.error('Generate test error:', e.message);
-    res.status(500).json({ error: 'Could not generate questions. Please try again.' });
+    console.error('Generate test error (both attempts failed):', e.message);
+    res.status(500).json({ error: 'AI could not generate questions right now. Please try again in a moment.' });
   }
 });
 
