@@ -554,3 +554,20 @@ router.get('/debug-test', async (req, res) => {
   }
   res.json(results);
 });
+
+// TEMP DEBUG - mirrors /chat exactly but no auth, for diagnosis
+router.post('/debug-chat', async (req, res) => {
+  try {
+    const { message, subject, character, lesson_context, conversation_history } = req.body;
+    const ch = AI[character] || AI.ken;
+    const history = (conversation_history || []).slice(-6).map(m => ({
+      role: m.role === 'ai' ? 'assistant' : 'user',
+      content: m.text || m.content || ''
+    }));
+    const prompt = buildPrompt(ch, subject, lesson_context);
+    const reply = await callAI(prompt, message, history, 300);
+    res.json({ reply, character: ch.name });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
