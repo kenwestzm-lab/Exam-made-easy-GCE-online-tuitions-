@@ -68,6 +68,12 @@ const TestSchema = new Schema({
   title: { type: String, required: true },
   subject_id: Number, duration: Number,
   tutor_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  is_mock_exam: { type: Boolean, default: false },
+  is_ecz_paper: { type: Boolean, default: false },
+  year: Number,
+  paper_number: Number,
+  grade: String,
+  solutions_pdf_url: String,
 }, { timestamps: true });
 
 // QUESTION
@@ -82,8 +88,11 @@ const QSchema = new Schema({
 const ResSchema = new Schema({
   test_id: { type: Schema.Types.ObjectId, ref: 'Test' },
   student_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  subject_id: Number,
   answers: Schema.Types.Mixed,
   score: Number, total: Number, percent: Number,
+  time_taken_seconds: Number,
+  is_mock_exam: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // LIVE CLASS

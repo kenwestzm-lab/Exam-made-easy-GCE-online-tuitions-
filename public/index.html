@@ -1318,7 +1318,31 @@ function Layout({
       padding: '1px 5px',
       fontSize: 9
     }
-  }, nav.slice(4).reduce((a, n) => a + (n.badge || 0), 0))))), /*#__PURE__*/React.createElement("style", null, '@media(min-width:768px){#sidebar{display:block!important}}'));
+  }, nav.slice(4).reduce((a, n) => a + (n.badge || 0), 0))))),
+  // Floating WhatsApp support button - real wa.me deep link
+  /*#__PURE__*/React.createElement("a", {
+    href: "https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform")),
+    target: "_blank",
+    rel: "noreferrer",
+    style: {
+      position: 'fixed',
+      bottom: 78,
+      right: 14,
+      width: 52,
+      height: 52,
+      borderRadius: '50%',
+      background: '#25D366',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 4px 16px rgba(37,211,102,0.5)',
+      zIndex: 90,
+      textDecoration: 'none',
+      fontSize: 26
+    },
+    title: "Chat with us on WhatsApp"
+  }, "\uD83D\uDCAC"),
+  /*#__PURE__*/React.createElement("style", null, '@media(min-width:768px){#sidebar{display:block!important}}'));
 }
 function SpeakingWaves({
   color = '#4ade80'
@@ -7706,6 +7730,80 @@ function EnhancedLiveClassesPage({ subs, pays }) {
   );
 }
 
+function StudentProgress(){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    apiFetch('GET','/tests/analytics/mine',null,tok())
+      .then(d=>{setData(d);setLoading(false);})
+      .catch(()=>setLoading(false));
+  },[]);
+
+  if(loading)return React.createElement(Spin,null);
+
+  if(!data||!data.totalTests){
+    return React.createElement('div',{style:{textAlign:'center',padding:'50px 20px'}},
+      React.createElement('div',{style:{fontSize:50,marginBottom:12}},'📊'),
+      React.createElement('h3',{style:{color:C.gd,marginBottom:8}},'No results yet'),
+      React.createElement('p',{style:{color:C.gr,fontSize:13}},'Complete a test or quiz to see your progress here.')
+    );
+  }
+
+  const scoreColor=p=>p>=70?C.ok:p>=50?C.gold:C.d;
+
+  return React.createElement('div',{style:{paddingBottom:20}},
+    React.createElement('h2',{style:{color:C.gd,marginBottom:14,fontSize:19}},'📊 My Progress'),
+
+    // Overall score card
+    React.createElement('div',{style:{background:`linear-gradient(135deg,${C.gd},${C.g})`,borderRadius:18,padding:20,marginBottom:14,color:'#fff',textAlign:'center'}},
+      React.createElement('div',{style:{fontSize:12,opacity:0.85,marginBottom:4}},'Overall Average'),
+      React.createElement('div',{style:{fontSize:42,fontWeight:800}},data.overall+'%'),
+      React.createElement('div',{style:{fontSize:12,opacity:0.85,marginTop:4}},data.totalTests+' test'+(data.totalTests!==1?'s':'')+' completed')
+    ),
+
+    // Strengths & Weaknesses
+    React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}},
+      React.createElement('div',{style:{...CD,padding:14}},
+        React.createElement('div',{style:{fontSize:12,fontWeight:700,color:C.ok,marginBottom:8}},'💪 Strengths'),
+        data.strengths.length===0?React.createElement('div',{style:{fontSize:11,color:C.gr}},'Keep practicing!'):
+        data.strengths.map((s,i)=>React.createElement('div',{key:i,style:{fontSize:12,marginBottom:4,color:C.dk}},si(s.subject_id)+' '+sn(s.subject_id)+' — '+s.average+'%'))
+      ),
+      React.createElement('div',{style:{...CD,padding:14}},
+        React.createElement('div',{style:{fontSize:12,fontWeight:700,color:C.d,marginBottom:8}},'📌 Needs Work'),
+        data.weaknesses.length===0?React.createElement('div',{style:{fontSize:11,color:C.gr}},'Great job overall!'):
+        data.weaknesses.map((s,i)=>React.createElement('div',{key:i,style:{fontSize:12,marginBottom:4,color:C.dk}},si(s.subject_id)+' '+sn(s.subject_id)+' — '+s.average+'%'))
+      )
+    ),
+
+    // By subject breakdown
+    React.createElement('div',{style:{...CD,marginBottom:14}},
+      React.createElement('h3',{style:{color:C.gd,fontSize:14,marginBottom:12}},'📚 By Subject'),
+      data.bySubject.map((s,i)=>React.createElement('div',{key:i,style:{marginBottom:10}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:3}},
+          React.createElement('span',null,si(s.subject_id)+' '+sn(s.subject_id)+' ('+s.attempts+')'),
+          React.createElement('span',{style:{fontWeight:700,color:scoreColor(s.average)}},s.average+'%')
+        ),
+        React.createElement('div',{style:{height:8,background:C.grl,borderRadius:6,overflow:'hidden'}},
+          React.createElement('div',{style:{height:'100%',width:s.average+'%',background:scoreColor(s.average),borderRadius:6,transition:'width 0.6s'}})
+        )
+      ))
+    ),
+
+    // Recent results
+    React.createElement('div',{style:CD},
+      React.createElement('h3',{style:{color:C.gd,fontSize:14,marginBottom:12}},'🕐 Recent Results'),
+      data.recent.map((r,i)=>React.createElement('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<data.recent.length-1?`1px solid ${C.grl}`:'none'}},
+        React.createElement('div',null,
+          React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.dk}},r.title),
+          React.createElement('div',{style:{fontSize:11,color:C.gr}},fdate(r.date)+' · '+sn(r.subject_id))
+        ),
+        React.createElement('div',{style:{fontSize:15,fontWeight:800,color:scoreColor(r.percent)}},r.percent+'%')
+      ))
+    )
+  );
+}
+
+
 function StudentApp() {
   const {
     profile
@@ -7751,6 +7849,10 @@ function StudentApp() {
     icon: '✏️',
     label: 'Tests'
   }, {
+    id: 'progress',
+    icon: '📊',
+    label: 'My Progress'
+  }, {
     id: 'pay',
     icon: '💳',
     label: 'Subscribe',
@@ -7792,6 +7894,7 @@ function StudentApp() {
       subs: subs,
       pays: pays
     }),
+    progress: /*#__PURE__*/React.createElement(StudentProgress, null),
     pay: /*#__PURE__*/React.createElement(SubscribePage, null),
     anns: /*#__PURE__*/React.createElement(AnnouncementsPage, null),
     profile: /*#__PURE__*/React.createElement(ProfilePage, null)
