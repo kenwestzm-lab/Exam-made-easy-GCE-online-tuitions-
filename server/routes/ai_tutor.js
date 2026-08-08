@@ -530,3 +530,27 @@ Be professional, clear and educational. Maximum 3 sentences.`;
     res.json({ result });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// TEMPORARY DEBUG ROUTE - remove after diagnosing
+router.get('/debug-test', async (req, res) => {
+  const results = {};
+  try {
+    const t1 = await callGroq('You are a helpful assistant.', 'Say hello in 5 words', [], 30);
+    results.groq = { ok: true, text: t1 };
+  } catch (e) {
+    results.groq = { ok: false, error: e.message };
+  }
+  try {
+    const t2 = await callOpenRouter('You are a helpful assistant.', 'Say hello in 5 words', [], 30);
+    results.openrouter = { ok: true, text: t2 };
+  } catch (e) {
+    results.openrouter = { ok: false, error: e.message };
+  }
+  try {
+    const t3 = await callGemini('You are a helpful assistant.', 'Say hello in 5 words', [], 30);
+    results.gemini = { ok: true, text: t3 };
+  } catch (e) {
+    results.gemini = { ok: false, error: e.message };
+  }
+  res.json(results);
+});
