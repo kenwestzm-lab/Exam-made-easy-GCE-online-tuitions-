@@ -57,7 +57,7 @@ const {
   createContext,
   useContext
 } = React;
-const BACKEND = 'https://exam-made-easy-gce-online-tuitions-1-ges6.onrender.com';
+const BACKEND = 'https://exam-made-easy-gce-online-tuitions-1.onrender.com';
 const apiFetch = async (method, path, body, token, fd) => {
   try {
     const o = {
@@ -2799,7 +2799,7 @@ function EnhancedAIClassRoom({
   const launchQuiz = async () => {
     if (!socket) return;
     add({
-      title: '🤖 Generating quiz...',
+      title: '📝 Generating quiz...',
       icon: '✏️',
       type: 'i'
     });
@@ -3570,7 +3570,7 @@ function EnhancedAIClassRoom({
       color: C.gr,
       marginBottom: 10
     }
-  }, "Practice with AI-generated questions on this topic"), /*#__PURE__*/React.createElement("button", {
+  }, "Practice with auto-generated questions on this topic"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     style: {
       ...BT('p', true),
@@ -5293,7 +5293,7 @@ function QuestionsPage() {
   useEffect(() => {
     if (!socket) return;
     socket.on('ai_tokens_approved', (data) => {
-      add({ title: '🎉 AI Tokens Activated!', body: data.tokens + ' tokens added! (' + data.plan + ' plan)', icon: '🤖', type: 'i' });
+      add({ title: '🎉 Study Tokens Activated!', body: data.tokens + ' tokens added! (' + data.plan + ' plan)', icon: '⭐', type: 'i' });
       window.pmNotify?.('Tokens Activated!', data.tokens + ' AI tokens added to your account!');
       apiFetch('GET', '/ai-tokens/status', null, tok()).then(s => setTokenStatus(s)).catch(()=>{});
     });
@@ -5439,8 +5439,8 @@ function QuestionsPage() {
     return /*#__PURE__*/React.createElement("div", { style: { padding: 16 } },
       React.createElement("div", { style: { background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.1)' } },
         React.createElement("div", { style: { textAlign: 'center', marginBottom: 16 } },
-          React.createElement("div", { style: { fontSize: 40 } }, "🤖"),
-          React.createElement("h3", { style: { color: C.gd, margin: '8px 0 4px' } }, "Get AI Tokens"),
+          React.createElement("div", { style: { fontSize: 40 } }, "⭐"),
+          React.createElement("h3", { style: { color: C.gd, margin: '8px 0 4px' } }, "Get Study Tokens"),
           React.createElement("p", { style: { color: C.gr, fontSize: 13, margin: 0 } }, "You have used all " + AI_FREE_LIMIT + " free questions")
         ),
         tokenStatus && React.createElement("div", { style: { background: C.grl, borderRadius: 10, padding: '8px 12px', marginBottom: 14, fontSize: 12, color: C.grd } },
@@ -5525,7 +5525,7 @@ function QuestionsPage() {
       color: 'rgba(255,255,255,0.7)',
       fontSize: 11
     }
-  }, "AI Tutor \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2"), tokenStatus && React.createElement("div", { style: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } }, tokenStatus.free_remaining > 0 ? "\uD83D\uDFE2 " + tokenStatus.free_remaining + " free questions left" : tokenStatus.paid_tokens > 0 ? "\uD83D\uDFE1 " + tokenStatus.paid_tokens + " tokens" : "\uD83D\uDD34 No tokens - tap to buy")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
+  }, "Study Assistant \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2"), tokenStatus && React.createElement("div", { style: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } }, tokenStatus.free_remaining > 0 ? "\uD83D\uDFE2 " + tokenStatus.free_remaining + " free questions left" : tokenStatus.paid_tokens > 0 ? "\uD83D\uDFE1 " + tokenStatus.paid_tokens + " tokens" : "\uD83D\uDD34 No tokens - tap to buy")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -5674,7 +5674,7 @@ function QuestionsPage() {
         fontWeight: 600,
         marginBottom: 2
       }
-    }, isAI ? aiChar?.name || 'AI Tutor' : 'Student', " \xB7 ", ftime(m.createdAt)), /*#__PURE__*/React.createElement("div", {
+    }, isAI ? aiChar?.name || 'Teacher' : 'Student', " \xB7 ", ftime(m.createdAt)), /*#__PURE__*/React.createElement("div", {
       style: {
         background: isMe ? `linear-gradient(135deg,${C.gd},${C.g})` : isAI ? `rgba(${isAI && ck === 'msimbi' ? '124,58,237' : '6,77,44'},0.25)` : 'rgba(255,255,255,0.09)',
         color: C.cTxt,
@@ -5691,7 +5691,7 @@ function QuestionsPage() {
         fontWeight: 700,
         marginBottom: 4
       }
-    }, aiChar?.name || 'AI Tutor', " says:"), displayText), !isMe && isAI && /*#__PURE__*/React.createElement("button", {
+    }, aiChar?.name || 'Teacher', " says:"), displayText), !isMe && isAI && /*#__PURE__*/React.createElement("button", {
       type: "button",
       onClick: () => ZambianVoice.speak(displayText, aiChar?.name?.includes("M'simbi") ? 'female' : 'male'),
       style: {
@@ -8114,7 +8114,7 @@ function ScheduleClass({
       gridTemplateColumns: '1fr 1fr',
       gap: 8
     }
-  }, [['human', '👨‍🏫 Human Tutor', 'You present live'], ['ai', '🤖 AI Teacher', 'AI teaches automatically']].map(([v, l, d]) => /*#__PURE__*/React.createElement("div", {
+  }, [['human', '👨‍🏫 Live Tutor', 'You present live'], ['ai', '🎓 Virtual Teacher', 'Teaches automatically']].map(([v, l, d]) => /*#__PURE__*/React.createElement("div", {
     key: v,
     onClick: () => set('presenter_type', v),
     style: {
@@ -8143,7 +8143,7 @@ function ScheduleClass({
     }
   }, /*#__PURE__*/React.createElement("label", {
     style: LB
-  }, "AI Teacher"), /*#__PURE__*/React.createElement("div", {
+  }, "Virtual Teacher"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -8260,7 +8260,7 @@ function ScheduleClass({
       }
       setScanningPhoto(false);
     }
-  })), /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: C.gr } }, "AI reads and builds lesson automatically")))
+  })), /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: C.gr } }, "Reads and builds lesson automatically")))
   , form.lesson_image_url && /*#__PURE__*/React.createElement("div", {
     style: { marginBottom: 12, background: C.goldp, borderRadius: 10, padding: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }
   }, /*#__PURE__*/React.createElement("img", { src: form.lesson_image_url, style: { width: 60, height: 60, objectFit: 'cover', borderRadius: 8, flexShrink: 0 } }),
@@ -8613,7 +8613,7 @@ function TutorCreateTest() {
     },
     onClick: genWithAI,
     disabled: aiGen
-  }, aiGen ? '🤖 Generating...' : '🤖 AI Generate 5 Qs'))), /*#__PURE__*/React.createElement("div", {
+  }, aiGen ? '📝 Generating...' : '📝 Auto Generate 5 Qs'))), /*#__PURE__*/React.createElement("div", {
     style: CD
   }, /*#__PURE__*/React.createElement("h3", {
     style: {
@@ -9706,7 +9706,7 @@ function TutorApp() {
       margin: '0 0 10px',
       fontSize: 14
     }
-  }, "\uD83E\uDD16 AI Teachers Ready"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83C\uDF93 Virtual Teachers Ready"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 10
@@ -9850,8 +9850,8 @@ function AdminApp() {
         window.pmNotify?.('New Payment!', data.student + ' paid ZMW ' + data.amount);
       });
       socket.on('new_ai_payment', (data) => {
-        add({ title: '🤖 AI Token Payment!', body: data.student + ' paid ZMW ' + data.amount + ' for ' + data.plan + ' plan', icon: '🤖', type: 'i' });
-        window.pmNotify?.('AI Token Payment!', data.student + ' - ZMW ' + data.amount);
+        add({ title: '⭐ Study Token Payment!', body: data.student + ' paid ZMW ' + data.amount + ' for ' + data.plan + ' plan', icon: '⭐', type: 'i' });
+        window.pmNotify?.('Study Token Payment!', data.student + ' - ZMW ' + data.amount);
       });
       return () => {
         socket.off('new_payment');
@@ -9883,7 +9883,7 @@ function AdminApp() {
   }, {
     id: 'ai_payments',
     icon: '🤖',
-    label: 'AI Tokens',
+    label: 'Study Tokens',
     badge: aiPnd || null
   }, {
     id: 'users',
@@ -10200,7 +10200,7 @@ function AdminApp() {
       try {
         await apiFetch('PUT', `/ai-tokens/payments/${id}/approve`, { admin_note: 'Approved' }, tok());
         setAiPays(p => p.map(x => x._id === id ? { ...x, status: 'approved' } : x));
-        add({ title: '✅ AI tokens activated!', icon: '🤖', type: 'i' });
+        add({ title: '✅ Study tokens activated!', icon: '⭐', type: 'i' });
       } catch(e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
       finally { setProc(null); }
     };
@@ -10216,7 +10216,7 @@ function AdminApp() {
     };
 
     return /*#__PURE__*/React.createElement("div", { style: { paddingBottom: 20 } },
-      React.createElement("h2", { style: { color: C.gd, marginBottom: 13, fontSize: 19 } }, "🤖 AI Token Payments (", aiPnd, " pending)"),
+      React.createElement("h2", { style: { color: C.gd, marginBottom: 13, fontSize: 19 } }, "⭐ Study Token Payments (", aiPnd, " pending)"),
       React.createElement("div", { style: { display: 'flex', background: '#f3f7f5', borderRadius: 12, padding: 4, marginBottom: 13, gap: 4 } },
         [['pending', `⏳ Pending (${aiPays.filter(p=>p.status==='pending').length})`], ['approved', '✅ Approved'], ['rejected', '❌ Rejected']].map(([tb, lb]) =>
           React.createElement("button", { key: tb, type: "button", onClick: () => setTab(tb), style: { flex: 1, padding: '9px 4px', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, background: tab === tb ? `linear-gradient(135deg,${C.gd},${C.g})` : 'transparent', color: tab === tb ? '#fff' : C.gr } }, lb)
@@ -10227,7 +10227,7 @@ function AdminApp() {
         React.createElement("div", { style: { fontWeight: 700, fontSize: 15 } }, p.student_id?.name || 'Student'),
         React.createElement("div", { style: { fontSize: 12, color: C.gr } }, p.student_id?.email, " · ", p.student_id?.phone),
         React.createElement("div", { style: { fontSize: 14, color: C.dk, margin: '5px 0' } },
-          "🤖 ", React.createElement("strong", null, p.plan?.toUpperCase()), " plan · ", p.tokens, " tokens · ",
+          "⭐ ", React.createElement("strong", null, p.plan?.toUpperCase()), " plan · ", p.tokens, " tokens · ",
           React.createElement("strong", { style: { color: C.g } }, "ZMW ", p.amount)
         ),
         p.method && React.createElement("div", { style: { fontSize: 12, color: C.gr } }, "💳 ", p.method, p.transaction_id ? " · Ref: " + p.transaction_id : ""),
