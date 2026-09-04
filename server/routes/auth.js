@@ -15,7 +15,7 @@ router.post('/register', async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) return res.status(400).json({ error: 'Email already registered. Please login.' });
-    const hash = await bcrypt.hash(password, 12);
+    const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password: hash, role: role || 'student', phone, grade, province, approved: role === 'admin' });
     res.status(201).json({ token: mkToken(user._id), user: { _id: user._id, name: user.name, email: user.email, role: user.role, approved: user.approved, phone: user.phone, grade: user.grade, province: user.province } });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -23,11 +23,15 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
+    const t0 = Date.now();
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
     const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const t1 = Date.now();
     if (!user) return res.status(400).json({ error: 'No account found with this email. Please register first.' });
     const ok = await bcrypt.compare(password, user.password);
+    const t2 = Date.now();
+    console.log('LOGIN TIMING: query=' + (t1-t0) + 'ms bcrypt=' + (t2-t1) + 'ms total=' + (t2-t0) + 'ms');
     if (!ok) return res.status(400).json({ error: 'Wrong password. Please try again.' });
     res.json({ token: mkToken(user._id), user: { _id: user._id, name: user.name, email: user.email, role: user.role, approved: user.approved, phone: user.phone, grade: user.grade, province: user.province, avatar: user.avatar, avatarUrl: user.avatarUrl, bio: user.bio } });
   } catch(e) { res.status(500).json({ error: e.message }); }
