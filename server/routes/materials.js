@@ -50,22 +50,34 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
     res.status(201).json(withUrls(m));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+// Detect the real file type by sniffing actual bytes rather than trusting a stored label
+async function proxyMaterial(fileUrl, title, declaredType, res, disposition) {
+  const response = await fetch(fileUrl);
+  if (!response.ok) throw new Error('Could not fetch file');
+  const buf = Buffer.from(await response.arrayBuffer());
+  const isPdf = buf.slice(0, 5).toString('utf8') === '%PDF-';
+  const isPng = buf.slice(0, 8).toString('hex') === '89504e470d0a1a0a';
+  const isJpg = buf.slice(0, 3).toString('hex') === 'ffd8ff';
+  let mime, ext;
+  if (isPdf) { mime = 'application/pdf'; ext = 'pdf'; }
+  else if (isPng) { mime = 'image/png'; ext = 'png'; }
+  else if (isJpg) { mime = 'image/jpeg'; ext = 'jpg'; }
+  else if (declaredType === 'word') { mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; ext = 'docx'; }
+  else if (declaredType === 'pptx') { mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; ext = 'pptx'; }
+  else { mime = response.headers.get('content-type') || 'application/octet-stream'; ext = 'bin'; }
+  const filename = (title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', disposition + '; filename="' + filename + '"');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(buf);
+}
 
-// Proxy VIEW - renders PDF inline in browser
+// Proxy VIEW - renders PDF/image inline in browser
 router.get('/:id/view', auth, async (req, res) => {
   try {
     const m = await Material.findById(req.params.id);
     if (!m?.file_url) return res.status(404).send('File not found');
-    const response = await fetch(m.file_url);
-    if (!response.ok) return res.status(502).send('Could not fetch file');
-    const ext = m.type === 'pdf' ? 'pdf' : m.type === 'word' ? 'docx' : m.type === 'pptx' ? 'pptx' : 'bin';
-    const mime = m.type === 'pdf' ? 'application/pdf' : m.type === 'word' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream';
-    const filename = (m.title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
-    res.setHeader('Content-Type', mime);
-    res.setHeader('Content-Disposition', 'inline; filename="' + filename + '"');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    const { Readable } = require('stream');
-    Readable.fromWeb(response.body).pipe(res);
+    await proxyMaterial(m.file_url, m.title, m.type, res, 'inline');
   } catch(e) { res.status(500).send(e.message); }
 });
 
@@ -78,19 +90,7 @@ router.get('/:id/download', auth, async (req, res) => {
       { new: true }
     );
     if (!m?.file_url) return res.status(404).json({ error: 'File not found' });
-
-    // Fetch file from Cloudinary and pipe it
-    const response = await fetch(m.file_url);
-    if (!response.ok) return res.status(502).json({ error: 'Could not fetch file' });
-
-    const ext = m.type === 'pdf' ? 'pdf' : m.type === 'word' ? 'docx' : m.type === 'pptx' ? 'pptx' : m.type === 'image' ? 'jpg' : 'bin';
-    const filename = (m.title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
-
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-
-    const { Readable } = require('stream');
-    Readable.fromWeb(response.body).pipe(res);
+    await proxyMaterial(m.file_url, m.title, m.type, res, 'attachment');
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

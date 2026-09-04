@@ -4282,7 +4282,7 @@ function MaterialsPanel(){
         React.createElement('div',{style:{fontSize:12,fontWeight:600,color:LC.white,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},m.title||m.name),
         React.createElement('div',{style:{fontSize:10,color:LC.grey}},m.type?.toUpperCase()||'FILE')
       ),
-      React.createElement('a',{href:m.view_url||m.file_url,target:'_blank',rel:'noreferrer',style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:8,padding:'5px 10px',fontSize:11,color:LC.gold,textDecoration:'none',fontWeight:600,flexShrink:0}},'Open')
+      React.createElement('a',{href:BACKEND+'/api/materials/'+m._id+'/view?token='+tok(),target:'_blank',rel:'noreferrer',style:{background:LC.goldl,border:'1px solid '+LC.goldb,borderRadius:8,padding:'5px 10px',fontSize:11,color:LC.gold,textDecoration:'none',fontWeight:600,flexShrink:0}},'Open')
     ))
   );
 }
@@ -7028,7 +7028,7 @@ function AssignmentsPage({
         lineHeight: 1.6
       }
     }, a.description), a.file_url && /*#__PURE__*/React.createElement("a", {
-      href: BACKEND+'/api/assignments/'+a._id+'/download?token='+tok(),
+      href: BACKEND+'/api/assignments/'+a._id+'/view?token='+tok(),
       target: "_blank",
       rel: "noreferrer",
       style: {
@@ -8929,7 +8929,7 @@ function TutorGrade() {
       color: C.dk
     }
   }, sel.content), sel.file_url && /*#__PURE__*/React.createElement("a", {
-    href: sel.file_url,
+    href: BACKEND+'/api/assignments/submissions/'+sel._id+'/view?token='+tok(),
     target: "_blank",
     rel: "noreferrer",
     style: {
@@ -9514,7 +9514,7 @@ function TutorMaterials() {
   }, sn(m.subject_id), " \xB7 ", m.type, " \xB7 ", m.downloads || 0, " downloads")), /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', gap: 5 }
   }, m.file_url && /*#__PURE__*/React.createElement("a", {
-    href: m.view_url || m.file_url,
+    href: BACKEND+'/api/materials/'+m._id+'/view?token='+tok(),
     target: "_blank",
     rel: "noreferrer",
     style: { ...BT('gh', true), fontSize: 11, padding: '6px 11px', textDecoration: 'none', display: 'inline-block' }

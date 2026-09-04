@@ -23,19 +23,57 @@ router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Detect real file type from Cloudinary's own response header rather than guessing from URL
+async function proxyFile(fileUrl, title, res, disposition) {
+  const response = await fetch(fileUrl);
+  if (!response.ok) throw new Error('Could not fetch file');
+  let mime = response.headers.get('content-type') || '';
+  // Cloudinary raw uploads often report octet-stream even for real PDFs — sniff the actual bytes.
+  const buf = Buffer.from(await response.arrayBuffer());
+  const isPdf = buf.slice(0, 5).toString('utf8') === '%PDF-';
+  if (isPdf) mime = 'application/pdf';
+  else if (!mime || mime === 'application/octet-stream') mime = 'application/octet-stream';
+  const ext = isPdf ? 'pdf' : (fileUrl.includes('.docx') ? 'docx' : (mime.includes('word') ? 'docx' : 'bin'));
+  const filename = (title || 'file').replace(/[^a-z0-9]/gi, '_') + '.' + ext;
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', disposition + '; filename="' + filename + '"');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(buf);
+}
+
+// Proxy VIEW - renders assignment PDF inline in browser
+router.get('/:id/view', auth, async (req, res) => {
+  try {
+    const a = await Assignment.findById(req.params.id);
+    if (!a?.file_url) return res.status(404).send('File not found');
+    await proxyFile(a.file_url, a.title, res, 'inline');
+  } catch(e) { res.status(500).send(e.message); }
+});
+
 // Proxy download assignment file with correct headers
 router.get('/:id/download', auth, async (req, res) => {
   try {
     const a = await Assignment.findById(req.params.id);
     if (!a?.file_url) return res.status(404).json({ error: 'No file' });
-    const response = await fetch(a.file_url);
-    if (!response.ok) return res.status(502).json({ error: 'Could not fetch file' });
-    const ext = a.file_url.includes('.pdf') ? 'pdf' : a.file_url.includes('.docx') ? 'docx' : 'bin';
-    const filename = (a.title||'assignment').replace(/[^a-z0-9]/gi,'_') + '.' + ext;
-    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-    const { Readable } = require('stream');
-    Readable.fromWeb(response.body).pipe(res);
+    await proxyFile(a.file_url, a.title, res, 'attachment');
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Proxy VIEW - renders a student's submitted file inline (for tutors grading)
+router.get('/submissions/:id/view', auth, async (req, res) => {
+  try {
+    const s = await Submission.findById(req.params.id);
+    if (!s?.file_url) return res.status(404).send('File not found');
+    await proxyFile(s.file_url, 'submission_' + s._id, res, 'inline');
+  } catch(e) { res.status(500).send(e.message); }
+});
+
+// Proxy DOWNLOAD - a student's submitted file
+router.get('/submissions/:id/download', auth, async (req, res) => {
+  try {
+    const s = await Submission.findById(req.params.id);
+    if (!s?.file_url) return res.status(404).json({ error: 'No file' });
+    await proxyFile(s.file_url, 'submission_' + s._id, res, 'attachment');
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
