@@ -556,6 +556,42 @@ function AuthScreen() {
   const gRef = useRef();
   const [role, setRole] = useState('student');
   const [prov, setProv] = useState('Copperbelt');
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [resetToken, setResetToken] = useState(new URLSearchParams(window.location.search).get('reset_token') || '');
+  const [resetPw, setResetPw] = useState('');
+  const [resetPw2, setResetPw2] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+  const [resetErr, setResetErr] = useState('');
+
+  const submitForgot = async () => {
+    if (!forgotEmail.trim()) { add({ title: 'Enter your email', icon: '⚠️', type: 'w' }); return; }
+    setForgotBusy(true);
+    try {
+      await apiFetch('POST', '/auth/forgot-password', { email: forgotEmail.trim() }, null);
+      setForgotSent(true);
+    } catch(e) {
+      add({ title: 'Error', body: e.message, icon: '❌', type: 'd' });
+    }
+    setForgotBusy(false);
+  };
+
+  const submitReset = async () => {
+    setResetErr('');
+    if (!resetPw || resetPw.length < 6) { setResetErr('Password must be at least 6 characters'); return; }
+    if (resetPw !== resetPw2) { setResetErr('Passwords do not match'); return; }
+    setResetBusy(true);
+    try {
+      await apiFetch('POST', '/auth/reset-password', { token: resetToken, password: resetPw }, null);
+      setResetDone(true);
+    } catch(e) {
+      setResetErr(e.message);
+    }
+    setResetBusy(false);
+  };
   const doLogin = async e => {
     e.preventDefault();
     const em = eRef.current?.value?.trim();
@@ -612,7 +648,79 @@ function AuthScreen() {
       setBusy(false);
     }
   };
-  return /*#__PURE__*/React.createElement("div", {
+  if (resetToken) {
+    if (resetDone) {
+      return /*#__PURE__*/React.createElement("div", {
+        style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#064d2c', textAlign: 'center' }
+      },
+        React.createElement("div", { style: { fontSize: 48, marginBottom: 12 } }, "✅"),
+        React.createElement("h2", { style: { color: '#fff', marginBottom: 8 } }, "Password reset!"),
+        React.createElement("p", { style: { color: 'rgba(255,255,255,0.8)', marginBottom: 20 } }, "You can now log in with your new password."),
+        React.createElement("button", {
+          onClick: () => { window.location.href = window.location.pathname; },
+          style: { background: '#fff', color: '#064d2c', border: 'none', borderRadius: 10, padding: '12px 28px', fontWeight: 700, cursor: 'pointer', fontSize: 15 }
+        }, "Go to Login")
+      );
+    }
+    return /*#__PURE__*/React.createElement("div", {
+      style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#064d2c' }
+    },
+      React.createElement("div", { style: { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360 } },
+        React.createElement("h2", { style: { color: '#064d2c', marginBottom: 4, textAlign: 'center' } }, "Reset Password"),
+        React.createElement("p", { style: { color: '#666', fontSize: 13, marginBottom: 18, textAlign: 'center' } }, "Enter your new password below"),
+        resetErr && React.createElement("div", { style: { background: '#fee2e2', color: '#b91c1c', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 } }, resetErr),
+        React.createElement("input", {
+          type: "password", placeholder: "New password", value: resetPw, onChange: e => setResetPw(e.target.value),
+          style: { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #ddd', marginBottom: 10, fontSize: 14, boxSizing: 'border-box' }
+        }),
+        React.createElement("input", {
+          type: "password", placeholder: "Confirm new password", value: resetPw2, onChange: e => setResetPw2(e.target.value),
+          style: { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #ddd', marginBottom: 16, fontSize: 14, boxSizing: 'border-box' }
+        }),
+        React.createElement("button", {
+          onClick: submitReset, disabled: resetBusy,
+          style: { width: '100%', background: '#064d2c', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontWeight: 700, cursor: 'pointer', fontSize: 15, opacity: resetBusy ? 0.7 : 1 }
+        }, resetBusy ? 'Resetting...' : 'Reset Password')
+      )
+    );
+  }
+
+  if (showForgot) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#064d2c' }
+    },
+      React.createElement("div", { style: { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360 } },
+        forgotSent
+          ? React.createElement(React.Fragment, null,
+              React.createElement("div", { style: { fontSize: 40, textAlign: 'center', marginBottom: 10 } }, "📧"),
+              React.createElement("h2", { style: { color: '#064d2c', marginBottom: 8, textAlign: 'center' } }, "Check your email"),
+              React.createElement("p", { style: { color: '#666', fontSize: 13, marginBottom: 20, textAlign: 'center' } }, "If an account exists for ", React.createElement("strong", null, forgotEmail), ", a reset link has been sent. It expires in 30 minutes."),
+              React.createElement("button", {
+                onClick: () => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); },
+                style: { width: '100%', background: '#064d2c', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontWeight: 700, cursor: 'pointer', fontSize: 15 }
+              }, "Back to Login")
+            )
+          : React.createElement(React.Fragment, null,
+              React.createElement("h2", { style: { color: '#064d2c', marginBottom: 4, textAlign: 'center' } }, "Forgot Password?"),
+              React.createElement("p", { style: { color: '#666', fontSize: 13, marginBottom: 18, textAlign: 'center' } }, "Enter your email and we will send you a reset link"),
+              React.createElement("input", {
+                type: "email", placeholder: "Your email", value: forgotEmail, onChange: e => setForgotEmail(e.target.value),
+                style: { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #ddd', marginBottom: 16, fontSize: 14, boxSizing: 'border-box' }
+              }),
+              React.createElement("button", {
+                onClick: submitForgot, disabled: forgotBusy,
+                style: { width: '100%', background: '#064d2c', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontWeight: 700, cursor: 'pointer', fontSize: 15, opacity: forgotBusy ? 0.7 : 1, marginBottom: 10 }
+              }, forgotBusy ? 'Sending...' : 'Send Reset Link'),
+              React.createElement("button", {
+                onClick: () => setShowForgot(false),
+                style: { width: '100%', background: 'none', color: '#666', border: 'none', padding: '8px', cursor: 'pointer', fontSize: 13 }
+              }, "← Back to Login")
+            )
+      )
+    );
+  }
+
+    return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: '100vh',
       background: `linear-gradient(180deg,${C.gd} 0%,#085e35 50%,#0d7a48 100%)`
@@ -790,7 +898,11 @@ function AuthScreen() {
       opacity: busy ? .7 : 1,
       marginBottom: 14
     }
-  }, busy ? '⏳ Signing in...' : '🎓 Sign In to Learn'), /*#__PURE__*/React.createElement("div", {
+  }, busy ? '⏳ Signing in...' : '🎓 Sign In to Learn'), tab === 'login' && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowForgot(true),
+    style: { display: 'block', margin: '0 auto 14px', background: 'none', border: 'none', color: '#064d2c', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }
+  }, "Forgot Password?"), /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '13px',

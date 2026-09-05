@@ -14,6 +14,8 @@ const UserSchema = new Schema({
   last_seen: { type: Date, default: Date.now },
   blocked_users: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   notifications_enabled: { type: Boolean, default: true },
+  resetToken: String,
+  resetTokenExpiry: Date,
 }, { timestamps: true });
 
 // SUBSCRIPTION

@@ -7,6 +7,62 @@ const { auth } = require('../middleware/auth');
 const { upload, uploadToCloudinary } = require('../config/cloudinary');
 
 const mkToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET || 'peacemindset_secret', { expiresIn: '90d' });
+const crypto = require('crypto');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// ── POST /api/auth/forgot-password ──────────────────
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    // Always respond success even if user not found, to avoid leaking which emails are registered
+    if (!user) return res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
+    const token = crypto.randomBytes(32).toString('hex');
+    user.resetToken = token;
+    user.resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    await user.save();
+    const resetUrl = (process.env.FRONTEND_URL || 'https://peacemindsetgcezm.vercel.app') + '/?reset_token=' + token;
+    try {
+      await resend.emails.send({
+        from: 'Peace Mindset School <onboarding@resend.dev>',
+        to: user.email,
+        subject: 'Reset your Peace Mindset password',
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:20px">
+            <h2 style="color:#064d2c">Peace Mindset Private School</h2>
+            <p>Hello ${user.name || 'there'},</p>
+            <p>We received a request to reset your password. Click the button below to choose a new one. This link expires in 30 minutes.</p>
+            <a href="${resetUrl}" style="display:inline-block;background:#064d2c;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">Reset Password</a>
+            <p style="font-size:12px;color:#666">If you did not request this, you can safely ignore this email.</p>
+            <p style="font-size:12px;color:#666">Or copy this link: ${resetUrl}</p>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error('Resend email error:', emailErr.message);
+      return res.status(500).json({ error: 'Could not send reset email. Please try again shortly.' });
+    }
+    res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/auth/reset-password ───────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and new password are required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const user = await User.findOne({ resetToken: token, resetTokenExpiry: { $gt: new Date() } });
+    if (!user) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
+    user.password = await bcrypt.hash(password, 10);
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+    await user.save();
+    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 router.post('/register', async (req, res) => {
   try {
