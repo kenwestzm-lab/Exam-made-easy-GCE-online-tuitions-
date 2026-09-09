@@ -9,7 +9,7 @@ const { upload, uploadToCloudinary } = require('../config/cloudinary');
 const mkToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET || 'peacemindset_secret', { expiresIn: '90d' });
 const crypto = require('crypto');
 const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 // ── POST /api/auth/forgot-password ──────────────────
 router.post('/forgot-password', async (req, res) => {
@@ -24,6 +24,10 @@ router.post('/forgot-password', async (req, res) => {
     user.resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     await user.save();
     const resetUrl = (process.env.FRONTEND_URL || 'https://peacemindsetgcezm.vercel.app') + '/?reset_token=' + token;
+    if (!resend) {
+      console.error('RESEND_API_KEY not configured - cannot send reset email');
+      return res.status(500).json({ error: 'Email service is not configured yet. Please contact the school.' });
+    }
     try {
       await resend.emails.send({
         from: 'Peace Mindset School <onboarding@resend.dev>',
