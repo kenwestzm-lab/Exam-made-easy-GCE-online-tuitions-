@@ -286,7 +286,9 @@ router.get('/status', async (req, res) => {
   res.json({
     groq: !!process.env.GROQ_API_KEY,
     openrouter: !!process.env.OPENROUTER_API_KEY,
-    gemini: !!process.env.GEMINI_API_KEY
+    gemini: !!process.env.GEMINI_API_KEY,
+    resend: !!process.env.RESEND_API_KEY,
+    resendKeyPrefix: process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 5) : null
   });
 });
 
