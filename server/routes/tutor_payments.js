@@ -24,7 +24,7 @@ const months = (v) => Math.min(Math.max(parseInt(v) || 1, 1), 12);
 
 // ───────── TUTOR: payment details ─────────
 router.get('/my-details', auth, tutorOnly, async (req, res) => {
-  try { res.json(await PayInfo.findOne({ tutor_id: req.user._id }) || null); }
+  try { res.json(await PayInfo.findOne({ tutor_id: req.user._id }) || { subjects: req.user.subjects || [] }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 

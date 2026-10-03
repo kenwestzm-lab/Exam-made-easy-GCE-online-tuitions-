@@ -70,13 +70,14 @@ router.post('/reset-password', async (req, res) => {
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, phone, grade, province } = req.body;
+    const { name, email, password, role, phone, grade, province, subjects } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) return res.status(400).json({ error: 'Email already registered. Please login.' });
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password: hash, role: (['student','tutor'].includes(role) ? role : 'student'), phone, grade, province, approved: false });
+    const user = await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password: hash, role: (['student','tutor'].includes(role) ? role : 'student'), phone, grade, province, approved: false,
+      subjects: (role === 'tutor' && Array.isArray(subjects)) ? subjects.map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 20) : [] });
     res.status(201).json({ token: mkToken(user._id), user: { _id: user._id, name: user.name, email: user.email, role: user.role, approved: user.approved, phone: user.phone, grade: user.grade, province: user.province } });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

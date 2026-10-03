@@ -9,6 +9,7 @@ const UserSchema = new Schema({
   role: { type: String, enum: ['student','tutor','admin'], default: 'student' },
   approved: { type: Boolean, default: false },
   phone: String, grade: String, province: String, bio: String,
+  subjects: [Number],
   avatar: String, avatarUrl: String,
   is_online: { type: Boolean, default: false },
   last_seen: { type: Date, default: Date.now },

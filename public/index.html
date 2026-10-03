@@ -6378,6 +6378,13 @@ function TutorSubscribe() {
     finally { setBusy(false); }
   };
 
+  useEffect(() => {
+    if (window.__subTutor && tutors.length) {
+      const t = tutors.find(x => String(x._id) === String(window.__subTutor));
+      window.__subTutor = null;
+      if (t) pick(t);
+    }
+  }, [tutors]);
   if (sel) return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
     h('button', { onClick: () => { setSel(null); setDet(null); }, style: { ...TP_btn('#6b7280'), marginBottom: 12 } }, '← Back to tutors'),
     h('div', { style: TP_card },
@@ -6407,7 +6414,7 @@ function TutorSubscribe() {
       const a = accFor(t._id), left = a ? TP_left(a.expires_at, skew.current) : null, pend = pendFor(t._id);
       return h('div', { key: t._id, style: TP_card },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
-          h('div', null, h('div', { style: { fontWeight: 700, fontSize: 15 } }, t.name), h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'K' + t.price_per_month + ' / month')),
+          h('div', null, h('div', { style: { fontWeight: 700, fontSize: 15 } }, t.name), h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'K' + t.price_per_month + ' / month'), t.subjects && t.subjects.length > 0 && h('div', { style: { fontSize: 11, color: '#064d2c', marginTop: 2 } }, t.subjects.map(id => { const s = SUBJECTS.find(x => x.id === id); return s ? s.i + ' ' + s.n : ''; }).join(' · '))),
           h('button', { onClick: () => pick(t), disabled: !!pend, style: { ...TP_btn(), opacity: pend ? .5 : 1 } }, left ? 'Renew' : pend ? 'Awaiting approval' : 'Subscribe')),
         left && h('div', { style: { marginTop: 8, fontSize: 12, color: '#065f46', fontWeight: 600 } }, '🔓 Unlocked · expires in ' + left + ' (' + TP_date(a.expires_at) + ')'),
         !left && a && h('div', { style: { marginTop: 8, fontSize: 12, color: '#991b1b', fontWeight: 600 } }, '🔒 Expired on ' + TP_date(a.expires_at) + '. Renew to unlock again.'));
@@ -6430,6 +6437,7 @@ function TutorPayPanel() {
   const [inc, setInc] = useState([]);
   const [studs, setStuds] = useState([]);
   const [price, setPrice] = useState('');
+  const [mySubj, setMySubj] = useState([]);
   const [rows, setRows] = useState([{ ...blank(), method: 'MTN Mobile Money' }, { ...blank(), method: 'Airtel Money' }, blank()]);
   const [fm, setFm] = useState('');
   const [fmo, setFmo] = useState(1);
@@ -6440,7 +6448,7 @@ function TutorPayPanel() {
   const skew = useRef(0);
   const load = () => {
     apiFetch('GET', '/tutor-pay/fee/status', null, tok()).then(d => { if (d) { setFee(d); skew.current = new Date(d.server_time).getTime() - Date.now(); if (d.pay_to && d.pay_to[0]) setFm(x => x || d.pay_to[0].method); } }).catch(() => {});
-    apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(d => { if (d) { setPrice(String(d.price_per_month)); const r = (d.methods || []).map(m => ({ method: m.method, account_name: m.account_name, account_number: m.account_number, instructions: m.instructions || '' })); while (r.length < 3) r.push(blank()); setRows(r); } }).catch(() => {});
+    apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(d => { if (d) { setPrice(d.price_per_month ? String(d.price_per_month) : ''); setMySubj(d.subjects || []); const r = (d.methods || []).map(m => ({ method: m.method, account_name: m.account_name, account_number: m.account_number, instructions: m.instructions || '' })); while (r.length < 3) r.push(blank()); setRows(r); } }).catch(() => {});
     apiFetch('GET', '/tutor-pay/incoming', null, tok()).then(d => setInc(Array.isArray(d) ? d : [])).catch(() => {});
     apiFetch('GET', '/tutor-pay/my-students', null, tok()).then(d => setStuds(Array.isArray(d) ? d : [])).catch(() => {});
   };
@@ -6455,8 +6463,9 @@ function TutorPayPanel() {
 
   const setRow = (i, k, v) => setRows(p => p.map((r, j) => j === i ? { ...r, [k]: v } : r));
   const saveDetails = async () => {
+    if (!mySubj.length) { add({ title: 'Choose the subjects you teach', icon: '⚠️', type: 'w' }); return; }
     try {
-      await apiFetch('PUT', '/tutor-pay/my-details', { price_per_month: Number(price), methods: rows.filter(r => r.method && r.account_number) }, tok());
+      await apiFetch('PUT', '/tutor-pay/my-details', { price_per_month: Number(price), subjects: mySubj, methods: rows.filter(r => r.method && r.account_number) }, tok());
       add({ title: '✅ Payment details saved', icon: '💳', type: 'i' }); load();
     } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
   };
@@ -6513,6 +6522,7 @@ function TutorPayPanel() {
     h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payment details (students pay you here)'),
       h('input', { type: 'number', value: price, onChange: e => setPrice(e.target.value), placeholder: 'Price per month (K)', style: TP_inp }),
+      h('div', { style: { marginBottom: 8 } }, h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 4 } }, 'Subjects you teach'), h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }, SUBJECTS.map(s => h('button', { key: s.id, type: 'button', onClick: () => setMySubj(p => p.includes(s.id) ? p.filter(x => x !== s.id) : [...p, s.id]), style: { padding: '5px 10px', borderRadius: 20, border: '1px solid #064d2c', cursor: 'pointer', fontSize: 12, background: mySubj.includes(s.id) ? '#064d2c' : '#fff', color: mySubj.includes(s.id) ? '#fff' : '#064d2c' } }, s.i + ' ' + s.n)))),
       rows.map((r, i) => h('div', { key: i, style: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 8, marginBottom: 8 } },
         h('input', { value: r.method, onChange: e => setRow(i, 'method', e.target.value), placeholder: 'Method (MTN Mobile Money, Airtel Money, Bank...)', style: TP_inp }),
         h('input', { value: r.account_name, onChange: e => setRow(i, 'account_name', e.target.value), placeholder: 'Account name', style: TP_inp }),
@@ -8126,7 +8136,7 @@ function EnhancedLiveClassesPage({ subs, pays }) {
       const ch = cls.presenter_type === 'ai' ? (AI_CHARS[cls.ai_character] || AI_CHARS.ken) : null;
       const canJoin = isLive && !cls.locked;
       const canAccess = !cls.locked;
-      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : add({title:'Subscribe Required',body:'Please subscribe to this subject to access this class.',icon:'🔒',type:'w'}), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
+      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
         React.createElement('div', { style: { padding: '14px 16px' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
             React.createElement('div', { style: { width: 42, height: 42, borderRadius: 12, background: ch ? 'linear-gradient(135deg,' + LC.gold + ',#f0b429)' : 'linear-gradient(135deg,' + C.gd + ',' + C.g + ')', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#000', flexShrink: 0 } }, ch ? ch.avatar : 'LIVE'),
@@ -8229,6 +8239,11 @@ function StudentApp() {
     profile
   } = useAuth();
   const [an, setAn] = useState('home');
+  useEffect(() => {
+    const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; setAn('pay'); };
+    window.addEventListener('goto-subscribe', g);
+    return () => window.removeEventListener('goto-subscribe', g);
+  }, []);
   const {
     data: subs
   } = useApiData('/subscriptions/mine', [profile?._id]);
