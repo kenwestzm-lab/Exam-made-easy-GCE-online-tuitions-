@@ -40,7 +40,8 @@ router.put('/my-details', auth, tutorOnly, async (req, res) => {
     if (!methods.length) return res.status(400).json({ error: 'Add at least one payment method with name and number' });
     const info = await PayInfo.findOneAndUpdate(
       { tutor_id: req.user._id },
-      { tutor_id: req.user._id, price_per_month: price, methods, active: req.body.active !== false },
+      { tutor_id: req.user._id, price_per_month: price, methods, active: req.body.active !== false,
+        ...(Array.isArray(req.body.subjects) ? { subjects: req.body.subjects.map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 20) } : {}) },
       { upsert: true, new: true, runValidators: true }
     );
     res.json(info);
@@ -54,7 +55,8 @@ router.get('/tutors', auth, async (req, res) => {
     const tutors = await User.find({ _id: { $in: infos.map(i => i.tutor_id) }, role: 'tutor', approved: true })
       .select('name avatarUrl avatar bio');
     const price = new Map(infos.map(i => [String(i.tutor_id), i.price_per_month]));
-    res.json(tutors.map(t => ({ _id: t._id, name: t.name, avatarUrl: t.avatarUrl, avatar: t.avatar, bio: t.bio, price_per_month: price.get(String(t._id)) })));
+    const subj = new Map(infos.map(i => [String(i.tutor_id), i.subjects || []]));
+    res.json(tutors.map(t => ({ _id: t._id, name: t.name, avatarUrl: t.avatarUrl, avatar: t.avatar, bio: t.bio, price_per_month: price.get(String(t._id)), subjects: subj.get(String(t._id)) || [] })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -64,7 +66,7 @@ router.get('/tutors/:id/details', auth, async (req, res) => {
     const tutor = await User.findOne({ _id: req.params.id, role: 'tutor', approved: true }).select('name');
     const info = await PayInfo.findOne({ tutor_id: req.params.id, active: true });
     if (!tutor || !info) return res.status(404).json({ error: 'This tutor has not set up payment details yet' });
-    res.json({ tutor: { _id: tutor._id, name: tutor.name }, price_per_month: info.price_per_month, methods: info.methods });
+    res.json({ tutor: { _id: tutor._id, name: tutor.name }, price_per_month: info.price_per_month, subjects: info.subjects || [], methods: info.methods });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

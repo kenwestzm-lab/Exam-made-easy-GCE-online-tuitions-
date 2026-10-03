@@ -15,7 +15,7 @@ const withUrls = (m) => {
 async function canAccess(user, m) {
   if (user.role === 'admin') return true;
   if (user.role === 'tutor') return !!(await tutorFeeExpiry(user._id));
-  return !m.tutor_id || (await studentHasAccess(user._id, m.tutor_id));
+  return !!m.tutor_id && (await studentHasAccess(user._id, m.tutor_id));
 }
 
 router.get('/', auth, async (req, res) => {
@@ -29,7 +29,7 @@ router.get('/', auth, async (req, res) => {
     }
     const ok = new Set(await activeTutorIds(req.user._id));
     res.json(mats.map(m => {
-      if (!m.tutor_id || ok.has(String(m.tutor_id))) return { ...withUrls(m), locked: false };
+      if (m.tutor_id && ok.has(String(m.tutor_id))) return { ...withUrls(m), locked: false };
       const o = m.toObject(); delete o.file_url;
       return { ...o, locked: true };
     }));

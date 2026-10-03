@@ -6,6 +6,7 @@ const reg = (name, schema) => mongoose.models[name] || mongoose.model(name, sche
 const PayInfo = new Schema({
   tutor_id: { ...ref, unique: true },
   price_per_month: { type: Number, required: true, min: 1 },
+  subjects: [Number],
   methods: [{ method: String, account_name: String, account_number: String, instructions: String }],
   active: { type: Boolean, default: true },
 }, { timestamps: true });

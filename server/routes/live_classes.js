@@ -15,7 +15,7 @@ const isOwner = (u, c) => String(c.tutor_id) === String(u._id);
 async function canView(user, cls) {
   if (user.role === 'admin') return true;
   if (user.role === 'tutor') return isOwner(user, cls);
-  return !cls.tutor_id || (await studentHasAccess(user._id, cls.tutor_id));
+  return !!cls.tutor_id && (await studentHasAccess(user._id, cls.tutor_id));
 }
 
 router.get('/live-classes', auth, async (req, res) => {
@@ -24,7 +24,7 @@ router.get('/live-classes', auth, async (req, res) => {
     if (req.user.role === 'admin') return res.json(list);
     if (req.user.role === 'tutor') return res.json(list.map(c => isOwner(req.user, c) ? c : lockView(c)));
     const ok = new Set(await activeTutorIds(req.user._id));
-    res.json(list.map(c => (!c.tutor_id || ok.has(String(c.tutor_id))) ? { ...c.toObject(), locked: false } : lockView(c)));
+    res.json(list.map(c => (c.tutor_id && ok.has(String(c.tutor_id))) ? { ...c.toObject(), locked: false } : lockView(c)));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
