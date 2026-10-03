@@ -7270,9 +7270,11 @@ function MaterialsPage({
       style: {
         fontSize: 11,
         color: C.d,
-        fontWeight: 600
+        fontWeight: 600,
+        cursor: 'pointer',
+        textDecoration: 'underline'
       }
-    }, "\uD83D\uDD12 Subscribe")))));
+    , onClick: () => window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: m.tutor_id } })), role: 'button' }, "\uD83D\uDD12 Subscribe")))));
   })));
 }
 function AssignmentsPage({
