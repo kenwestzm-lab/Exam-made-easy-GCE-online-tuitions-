@@ -36,6 +36,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/tutor-pay', require('./routes/tutor_payments'));
 app.use('/api/materials', require('./routes/materials'));
 app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/tests', require('./routes/tests'));
@@ -43,6 +44,7 @@ app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api/ai-tokens', require('./routes/ai_tokens'));
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/users', require('./routes/user_prefs'));
+app.use('/api', require('./routes/live_classes'));
 app.use('/api', require('./routes/misc'));
 
 // ── Socket.IO Real-time ───────────────────────────────
@@ -234,6 +236,7 @@ const PORT = process.env.PORT || 10000;
 connectDB().then(() => {
   server.listen(PORT, () => {
     scheduleExpiryChecks(io);
+    require('./services/tutorPayWatcher')(io);
     console.log(`✅ Peace Mindset Server v5 running on port ${PORT}`);
     console.log(`   Gemini: ${process.env.GEMINI_API_KEY ? '✅' : '❌ Missing'}`);
     console.log(`   Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? '✅' : '❌ Missing'}`);

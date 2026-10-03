@@ -6308,7 +6308,248 @@ function ProfilePage() {
     disabled: saving
   }, saving ? '⏳ Saving...' : '💾 Save Changes')));
 }
-function SubscribePage() {
+/* ===== TUTOR PAYMENTS UI (injected) ===== */
+const TP_card = { background: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: '0 2px 10px rgba(0,0,0,.07)' };
+const TP_inp = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' };
+const TP_btn = (bg) => ({ background: bg || '#064d2c', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
+const TP_left = (exp, skew) => {
+  const ms = new Date(exp).getTime() - (Date.now() + skew);
+  if (ms <= 0) return null;
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return (d ? d + 'd ' : '') + hh + 'h ' + m + 'm ' + ss + 's';
+};
+const TP_date = (d) => new Date(d).toLocaleString();
+const TP_status = (st) => ({ pending: ['#fef3c7', '#92400e', 'Pending'], approved: ['#d1fae5', '#065f46', 'Approved'], rejected: ['#fee2e2', '#991b1b', 'Rejected'] }[st] || ['#f3f4f6', '#374151', st]);
+const TP_badge = (st) => { const x = TP_status(st); return React.createElement('span', { style: { background: x[0], color: x[1], borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 } }, x[2]); };
+
+// ---------- STUDENT: choose tutor -> see details -> submit ----------
+function TutorSubscribe() {
+  const { socket } = useAuth();
+  const { add } = useToast();
+  const h = React.createElement;
+  const [tutors, setTutors] = useState([]);
+  const [access, setAccess] = useState([]);
+  const [pays, setPays] = useState([]);
+  const [sel, setSel] = useState(null);
+  const [det, setDet] = useState(null);
+  const [method, setMethod] = useState('');
+  const [months, setMonths] = useState(1);
+  const [txn, setTxn] = useState('');
+  const [receipt, setReceipt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [, setTick] = useState(0);
+  const skew = useRef(0);
+  const load = () => {
+    apiFetch('GET', '/tutor-pay/tutors', null, tok()).then(d => setTutors(Array.isArray(d) ? d : [])).catch(() => {});
+    apiFetch('GET', '/tutor-pay/access/mine', null, tok()).then(d => { if (Array.isArray(d)) { setAccess(d); if (d[0]) skew.current = new Date(d[0].server_time).getTime() - Date.now(); } }).catch(() => {});
+    apiFetch('GET', '/tutor-pay/mine', null, tok()).then(d => setPays(Array.isArray(d) ? d : [])).catch(() => {});
+  };
+  useEffect(() => { load(); const t = setInterval(() => setTick(x => x + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!socket) return;
+    const f = () => load();
+    const evs = ['access_granted', 'access_expired', 'payment_rejected'];
+    evs.forEach(e => socket.on(e, f));
+    return () => evs.forEach(e => socket.off(e, f));
+  }, [socket]);
+
+  const accFor = (id) => access.find(a => a.tutor && String(a.tutor._id) === String(id));
+  const pendFor = (id) => pays.find(p => p.tutor_id && String(p.tutor_id._id || p.tutor_id) === String(id) && p.status === 'pending');
+
+  const pick = async (t) => {
+    setSel(t); setDet(null); setMethod('');
+    try {
+      const d = await apiFetch('GET', '/tutor-pay/tutors/' + t._id + '/details', null, tok());
+      setDet(d); if (d.methods && d.methods[0]) setMethod(d.methods[0].method);
+    } catch (e) { add({ title: 'Not available', body: e.message, icon: '⚠️', type: 'w' }); setSel(null); }
+  };
+  const submit = async () => {
+    if (!txn.trim() || !method) { add({ title: 'Missing info', body: 'Choose a method and enter the reference number', icon: '⚠️', type: 'w' }); return; }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('tutor_id', sel._id); fd.append('method', method); fd.append('months', months);
+      fd.append('amount', det.price_per_month * months); fd.append('transaction_id', txn.trim());
+      if (receipt) fd.append('receipt', receipt);
+      await apiFetch('POST', '/tutor-pay/submit', null, tok(), fd);
+      add({ title: '✅ Payment submitted', body: sel.name + ' will review and approve it.', icon: '💳', type: 'i' });
+      setTxn(''); setReceipt(null); setSel(null); setDet(null); load();
+    } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+    finally { setBusy(false); }
+  };
+
+  if (sel) return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
+    h('button', { onClick: () => { setSel(null); setDet(null); }, style: { ...TP_btn('#6b7280'), marginBottom: 12 } }, '← Back to tutors'),
+    h('div', { style: TP_card },
+      h('h3', { style: { margin: '0 0 6px', color: '#064d2c' } }, 'Subscribe to ' + sel.name),
+      !det ? h('p', null, 'Loading payment details...') : h('div', null,
+        h('p', { style: { fontSize: 13, color: '#374151' } }, 'Price: ', h('b', null, 'K' + det.price_per_month + ' per month')),
+        h('div', { style: { fontWeight: 700, margin: '8px 0', color: '#064d2c' } }, '💳 Send money to:'),
+        det.methods.map((m, i) => h('div', { key: i, onClick: () => setMethod(m.method), style: { border: '2px solid ' + (method === m.method ? '#064d2c' : '#e5e7eb'), borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer', background: method === m.method ? '#ecfdf5' : '#fff' } },
+          h('div', { style: { fontWeight: 700 } }, m.method),
+          h('div', { style: { fontSize: 18, fontWeight: 800, color: '#064d2c', letterSpacing: 1 } }, m.account_number),
+          h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'Name: ' + m.account_name),
+          m.instructions && h('div', { style: { fontSize: 12, color: '#6b7280' } }, m.instructions))),
+        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Months'),
+        h('select', { value: months, onChange: e => setMonths(Number(e.target.value)), style: TP_inp }, [1, 2, 3, 4, 5, 6, 12].map(n => h('option', { key: n, value: n }, n + ' month(s) – K' + det.price_per_month * n))),
+        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Reference / Transaction ID (from your SMS)'),
+        h('input', { value: txn, onChange: e => setTxn(e.target.value), placeholder: 'e.g. MP260103.1234.A56789', style: TP_inp }),
+        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Screenshot (optional)'),
+        h('input', { type: 'file', accept: 'image/*', onChange: e => setReceipt(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
+        h('button', { onClick: submit, disabled: busy, style: { ...TP_btn(), width: '100%', opacity: busy ? .6 : 1 } }, busy ? 'Submitting...' : 'Submit payment of K' + det.price_per_month * months)))
+  );
+
+  return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
+    h('h2', { style: { color: '#064d2c', marginBottom: 4, fontSize: 19 } }, '💳 Subscribe to a Tutor'),
+    h('p', { style: { color: '#6b7280', fontSize: 13, marginBottom: 14 } }, 'Choose a tutor, pay using their details, and the tutor will approve your payment. You can only join classes of tutors you have paid.'),
+    tutors.length === 0 && h('div', { style: { ...TP_card, textAlign: 'center', color: '#6b7280' } }, 'No tutors are accepting payments yet.'),
+    tutors.map(t => {
+      const a = accFor(t._id), left = a ? TP_left(a.expires_at, skew.current) : null, pend = pendFor(t._id);
+      return h('div', { key: t._id, style: TP_card },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
+          h('div', null, h('div', { style: { fontWeight: 700, fontSize: 15 } }, t.name), h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'K' + t.price_per_month + ' / month')),
+          h('button', { onClick: () => pick(t), disabled: !!pend, style: { ...TP_btn(), opacity: pend ? .5 : 1 } }, left ? 'Renew' : pend ? 'Awaiting approval' : 'Subscribe')),
+        left && h('div', { style: { marginTop: 8, fontSize: 12, color: '#065f46', fontWeight: 600 } }, '🔓 Unlocked · expires in ' + left + ' (' + TP_date(a.expires_at) + ')'),
+        !left && a && h('div', { style: { marginTop: 8, fontSize: 12, color: '#991b1b', fontWeight: 600 } }, '🔒 Expired on ' + TP_date(a.expires_at) + '. Renew to unlock again.'));
+    }),
+    pays.length > 0 && h('div', { style: TP_card },
+      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payments'),
+      pays.map(p => h('div', { key: p._id, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #f3f4f6', fontSize: 13 } },
+        h('span', null, (p.tutor_id && p.tutor_id.name || 'Tutor') + ' · K' + p.amount + ' · ' + p.months + 'm'),
+        TP_badge(p.status))))
+  );
+}
+
+// ---------- TUTOR: payment details, approvals, K20 fee ----------
+function TutorPayPanel() {
+  const { socket } = useAuth();
+  const { add } = useToast();
+  const h = React.createElement;
+  const blank = () => ({ method: '', account_name: '', account_number: '', instructions: '' });
+  const [fee, setFee] = useState(null);
+  const [inc, setInc] = useState([]);
+  const [studs, setStuds] = useState([]);
+  const [price, setPrice] = useState('');
+  const [rows, setRows] = useState([{ ...blank(), method: 'MTN Mobile Money' }, { ...blank(), method: 'Airtel Money' }, blank()]);
+  const [fm, setFm] = useState('');
+  const [fmo, setFmo] = useState(1);
+  const [ft, setFt] = useState('');
+  const [fr, setFr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [, setTick] = useState(0);
+  const skew = useRef(0);
+  const load = () => {
+    apiFetch('GET', '/tutor-pay/fee/status', null, tok()).then(d => { if (d) { setFee(d); skew.current = new Date(d.server_time).getTime() - Date.now(); if (d.pay_to && d.pay_to[0]) setFm(x => x || d.pay_to[0].method); } }).catch(() => {});
+    apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(d => { if (d) { setPrice(String(d.price_per_month)); const r = (d.methods || []).map(m => ({ method: m.method, account_name: m.account_name, account_number: m.account_number, instructions: m.instructions || '' })); while (r.length < 3) r.push(blank()); setRows(r); } }).catch(() => {});
+    apiFetch('GET', '/tutor-pay/incoming', null, tok()).then(d => setInc(Array.isArray(d) ? d : [])).catch(() => {});
+    apiFetch('GET', '/tutor-pay/my-students', null, tok()).then(d => setStuds(Array.isArray(d) ? d : [])).catch(() => {});
+  };
+  useEffect(() => { load(); const t = setInterval(() => setTick(x => x + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!socket) return;
+    const f = () => load();
+    const evs = ['new_tutor_payment', 'tutor_fee_approved', 'tutor_fee_rejected', 'tutor_fee_expired'];
+    evs.forEach(e => socket.on(e, f));
+    return () => evs.forEach(e => socket.off(e, f));
+  }, [socket]);
+
+  const setRow = (i, k, v) => setRows(p => p.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  const saveDetails = async () => {
+    try {
+      await apiFetch('PUT', '/tutor-pay/my-details', { price_per_month: Number(price), methods: rows.filter(r => r.method && r.account_number) }, tok());
+      add({ title: '✅ Payment details saved', icon: '💳', type: 'i' }); load();
+    } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+  };
+  const review = async (id, act) => {
+    try { await apiFetch('PUT', '/tutor-pay/' + id + '/' + act, {}, tok()); add({ title: act === 'approve' ? '✅ Approved – student unlocked' : 'Rejected', icon: '💳', type: 'i' }); load(); }
+    catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+  };
+  const payFee = async () => {
+    if (!ft.trim()) { add({ title: 'Enter the reference number', icon: '⚠️', type: 'w' }); return; }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('method', fm); fd.append('months', fmo); fd.append('amount', 20 * fmo); fd.append('transaction_id', ft.trim());
+      if (fr) fd.append('receipt', fr);
+      await apiFetch('POST', '/tutor-pay/fee/submit', null, tok(), fd);
+      add({ title: '✅ Fee submitted', body: 'Admin will approve it shortly.', icon: '💳', type: 'i' }); setFt(''); setFr(null); load();
+    } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+    finally { setBusy(false); }
+  };
+
+  const left = fee && fee.expires_at ? TP_left(fee.expires_at, skew.current) : null;
+  return h('div', { style: { maxWidth: 680, paddingBottom: 28 } },
+    h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, '💰 Payments'),
+    // K20 fee
+    h('div', { style: { ...TP_card, border: '2px solid ' + (left ? '#10b981' : '#ef4444') } },
+      h('div', { style: { fontWeight: 700, marginBottom: 4 } }, 'Monthly membership fee: K20'),
+      left ? h('div', { style: { color: '#065f46', fontSize: 13, fontWeight: 600 } }, '✅ Paid · expires in ' + left)
+        : h('div', { style: { color: '#991b1b', fontSize: 13, fontWeight: 600 } }, '🔒 Unpaid or expired. You cannot schedule classes or access materials until paid.'),
+      fee && fee.pending && h('div', { style: { fontSize: 12, color: '#92400e', marginTop: 6 } }, '⏳ Your fee payment is awaiting admin approval.'),
+      fee && h('div', { style: { marginTop: 10 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, 'Pay to:'),
+        (fee.pay_to || []).map((m, i) => h('div', { key: i, onClick: () => setFm(m.method), style: { border: '2px solid ' + (fm === m.method ? '#064d2c' : '#e5e7eb'), borderRadius: 10, padding: 8, marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', background: fm === m.method ? '#ecfdf5' : '#fff' } },
+          h('span', { style: { fontWeight: 600 } }, m.method), h('span', { style: { fontWeight: 800, color: '#064d2c' } }, m.account_number))),
+        h('select', { value: fmo, onChange: e => setFmo(Number(e.target.value)), style: TP_inp }, [1, 2, 3, 6, 12].map(n => h('option', { key: n, value: n }, n + ' month(s) – K' + 20 * n))),
+        h('input', { value: ft, onChange: e => setFt(e.target.value), placeholder: 'Reference / Transaction ID', style: TP_inp }),
+        h('input', { type: 'file', accept: 'image/*', onChange: e => setFr(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
+        h('button', { onClick: payFee, disabled: busy || (fee && fee.pending), style: { ...TP_btn(), opacity: busy || (fee && fee.pending) ? .5 : 1 } }, busy ? 'Submitting...' : 'Pay K' + 20 * fmo))),
+    // incoming payments
+    h('div', { style: TP_card },
+      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Student payments'),
+      inc.length === 0 && h('div', { style: { color: '#6b7280', fontSize: 13 } }, 'No payments yet.'),
+      inc.map(p => h('div', { key: p._id, style: { borderTop: '1px solid #f3f4f6', padding: '8px 0', fontSize: 13 } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('b', null, p.student_id ? p.student_id.name : 'Student'), TP_badge(p.status)),
+        h('div', { style: { color: '#6b7280' } }, 'K' + p.amount + ' · ' + p.months + ' month(s) · ' + p.method + ' · Ref: ' + p.transaction_id),
+        p.receipt_url && h('a', { href: p.receipt_url, target: '_blank', rel: 'noreferrer', style: { fontSize: 12 } }, 'View screenshot'),
+        p.status === 'pending' && h('div', { style: { display: 'flex', gap: 8, marginTop: 6 } },
+          h('button', { onClick: () => review(p._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
+          h('button', { onClick: () => review(p._id, 'reject'), style: TP_btn('#dc2626') }, 'Reject'))))),
+    // active students
+    h('div', { style: TP_card },
+      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Active students (' + studs.length + ')'),
+      studs.map(s => h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } }, (s.student_id ? s.student_id.name : 'Student') + ' · until ' + TP_date(s.expires_at)))),
+    // payment details
+    h('div', { style: TP_card },
+      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payment details (students pay you here)'),
+      h('input', { type: 'number', value: price, onChange: e => setPrice(e.target.value), placeholder: 'Price per month (K)', style: TP_inp }),
+      rows.map((r, i) => h('div', { key: i, style: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 8, marginBottom: 8 } },
+        h('input', { value: r.method, onChange: e => setRow(i, 'method', e.target.value), placeholder: 'Method (MTN Mobile Money, Airtel Money, Bank...)', style: TP_inp }),
+        h('input', { value: r.account_name, onChange: e => setRow(i, 'account_name', e.target.value), placeholder: 'Account name', style: TP_inp }),
+        h('input', { value: r.account_number, onChange: e => setRow(i, 'account_number', e.target.value), placeholder: 'Number / account', style: TP_inp }),
+        h('input', { value: r.instructions, onChange: e => setRow(i, 'instructions', e.target.value), placeholder: 'Instructions (optional)', style: TP_inp }))),
+      h('button', { onClick: saveDetails, style: TP_btn() }, 'Save payment details')));
+}
+
+// ---------- ADMIN: approve tutor K20 fees ----------
+function AdminTutorFees() {
+  const { socket } = useAuth();
+  const { add } = useToast();
+  const h = React.createElement;
+  const [list, setList] = useState([]);
+  const load = () => apiFetch('GET', '/tutor-pay/fee/all', null, tok()).then(d => setList(Array.isArray(d) ? d : [])).catch(() => {});
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!socket) return; socket.on('new_tutor_fee', load); return () => socket.off('new_tutor_fee', load); }, [socket]);
+  const act = async (id, a) => {
+    try { await apiFetch('PUT', '/tutor-pay/fee/' + id + '/' + a, {}, tok()); add({ title: a === 'approve' ? '✅ Fee approved' : 'Rejected', icon: '💳', type: 'i' }); load(); }
+    catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+  };
+  return h('div', { style: { maxWidth: 680, paddingBottom: 28 } },
+    h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, '💰 Tutor K20 Fees'),
+    list.length === 0 && h('div', { style: TP_card }, 'No fee payments yet.'),
+    list.map(f => h('div', { key: f._id, style: TP_card },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('b', null, f.tutor_id ? f.tutor_id.name : 'Tutor'), TP_badge(f.status)),
+      h('div', { style: { fontSize: 13, color: '#6b7280' } }, 'K' + f.amount + ' · ' + f.months + ' month(s) · ' + f.method + ' · Ref: ' + f.transaction_id),
+      f.expires_at && h('div', { style: { fontSize: 12, color: '#065f46' } }, 'Valid until ' + TP_date(f.expires_at)),
+      f.receipt_url && h('a', { href: f.receipt_url, target: '_blank', rel: 'noreferrer', style: { fontSize: 12 } }, 'View screenshot'),
+      f.status === 'pending' && h('div', { style: { display: 'flex', gap: 8, marginTop: 6 } },
+        h('button', { onClick: () => act(f._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
+        h('button', { onClick: () => act(f._id, 'reject'), style: TP_btn('#dc2626') }, 'Reject')))));
+}
+/* ===== END TUTOR PAYMENTS UI ===== */
+
+function SubscribePage() { return React.createElement(TutorSubscribe, null); }
+function SubscribePageOld() {
   const {
     profile
   } = useAuth();
@@ -6843,8 +7084,17 @@ function MaterialsPage({
 }) {
   const {
     data: mats,
-    loading
+    loading,
+    refetch
   } = useApiData('/materials');
+  const { socket } = useAuth();
+  useEffect(() => {
+    const f = () => refetch();
+    const t = setInterval(f, 30000);
+    const evs = ['access_granted', 'access_expired'];
+    if (socket) evs.forEach(e => socket.on(e, f));
+    return () => { clearInterval(t); if (socket) evs.forEach(e => socket.off(e, f)); };
+  }, [socket]);
   const [filter, setFilter] = useState(0);
   const filtered = filter === 0 ? mats : mats.filter(m => m.subject_id === filter);
   const tIcon = t => ({
@@ -6916,7 +7166,7 @@ function MaterialsPage({
       gap: 11
     }
   }, filtered.map(m => {
-    const ok = !m.premium || isSub(subs, pays, m.subject_id);
+    const ok = !m.locked;
     return /*#__PURE__*/React.createElement("div", {
       key: m._id,
       style: {
@@ -7827,6 +8077,14 @@ function EnhancedLiveClassesPage({ subs, pays }) {
   const [lobbyClass, setLobbyClass] = useState(null);
   const [viewMode, setViewMode] = useState('upcoming');
   const autoRef = useRef();
+  useEffect(() => {
+    if (!socket) return;
+    const f = () => refetch();
+    const tm = setInterval(f, 30000);
+    const evs = ['access_granted', 'access_expired', 'class_went_live'];
+    evs.forEach(e => socket.on(e, f));
+    return () => { clearInterval(tm); evs.forEach(e => socket.off(e, f)); };
+  }, [socket]);
 
   useEffect(() => {
     const chk = () => {
@@ -7866,8 +8124,8 @@ function EnhancedLiveClassesPage({ subs, pays }) {
     visible.map(cls => {
       const isLive = cls.status === 'live';
       const ch = cls.presenter_type === 'ai' ? (AI_CHARS[cls.ai_character] || AI_CHARS.ken) : null;
-      const canJoin = isLive && (isPresenter || isSub(subs, pays, cls.subject_id));
-      const canAccess = isPresenter || isSub(subs, pays, cls.subject_id);
+      const canJoin = isLive && !cls.locked;
+      const canAccess = !cls.locked;
       return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : add({title:'Subscribe Required',body:'Please subscribe to this subject to access this class.',icon:'🔒',type:'w'}), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
         React.createElement('div', { style: { padding: '14px 16px' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
@@ -9674,6 +9932,10 @@ function TutorApp() {
     icon: '📤',
     label: 'Upload Materials'
   }, {
+    id: 'pay',
+    icon: '💰',
+    label: 'Payments'
+  }, {
     id: 'tests',
     icon: '✏️',
     label: 'Create Tests'
@@ -9925,6 +10187,7 @@ function TutorApp() {
     schedule: /*#__PURE__*/React.createElement(ScheduleClass, {
       onDone: () => setAn('home')
     }),
+    pay: React.createElement(TutorPayPanel, null),
     materials: /*#__PURE__*/React.createElement(TutorMaterials, null),
     tests: /*#__PURE__*/React.createElement(TutorCreateTest, null),
     assignments: /*#__PURE__*/React.createElement(TutorCreateAssignment, null),
@@ -9997,6 +10260,10 @@ function AdminApp() {
     icon: '🤖',
     label: 'Study Tokens',
     badge: aiPnd || null
+  }, {
+    id: 'tfees',
+    icon: '💰',
+    label: 'Tutor Fees'
   }, {
     id: 'users',
     icon: '👥',
@@ -10736,6 +11003,7 @@ function AdminApp() {
     home: /*#__PURE__*/React.createElement(Dash, null),
     payments: /*#__PURE__*/React.createElement(Payments, null),
     ai_payments: /*#__PURE__*/React.createElement(AIPayments, null),
+    tfees: React.createElement(AdminTutorFees, null),
     users: /*#__PURE__*/React.createElement(Users, null),
     announce: /*#__PURE__*/React.createElement(Announce, null),
     profile: /*#__PURE__*/React.createElement(ProfilePage, null)

@@ -2,55 +2,57 @@ const express = require('express');
 const router = express.Router();
 const { Material } = require('../models');
 const { auth, tutorOrAdmin } = require('../middleware/auth');
+const { requireTutorFee } = require('../middleware/tutorFee');
+const { activeTutorIds, studentHasAccess, tutorFeeExpiry } = require('../services/access');
 const { upload, uploadToCloudinary, getViewUrl, getDownloadUrl } = require('../config/cloudinary');
 
-// Add view/download URLs to material object
 const withUrls = (m) => {
   const obj = m.toObject ? m.toObject() : m;
-  return {
-    ...obj,
-    view_url: getViewUrl(obj.file_url, obj.type),
-    download_url: getDownloadUrl(obj.file_url, obj.title, obj.type),
-  };
+  return { ...obj, view_url: getViewUrl(obj.file_url, obj.type), download_url: getDownloadUrl(obj.file_url, obj.title, obj.type) };
 };
+
+// Server-side gate used by list, view and download
+async function canAccess(user, m) {
+  if (user.role === 'admin') return true;
+  if (user.role === 'tutor') return !!(await tutorFeeExpiry(user._id));
+  return !m.tutor_id || (await studentHasAccess(user._id, m.tutor_id));
+}
 
 router.get('/', auth, async (req, res) => {
   try {
     const mats = await Material.find().sort('-createdAt');
-    res.json(mats.map(withUrls));
+    if (req.user.role === 'admin') return res.json(mats.map(withUrls));
+    if (req.user.role === 'tutor') {
+      if (!(await tutorFeeExpiry(req.user._id)))
+        return res.status(402).json({ error: 'Your K20 monthly fee is unpaid. Pay it to access materials.', code: 'TUTOR_FEE_REQUIRED' });
+      return res.json(mats.map(withUrls));
+    }
+    const ok = new Set(await activeTutorIds(req.user._id));
+    res.json(mats.map(m => {
+      if (!m.tutor_id || ok.has(String(m.tutor_id))) return { ...withUrls(m), locked: false };
+      const o = m.toObject(); delete o.file_url;
+      return { ...o, locked: true };
+    }));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/', auth, tutorOrAdmin, upload.single('file'), async (req, res) => {
+router.post('/', auth, tutorOrAdmin, requireTutorFee, upload.single('file'), async (req, res) => {
   try {
     const { title, description, subject_id, type, premium } = req.body;
     let file_url = '', size = '';
     if (req.file) {
-      // PDFs upload as 'image' type - Cloudinary serves these with correct
-      // Content-Type headers so browsers render them inline natively.
-      // Word/PowerPoint have no native browser viewer, so they stay 'raw' (download-only).
       const rType = ['video','audio'].includes(type) ? 'video'
         : ['pptx','word'].includes(type) ? 'raw'
         : 'image';
       const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/materials', rType);
       file_url = r.secure_url;
-      size = req.file.size > 1024*1024
-        ? Math.round(req.file.size/1024/1024)+'MB'
-        : Math.round(req.file.size/1024)+'KB';
+      size = req.file.size > 1024*1024 ? Math.round(req.file.size/1024/1024)+'MB' : Math.round(req.file.size/1024)+'KB';
     }
-    const m = await Material.create({
-      title, description,
-      subject_id: Number(subject_id),
-      type,
-      premium: premium !== 'false',
-      file_url,
-      size,
-      tutor_id: req.user._id
-    });
+    const m = await Material.create({ title, description, subject_id: Number(subject_id), type, premium: premium !== 'false', file_url, size, tutor_id: req.user._id });
     res.status(201).json(withUrls(m));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
-// Detect the real file type by sniffing actual bytes rather than trusting a stored label
+
 async function proxyMaterial(fileUrl, title, declaredType, res, disposition) {
   const response = await fetch(fileUrl);
   if (!response.ok) throw new Error('Could not fetch file');
@@ -72,43 +74,45 @@ async function proxyMaterial(fileUrl, title, declaredType, res, disposition) {
   res.send(buf);
 }
 
-// Proxy VIEW - renders PDF/image inline in browser
+const denied = (res, user) => res.status(user.role === 'tutor' ? 402 : 403)
+  .json({ error: user.role === 'tutor' ? 'K20 monthly fee unpaid' : 'Locked. Subscribe to this tutor to unlock.', code: 'LOCKED' });
+
 router.get('/:id/view', auth, async (req, res) => {
   try {
     const m = await Material.findById(req.params.id);
     if (!m?.file_url) return res.status(404).send('File not found');
+    if (!(await canAccess(req.user, m))) return denied(res, req.user);
     await proxyMaterial(m.file_url, m.title, m.type, res, 'inline');
   } catch(e) { res.status(500).send(e.message); }
 });
 
-// Proxy download - forces proper file download
 router.get('/:id/download', auth, async (req, res) => {
   try {
-    const m = await Material.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { downloads: 1 } },
-      { new: true }
-    );
+    const m = await Material.findById(req.params.id);
     if (!m?.file_url) return res.status(404).json({ error: 'File not found' });
+    if (!(await canAccess(req.user, m))) return denied(res, req.user);
+    await Material.updateOne({ _id: m._id }, { $inc: { downloads: 1 } });
     await proxyMaterial(m.file_url, m.title, m.type, res, 'attachment');
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Increment download count
 router.post('/:id/download', auth, async (req, res) => {
   try {
-    const m = await Material.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { downloads: 1 } },
-      { new: true }
-    );
+    const m0 = await Material.findById(req.params.id);
+    if (!m0) return res.status(404).json({ error: 'Not found' });
+    if (!(await canAccess(req.user, m0))) return denied(res, req.user);
+    const m = await Material.findByIdAndUpdate(req.params.id, { $inc: { downloads: 1 } }, { new: true });
     res.json({ downloads: m.downloads });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/:id', auth, tutorOrAdmin, async (req, res) => {
+// A tutor can delete only their own material; admin can delete any
+router.delete('/:id', auth, tutorOrAdmin, requireTutorFee, async (req, res) => {
   try {
-    await Material.findByIdAndDelete(req.params.id);
+    const filter = { _id: req.params.id };
+    if (req.user.role === 'tutor') filter.tutor_id = req.user._id;
+    const r = await Material.deleteOne(filter);
+    if (!r.deletedCount) return res.status(404).json({ error: 'Not found or not yours' });
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

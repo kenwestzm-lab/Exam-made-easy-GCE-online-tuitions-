@@ -76,7 +76,7 @@ router.post('/register', async (req, res) => {
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) return res.status(400).json({ error: 'Email already registered. Please login.' });
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password: hash, role: role || 'student', phone, grade, province, approved: role === 'admin' });
+    const user = await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password: hash, role: (['student','tutor'].includes(role) ? role : 'student'), phone, grade, province, approved: false });
     res.status(201).json({ token: mkToken(user._id), user: { _id: user._id, name: user.name, email: user.email, role: user.role, approved: user.approved, phone: user.phone, grade: user.grade, province: user.province } });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
