@@ -73,6 +73,7 @@ router.post('/register', async (req, res) => {
     const { name, email, password, role, phone, grade, province, subjects } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (role === 'tutor' && !(Array.isArray(subjects) && subjects.length)) return res.status(400).json({ error: 'Tutors must choose at least one subject they teach' });
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) return res.status(400).json({ error: 'Email already registered. Please login.' });
     const hash = await bcrypt.hash(password, 10);
