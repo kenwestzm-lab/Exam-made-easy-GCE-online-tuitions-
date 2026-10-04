@@ -2838,6 +2838,8 @@ function EnhancedAIClassRoom({
     if (classData?.presenter_type === 'ai') await handleStudentQ(q, profile?.name);
   };
   const raiseHand = () => {
+    addMsg('system', 'Questions are taken after the lesson on the Questions page.');
+    return;
     const n = !handUp;
     setHandUp(n);
     if (socket && classData?._id) socket.emit('hand_raise', {
@@ -4593,9 +4595,9 @@ function LiveClassRoom({classData,onExit,profile,socket}){
       if(classData?.lesson_script){
         try{
           const lb=await apiFetch('POST','/ai/build-lesson',{subject:subName(),topic:classData?.lesson_topic||subName(),notes:classData.lesson_script,character:ck},tok());
-          if(lb?.chunks?.length){chunks.current=lb.chunks;setLessonReady(true);}
+          if(lb?.chunks?.length){chunks.current=lb.chunks.map(c=>({type:'teach',text:c.text||c.question||''})).filter(c=>c.text);setLessonReady(true);}
         }catch(e){
-          chunks.current=classData.lesson_script.split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:i%5===4?'question':'teach',question:i%5===4?text.trim()+' Can you explain this?':null}));
+          chunks.current=classData.lesson_script.split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:'teach',question:null}));
           setLessonReady(true);
         }
       }
@@ -4613,7 +4615,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     const onQ=({question,studentName})=>{
       addMsg('student',question,{name:studentName});
       // AI responds to questions from students even when not waiting
-      if(isAI&&!waiting.current){
+      if(false){
         apiFetch('POST','/ai/chat',{message:studentName+' asks: '+question,subject:subName(),character:ck,conversation_history:[],lesson_context:(classData?.lesson_script||'').substring(0,300)},tok())
           .then(r=>{if(r.reply)say(r.reply);}).catch(()=>{});
       }
@@ -4632,6 +4634,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
   const sendMsg=()=>{
     if(!input.trim())return;
     const q=input.trim();setInput('');
+    if(isAI&&!isPresenter){addMsg('system','Questions are taken after the lesson on the Questions page.');return;}
     if(waitingAnswer){submitAnswer(q);return;}
     addMsg('me',q,{name:profile?.name});
     if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:q,studentName:profile?.name});
@@ -4649,6 +4652,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     React.createElement('h2',{style:{color:G.gold,fontSize:24,marginBottom:8}},'Class Completed!'),
     React.createElement('p',{style:{color:G.grey,marginBottom:24}},'Well done for attending today.'),
     quizReady&&React.createElement('p',{style:{color:G.green,marginBottom:16,fontWeight:600}},'✅ Quiz has been sent to your tutor for review'),
+    !isPresenter&&React.createElement('button',{onClick:()=>{onExit();setTimeout(()=>window.dispatchEvent(new CustomEvent('goto-subscribe',{detail:{page:'questions'}})),80);},style:{background:'rgba(255,255,255,0.08)',color:G.gold,border:'1px solid '+G.goldb,borderRadius:12,padding:'12px 24px',fontWeight:700,cursor:'pointer',fontSize:14,marginBottom:12}},'❓ Ask about this lesson'),
     React.createElement('button',{onClick:onExit,style:{background:'linear-gradient(135deg,'+G.gold+',#d97706)',color:'#000',border:'none',borderRadius:12,padding:'12px 32px',fontWeight:700,cursor:'pointer',fontSize:15}},'← Back to Classes')
   );
 
@@ -8245,7 +8249,7 @@ function StudentApp() {
   } = useAuth();
   const [an, setAn] = useState('home');
   useEffect(() => {
-    const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; setAn('pay'); };
+    const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; setAn(e.detail && e.detail.page ? e.detail.page : 'pay'); };
     window.addEventListener('goto-subscribe', g);
     return () => window.removeEventListener('goto-subscribe', g);
   }, []);

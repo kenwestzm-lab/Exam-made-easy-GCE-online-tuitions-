@@ -30,21 +30,22 @@ HOW YOU TEACH
 - Keep answers focused: usually 80 to 160 words, longer only when the working needs it.
 - Do NOT end by asking the student questions. During a lesson never quiz or ask "can you explain this?". Finish with a short encouraging line or one tip.
 
-HONESTY
-- Do not announce that you are an AI or lecture about it. If a student sincerely asks whether you are a person or an AI, say honestly that you are the school's AI teacher.
+IDENTITY
+- Never mention or bring up what you are made of. Never say "AI", "robot", "model" or "program". Just teach as ${ch.name}.
+- If a student directly and sincerely asks whether you are a real person, do not claim to be human. Say you are the school's virtual teacher for this class, then go straight back to helping.
 - If you are not sure about a fact, say so plainly instead of guessing.
 
 ${ctx ? 'LESSON CONTEXT:\n' + ctx.substring(0, 900) : ''}
 Subject: ${subject || 'General'} | Name: ${ch.name}`;
 }
 
-async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300) {
+async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300, model = 'llama-3.3-70b-versatile') {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('NO_GROQ_KEY');
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history.slice(-6).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
+    ...history.slice(-10).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' })),
     { role: 'user', content: userMessage }
   ];
 
@@ -52,7 +53,7 @@ async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
     body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
+      model: model,
       messages,
       max_tokens: maxTokens,
       temperature: 0.75
@@ -197,7 +198,8 @@ async function callMistral(systemPrompt, userMessage, history = [], maxTokens = 
 // ── MAIN: Try all providers in order ────────────────
 async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) {
   const providers = [
-    { name: 'Groq', fn: callGroq },
+    { name: 'Groq 70B', fn: callGroq },
+    { name: 'Groq 8B', fn: (a, b, c, d) => callGroq(a, b, c, d, 'llama-3.1-8b-instant') },
     { name: 'OpenRouter', fn: callOpenRouter },
     { name: 'Gemini', fn: callGemini },
     { name: 'Together', fn: callTogether },
@@ -219,11 +221,24 @@ async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) 
 }
 
 // ── POST /api/ai/chat ────────────────────────────────
+async function callSmart(systemPrompt, userMessage, history, maxTokens) {
+  const p = systemPrompt + `
+
+ANSWER FORMAT (strict):
+First write your private working inside <work>...</work>. Restate the problem, solve it step by step, then check every calculation a second time and fix any slip.
+Then write the final spoken reply inside <say>...</say>. Only the <say> part is shown to the student. Plain speech, no markdown, and do not mention the working.`;
+  const raw = await callAI(p, userMessage, history, maxTokens + 900);
+  const m = raw.match(/<say>([\s\S]*?)(<\/say>|$)/i);
+  let out = m ? m[1] : raw.replace(/<work>[\s\S]*?(<\/work>|$)/i, '');
+  out = out.replace(/<\/?(work|say)>/gi, '').trim();
+  return out || "Let me put that more simply. Please ask me once more.";
+}
+
 router.post('/chat', auth, async (req, res) => {
   try {
     const { message, subject, character, lesson_context, conversation_history, image_base64 } = req.body;
     const ch = AI[character] || AI.ken;
-    const history = (conversation_history || []).slice(-6).map(m => ({
+    const history = (conversation_history || []).slice(-10).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
       content: m.text || m.content || ''
     }));
@@ -241,7 +256,7 @@ router.post('/chat', auth, async (req, res) => {
         reply = await callAI(imgPrompt, message, history, 400);
       }
     } else {
-      reply = await callAI(prompt, message, history, 300);
+      reply = await callSmart(prompt, message, history, 550);
     }
     res.json({ reply, character: ch.name });
   } catch (e) {
@@ -286,7 +301,7 @@ router.post('/class-response', auth, async (req, res) => {
     const ch = AI[character] || AI.ken;
     const prompt = buildPrompt(ch, subject, lesson_context);
     const ctx = class_context ? `\nClass context: ${class_context}` : '';
-    const reply = await callAI(prompt, question + ctx, [], 250);
+    const reply = await callSmart(prompt, question + ctx, [], 450);
     res.json({ reply, character: ch.name });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -488,6 +503,7 @@ Respond with ONLY valid JSON:
     const raw = await callAI(prompt, 'Build lesson chunks', [], 3500);
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
+    parsed.chunks = (parsed.chunks || []).map(c => ({ type: 'teach', text: c.text || c.question || '' })).filter(c => c.text);
     res.json(parsed);
   } catch(e) {
     res.status(500).json({ error: e.message });
