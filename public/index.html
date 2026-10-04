@@ -6433,7 +6433,8 @@ function TutorSubscribe() {
 }
 
 // ---------- TUTOR: payment details, approvals, K20 fee ----------
-function TutorPayPanel() {
+function TutorPayPanel(props) {
+  const mode = (props && props.mode) || 'pay';
   const { socket } = useAuth();
   const { add } = useToast();
   const h = React.createElement;
@@ -6493,9 +6494,10 @@ function TutorPayPanel() {
 
   const left = fee && fee.expires_at ? TP_left(fee.expires_at, skew.current) : null;
   return h('div', { style: { maxWidth: 680, paddingBottom: 28 } },
-    h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, '💰 Payments'),
+    h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, mode === 'fee' ? '🎫 Membership Fee' : '💰 Payments'),
+    mode !== 'fee' && fee && !left && h('div', { style: { background: '#fef2f2', color: '#991b1b', borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 10 } }, '🔒 Your K20 membership is unpaid. Open the Membership tab to pay.'),
     // K20 fee
-    h('div', { style: { ...TP_card, border: '2px solid ' + (left ? '#10b981' : '#ef4444') } },
+    mode === 'fee' && h('div', { style: { ...TP_card, border: '2px solid ' + (left ? '#10b981' : '#ef4444') } },
       h('div', { style: { fontWeight: 700, marginBottom: 4 } }, 'Monthly membership fee: K20'),
       left ? h('div', { style: { color: '#065f46', fontSize: 13, fontWeight: 600 } }, '✅ Paid · expires in ' + left)
         : h('div', { style: { color: '#991b1b', fontSize: 13, fontWeight: 600 } }, '🔒 Unpaid or expired. You cannot schedule classes or access materials until paid.'),
@@ -6509,7 +6511,7 @@ function TutorPayPanel() {
         h('input', { type: 'file', accept: 'image/*', onChange: e => setFr(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
         h('button', { onClick: payFee, disabled: busy || (fee && fee.pending), style: { ...TP_btn(), opacity: busy || (fee && fee.pending) ? .5 : 1 } }, busy ? 'Submitting...' : 'Pay K' + 20 * fmo))),
     // incoming payments
-    h('div', { style: TP_card },
+    mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Student payments'),
       inc.length === 0 && h('div', { style: { color: '#6b7280', fontSize: 13 } }, 'No payments yet.'),
       inc.map(p => h('div', { key: p._id, style: { borderTop: '1px solid #f3f4f6', padding: '8px 0', fontSize: 13 } },
@@ -6520,11 +6522,11 @@ function TutorPayPanel() {
           h('button', { onClick: () => review(p._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
           h('button', { onClick: () => review(p._id, 'reject'), style: TP_btn('#dc2626') }, 'Reject'))))),
     // active students
-    h('div', { style: TP_card },
+    mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Active students (' + studs.length + ')'),
       studs.map(s => h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } }, (s.student_id ? s.student_id.name : 'Student') + ' · until ' + TP_date(s.expires_at)))),
     // payment details
-    h('div', { style: TP_card },
+    mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payment details (students pay you here)'),
       h('input', { type: 'number', value: price, onChange: e => setPrice(e.target.value), placeholder: 'Price per month (K)', style: TP_inp }),
       h('div', { style: { marginBottom: 8 } }, h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 4 } }, 'Subjects you teach'), h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }, SUBJECTS.map(s => h('button', { key: s.id, type: 'button', onClick: () => setMySubj(p => p.includes(s.id) ? p.filter(x => x !== s.id) : [...p, s.id]), style: { padding: '5px 10px', borderRadius: 20, border: '1px solid #064d2c', cursor: 'pointer', fontSize: 12, background: mySubj.includes(s.id) ? '#064d2c' : '#fff', color: mySubj.includes(s.id) ? '#fff' : '#064d2c' } }, s.i + ' ' + s.n)))),
@@ -9962,6 +9964,10 @@ function TutorApp() {
     icon: '💰',
     label: 'Payments'
   }, {
+    id: 'membership',
+    icon: '🎫',
+    label: 'Membership'
+  }, {
     id: 'tests',
     icon: '✏️',
     label: 'Create Tests'
@@ -10214,6 +10220,7 @@ function TutorApp() {
       onDone: () => setAn('home')
     }),
     pay: React.createElement(TutorPayPanel, null),
+    membership: React.createElement(TutorPayPanel, { mode: 'fee' }),
     materials: /*#__PURE__*/React.createElement(TutorMaterials, null),
     tests: /*#__PURE__*/React.createElement(TutorCreateTest, null),
     assignments: /*#__PURE__*/React.createElement(TutorCreateAssignment, null),
