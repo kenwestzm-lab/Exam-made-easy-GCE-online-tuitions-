@@ -6427,7 +6427,11 @@ function TutorSubscribe() {
     pays.length > 0 && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payments'),
       pays.map(p => h('div', { key: p._id, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #f3f4f6', fontSize: 13 } },
-        h('span', null, (p.tutor_id && p.tutor_id.name || 'Tutor') + ' · K' + p.amount + ' · ' + p.months + 'm'),
+        h('span', null, (p.tutor_id && p.tutor_id.name || 'Tutor') + ' · K' + p.amount + ' · ' + p.months + 'm',
+          (p.status === 'approved' && p.expires_at && pays.find(x => x.status === 'approved' && String(x.tutor_id && x.tutor_id._id || x.tutor_id) === String(p.tutor_id && p.tutor_id._id || p.tutor_id)) === p)
+            ? h('div', { style: { fontSize: 11, fontWeight: 700, color: TP_left(p.expires_at, skew.current) ? '#065f46' : '#991b1b' } },
+                TP_left(p.expires_at, skew.current) ? '⏳ ' + TP_left(p.expires_at, skew.current) + ' left' : '🔒 Expired ' + TP_date(p.expires_at))
+            : null),
         TP_badge(p.status))))
   );
 }
@@ -6517,6 +6521,10 @@ function TutorPayPanel(props) {
       inc.map(p => h('div', { key: p._id, style: { borderTop: '1px solid #f3f4f6', padding: '8px 0', fontSize: 13 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('b', null, p.student_id ? p.student_id.name : 'Student'), TP_badge(p.status)),
         h('div', { style: { color: '#6b7280' } }, 'K' + p.amount + ' · ' + p.months + ' month(s) · ' + p.method + ' · Ref: ' + p.transaction_id),
+        (p.status === 'approved' && p.expires_at && inc.find(x => x.status === 'approved' && String(x.student_id && x.student_id._id) === String(p.student_id && p.student_id._id)) === p)
+          ? h('div', { style: { fontSize: 12, fontWeight: 700, color: TP_left(p.expires_at, skew.current) ? '#065f46' : '#991b1b' } },
+              TP_left(p.expires_at, skew.current) ? '⏳ Access ends in ' + TP_left(p.expires_at, skew.current) : '🔒 Student access expired ' + TP_date(p.expires_at))
+          : null,
         p.receipt_url && h('a', { href: p.receipt_url, target: '_blank', rel: 'noreferrer', style: { fontSize: 12 } }, 'View screenshot'),
         p.status === 'pending' && h('div', { style: { display: 'flex', gap: 8, marginTop: 6 } },
           h('button', { onClick: () => review(p._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
@@ -6524,7 +6532,7 @@ function TutorPayPanel(props) {
     // active students
     mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Active students (' + studs.length + ')'),
-      studs.map(s => h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } }, (s.student_id ? s.student_id.name : 'Student') + ' · until ' + TP_date(s.expires_at)))),
+      studs.map(s => h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } }, (s.student_id ? s.student_id.name : 'Student') + ' · ' + (TP_left(s.expires_at, skew.current) ? '⏳ ' + TP_left(s.expires_at, skew.current) + ' left' : '🔒 expired') + ' (until ' + TP_date(s.expires_at) + ')'))),
     // payment details
     mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payment details (students pay you here)'),
