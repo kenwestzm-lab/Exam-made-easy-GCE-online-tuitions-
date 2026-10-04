@@ -342,9 +342,8 @@ function AuthProvider({
       setProfile(u);
       document.body.className = 'app-mode';
       const s = io(BACKEND, {
-        query: {
-          userId: u._id
-        },
+        auth: { token: localStorage.getItem('pms_t') },
+        query: { userId: u._id },
         transports: ['websocket', 'polling'],
         reconnection: true
       });
@@ -356,9 +355,8 @@ function AuthProvider({
   }, []);
   const cx = uid => {
     const s = io(BACKEND, {
-      query: {
-        userId: uid
-      },
+      auth: { token: localStorage.getItem('pms_t') },
+        query: { userId: uid },
       transports: ['websocket', 'polling'],
       reconnection: true
     });

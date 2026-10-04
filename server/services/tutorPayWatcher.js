@@ -9,7 +9,15 @@ module.exports = (io) => {
       const acc = await TutorAccess.find({ expires_at: { $lte: now }, expiry_notified: false });
       for (const a of acc) {
         const r = await TutorAccess.updateOne({ _id: a._id, expiry_notified: false }, { expiry_notified: true });
-        if (r.modifiedCount) io.to('user_' + a.student_id).emit('access_expired', { tutor_id: a.tutor_id });
+        if (r.modifiedCount) {
+          io.to('user_' + a.student_id).emit('access_expired', { tutor_id: a.tutor_id });
+          try {
+            const { LiveClass } = require('../models');
+            const ids = await LiveClass.find({ tutor_id: a.tutor_id }).select('_id');
+            const op = io.in('user_' + a.student_id);
+            if (ids.length && typeof op.socketsLeave === 'function') op.socketsLeave(ids.map(c => 'class_' + c._id));
+          } catch (e) {}
+        }
       }
       const fees = await TutorFee.find({ status: 'approved', expires_at: { $lte: now }, expiry_notified: false });
       for (const f of fees) {

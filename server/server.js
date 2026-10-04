@@ -48,11 +48,39 @@ app.use('/api', require('./routes/live_classes'));
 app.use('/api', require('./routes/misc'));
 
 // ── Socket.IO Real-time ───────────────────────────────
+// Identity comes from a verified login token, never from the URL
+io.use(async (socket, next) => {
+  try {
+    const jwt = require('jsonwebtoken');
+    const { User } = require('./models');
+    const token = socket.handshake.auth && socket.handshake.auth.token;
+    if (!token) return next(new Error('AUTH_REQUIRED'));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'peacemindset_secret');
+    const u = await User.findById(decoded.id).select('name role');
+    if (!u) return next(new Error('AUTH_REQUIRED'));
+    socket.data.userId = String(u._id);
+    socket.data.user = { _id: String(u._id), name: u.name, role: u.role };
+    next();
+  } catch (e) { next(new Error('AUTH_REQUIRED')); }
+});
+
 io.on('connection', (socket) => {
   console.log('🔌 Connected:', socket.id);
 
   // Auto-join personal room
-  const userId = socket.handshake.query?.userId;
+  const userId = socket.data.userId;
+  const CLASS_EVENTS = new Set(['class_question','hand_raise','whiteboard_stroke','whiteboard_text','whiteboard_image','whiteboard_image_update','whiteboard_clear','whiteboard_full_sync','ai_speaking','ai_done_speaking','class_quiz','student_quiz_done','class_announcement','ai_correction','class_status_change']);
+  // Drop class events from sockets that were not admitted to that class room
+  socket.use(async (packet, next) => {
+    try {
+      const ev = packet[0], data = packet[1];
+      if (CLASS_EVENTS.has(ev)) {
+        if (socket.data.joining) await socket.data.joining.catch(() => {});
+        if (!data || !socket.rooms.has('class_' + data.classId)) return;
+      }
+      next();
+    } catch (e) { /* drop packet */ }
+  });
   if (userId) {
     socket.join(`user_${userId}`);
     console.log(`User ${userId} joined personal room`);
@@ -84,10 +112,25 @@ io.on('connection', (socket) => {
     } catch (e) { console.error('mark_read error:', e.message); }
   });
 
-  socket.on('join_class', ({ classId, user }) => {
-    socket.join(`class_${classId}`);
-    if (user?._id) socket.join(`user_${user._id}`);
-    socket.to(`class_${classId}`).emit('student_joined', { user });
+  socket.on('join_class', ({ classId } = {}) => {
+    socket.data.joining = (async () => {
+      try {
+        const mongoose = require('mongoose');
+        if (!mongoose.isValidObjectId(classId)) return;
+        const { LiveClass } = require('./models');
+        const { studentHasAccess } = require('./services/access');
+        const cls = await LiveClass.findById(classId).select('tutor_id');
+        if (!cls) return;
+        const me = socket.data.user;
+        let ok = false;
+        if (me.role === 'admin') ok = true;
+        else if (me.role === 'tutor') ok = String(cls.tutor_id) === me._id;
+        else ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id);
+        if (!ok) { socket.emit('class_join_denied', { classId }); return; }
+        socket.join(`class_${classId}`);
+        socket.to(`class_${classId}`).emit('student_joined', { user: { _id: me._id, name: me.name } });
+      } catch (e) { console.error('join_class error:', e.message); }
+    })();
   });
 
   socket.on('leave_class', ({ classId, userId }) => {
@@ -98,8 +141,13 @@ io.on('connection', (socket) => {
   socket.on('join_group', (subjectId) => {
     socket.join(`group_${subjectId}`);
   });
-  socket.on('join_custom_group', (groupId) => {
-    socket.join('cg_'+groupId);
+  socket.on('join_custom_group', async (groupId) => {
+    try {
+      const mongoose = require('mongoose');
+      if (!mongoose.isValidObjectId(groupId)) return;
+      const { Group } = require('./models');
+      if (await Group.exists({ _id: groupId, members: socket.data.userId })) socket.join('cg_' + groupId);
+    } catch (e) {}
   });
 
   socket.on('class_question', (data) => {
@@ -183,7 +231,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join_admin', () => {
-    socket.join('admins');
+    if (socket.data.user && socket.data.user.role === 'admin') socket.join('admins');
   });
 
   socket.on('disconnect', () => {

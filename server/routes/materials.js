@@ -39,6 +39,9 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, tutorOrAdmin, requireTutorFee, upload.single('file'), async (req, res) => {
   try {
     const { title, description, subject_id, type, premium } = req.body;
+    if (req.user.role === 'tutor' && (req.user.subjects || []).length && !req.user.subjects.includes(Number(subject_id))) return res.status(403).json({ error: 'You can only use subjects you teach' });
+    
+
     let file_url = '', size = '';
     if (req.file) {
       const rType = ['video','audio'].includes(type) ? 'video'

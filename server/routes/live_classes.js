@@ -32,6 +32,8 @@ router.get('/live-classes', auth, async (req, res) => {
 router.post('/live-classes', auth, tutorOrAdmin, requireTutorFee, async (req, res) => {
   try {
     const body = { ...req.body }; delete body._id;
+    if (req.user.role === 'tutor' && (req.user.subjects || []).length && !req.user.subjects.includes(Number(body.subject_id))) return res.status(403).json({ error: 'You can only use subjects you teach' });
+    
     res.status(201).json(await LiveClass.create({ ...body, tutor_id: req.user._id }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -47,6 +49,7 @@ router.put('/live-classes/:id', auth, tutorOrAdmin, async (req, res) => {
         return res.status(402).json({ error: 'K20 monthly fee unpaid. Pay it to start classes.', code: 'TUTOR_FEE_REQUIRED' });
     }
     const body = { ...req.body }; delete body.tutor_id; delete body._id;
+    if (body.subject_id !== undefined && req.user.role === 'tutor' && (req.user.subjects || []).length && !req.user.subjects.includes(Number(body.subject_id))) return res.status(403).json({ error: 'You can only use subjects you teach' });
     const updated = await LiveClass.findByIdAndUpdate(req.params.id, body, { new: true });
     const io = req.app.get('io');
     if (io && body.status === 'live')
