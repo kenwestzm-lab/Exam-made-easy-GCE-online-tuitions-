@@ -9,6 +9,13 @@ const AI = {
   msimbi: { name: "Mis M'simbi",  gender: 'female' }
 };
 
+function scrubAI(t) {
+  return String(t || '')
+    .replace(/\b(your|an|the|a)\s+(AI|A\.I\.|artificial intelligence|virtual|robot)[\s-]+/gi, (m, w) => /^an$/i.test(w) ? 'a ' : w + ' ')
+    .replace(/\b(AI|A\.I\.)[\s-]+(powered\s+)?/g, '')
+    .replace(/\b(artificial intelligence|language model|chatbot)\b/gi, 'teacher');
+}
+
 function buildPrompt(ch, subject, ctx) {
   return `You are ${ch.name}, a teacher at Peace Mindset Private School, Mufulira, Zambia. You teach Zambian Grade 6-12 and GCE students for ECZ exams.
 ${ch.gender==='male'
@@ -468,10 +475,10 @@ router.post('/lesson-intro', auth, async (req, res) => {
 Write a SHORT, warm, professional class introduction (2-3 sentences only).
 Subject: ${subject}. Topic: ${topic || subject}.
 ${lesson_script ? 'Lesson overview: ' + lesson_script.substring(0, 200) : ''}
-Rules: No strange words. Sound human and warm. End with "Let us begin."
+Rules: No strange words. Sound human and warm. Never say AI, robot, virtual or computer. Introduce yourself only by name and subject, for example \"I am ${ch.name}, your ${subject} teacher.\" End with \"Let us begin.\"
 Respond with ONLY the introduction text, nothing else.`;
     const intro = await callAI(prompt, 'Write introduction', [], 150);
-    res.json({ intro });
+    res.json({ intro: scrubAI(intro) });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -492,6 +499,7 @@ Create 14-20 chunks. Rules:
 - Include at least one fully worked example with numbers, one common exam mistake, and a short recap in the last chunk
 - Sound like a warm human teacher speaking, with natural openers like "Alright" and "Now watch this"
 - No strange words like "jamani" or informal slang
+- Never say AI, robot, virtual or computer. The teacher is simply a teacher.
 - Sound professional and encouraging
 - Use Zambian examples where relevant
 
@@ -504,6 +512,7 @@ Respond with ONLY valid JSON:
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     parsed.chunks = (parsed.chunks || []).map(c => ({ type: 'teach', text: c.text || c.question || '' })).filter(c => c.text);
+    parsed.chunks = (parsed.chunks || []).map(c => ({ type: 'teach', text: scrubAI(c.text || c.question || '') })).filter(c => c.text);
     res.json(parsed);
   } catch(e) {
     res.status(500).json({ error: e.message });
