@@ -6328,6 +6328,437 @@ const TP_status = (st) => ({ pending: ['#fef3c7', '#92400e', 'Pending'], approve
 const TP_badge = (st) => { const x = TP_status(st); return React.createElement('span', { style: { background: x[0], color: x[1], borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 } }, x[2]); };
 
 // ---------- STUDENT: choose tutor -> see details -> submit ----------
+/* ===== LIVE AUDIO CLASS (injected) ===== */
+const AC_CSS = `
+.ac-root{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;background:radial-gradient(1200px 600px at 20% -10%,#12356b 0%,#0b1a33 45%,#070f1f 100%);color:#e8efff;font-family:inherit}
+.ac-top{display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid rgba(255,255,255,.08)}
+.ac-title{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-sub{font-size:12px;color:#93a8d1}
+.ac-live{background:#e11d48;color:#fff;font-weight:800;font-size:11px;border-radius:6px;padding:2px 7px;letter-spacing:.5px}
+.ac-wait{background:#b45309}
+.ac-time{font-variant-numeric:tabular-nums;font-size:13px;color:#cfe0ff}
+.ac-dot{width:9px;height:9px;border-radius:50%;background:#64748b}
+.ac-dot.ok{background:#22c55e}.ac-dot.bad{background:#f59e0b}
+.ac-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.ac-stage{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding:14px 12px 12px;text-align:center}
+.ac-panel{flex:1;min-height:0;display:flex;flex-direction:column;background:rgba(255,255,255,.05);border-top:1px solid rgba(255,255,255,.08)}
+@media(min-width:900px){.ac-body{flex-direction:row}.ac-stage{flex:1;justify-content:center}.ac-panel{flex:0 0 380px;border-top:0;border-left:1px solid rgba(255,255,255,.08)}}
+.ac-orb{width:124px;height:124px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:46px;background:linear-gradient(145deg,#1d4ed8,#0ea5e9);position:relative;box-shadow:0 10px 40px rgba(14,165,233,.35);margin:6px 0 10px}
+.ac-orb.on::before,.ac-orb.on::after{content:'';position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(56,189,248,.75);animation:acPulse 1.6s ease-out infinite}
+.ac-orb.on::after{animation-delay:.8s}
+.ac-orb.off{background:linear-gradient(145deg,#334155,#475569);box-shadow:none}
+@keyframes acPulse{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.6);opacity:0}}
+.ac-wave{display:inline-flex;gap:2px;align-items:center;height:14px;margin-left:4px}
+.ac-wave i{width:3px;height:4px;background:#34d399;border-radius:2px;animation:acBar .7s ease-in-out infinite}
+@keyframes acBar{0%,100%{height:3px}50%{height:14px}}
+.ac-ctrls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+.ac-btn{border:0;border-radius:14px;padding:11px 16px;font-weight:700;font-size:14px;cursor:pointer;color:#fff;background:#1e3a8a;font-family:inherit}
+.ac-btn.red{background:#dc2626}.ac-btn.green{background:#059669}.ac-btn.amber{background:#d97706}
+.ac-btn.ghost{background:rgba(255,255,255,.1)}.ac-btn.big{padding:14px 26px;font-size:16px}
+.ac-btn:disabled{opacity:.5}
+.ac-tabs{display:flex;border-bottom:1px solid rgba(255,255,255,.08)}
+.ac-tab{flex:1;padding:11px 4px;background:none;border:0;color:#93a8d1;font-weight:600;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+.ac-tab.on{color:#fff;border-bottom-color:#38bdf8}
+.ac-scroll{flex:1;min-height:0;overflow:auto;padding:10px 12px}
+.ac-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05)}
+.ac-av{width:34px;height:34px;border-radius:50%;background:#1e3a8a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+.ac-av.sp{box-shadow:0 0 0 2px #22c55e}
+.ac-mini{border:0;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;background:#059669;font-family:inherit}
+.ac-mini.r{background:#b91c1c}.ac-mini.g{background:rgba(255,255,255,.14)}
+.ac-msg{margin-bottom:8px;font-size:13px;line-height:1.4}
+.ac-msg b{color:#7dd3fc}.ac-msg.h b{color:#fbbf24}
+.ac-inp{flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 12px;color:#fff;font-size:14px;outline:none;font-family:inherit}
+.ac-center{flex:1;display:flex;align-items:center;justify-content:center;padding:20px}
+.ac-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:26px 22px;max-width:380px;width:100%;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+`;
+const acInit = (n) => (n || '?').trim().split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+const acFmt = (s) => { s = Math.max(0, Math.floor(s || 0)); const hh = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (hh ? hh + ':' : '') + String(m).padStart(hh ? 2 : 1, '0') + ':' + String(x).padStart(2, '0'); };
+const acLevel = (an) => { if (!an) return 0; const b = new Uint8Array(an.fftSize); an.getByteTimeDomainData(b); let mx = 0; for (let i = 0; i < b.length; i++) { const v = Math.abs(b[i] - 128); if (v > mx) mx = v; } return mx; };
+const AC_MIC = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
+const AcWave = () => React.createElement('span', { className: 'ac-wave' }, [0, 1, 2, 3].map(i => React.createElement('i', { key: i, style: { animationDelay: (i * 0.12) + 's' } })));
+
+function AudioClassRoom({ cls, profile, socket, onExit }) {
+  const h = React.createElement;
+  const { add } = useToast();
+  const [phase, setPhase] = useState('pre');
+  const [err, setErr] = useState('');
+  const [isHost, setIsHost] = useState(false);
+  const [roster, setRoster] = useState([]);
+  const [hostPresent, setHostPresent] = useState(false);
+  const [micOn, setMicOn] = useState(true);
+  const [micReady, setMicReady] = useState(true);
+  const [hand, setHand] = useState(false);
+  const [speaker, setSpeaker] = useState(false);
+  const [tab, setTab] = useState('people');
+  const [chat, setChat] = useState([]);
+  const [input, setInput] = useState('');
+  const [note, setNote] = useState('');
+  const [draft, setDraft] = useState('');
+  const [speaking, setSpeaking] = useState([]);
+  const [conn, setConn] = useState('');
+  const [elapsed, setElapsed] = useState(0);
+  const [unread, setUnread] = useState(0);
+  const [needsTap, setNeedsTap] = useState(false);
+  const R = useRef({ peers: new Map(), speakers: new Set(), micOn: true });
+  const r = R.current;
+  r.roster = roster; r.tab = tab;
+  const owner = profile?.role === 'admin' || (profile?.role === 'tutor' && String(cls.tutor_id) === String(profile?._id));
+
+  useEffect(() => { if (!document.getElementById('ac-css')) { const s = document.createElement('style'); s.id = 'ac-css'; s.textContent = AC_CSS; document.head.appendChild(s); } }, []);
+
+  const closePeer = (sid) => {
+    const e = r.peers.get(sid); if (!e) return;
+    try { e.pc.ontrack = null; e.pc.onicecandidate = null; e.pc.onconnectionstatechange = null; e.pc.close(); } catch (x) {}
+    try { e.gain && e.gain.disconnect(); e.src && e.src.disconnect(); e.dest && e.dest.disconnect(); } catch (x) {}
+    if (e.el) { try { e.el.srcObject = null; } catch (x) {} }
+    r.peers.delete(sid); r.speakers.delete(sid);
+  };
+  const closeAll = () => { [...r.peers.keys()].forEach(closePeer); };
+
+  // HOST: per-student mix-minus (tutor mic + every speaking student except that student)
+  const rewire = () => {
+    if (!r.ctx || !r.isHost) return;
+    r.peers.forEach((e, sid) => {
+      if (!e.dest) return;
+      if (r.micGain) { try { r.micGain.connect(e.dest); } catch (x) {} }
+      r.peers.forEach((o, osid) => {
+        if (!o.gain) return;
+        try { o.gain.disconnect(e.dest); } catch (x) {}
+        if (osid !== sid && r.speakers.has(osid)) { try { o.gain.connect(e.dest); } catch (x) {} }
+      });
+    });
+    r.peers.forEach((o, osid) => {
+      if (!o.gain) return;
+      try { o.gain.disconnect(r.ctx.destination); } catch (x) {}
+      if (r.speakers.has(osid)) { try { o.gain.connect(r.ctx.destination); } catch (x) {} }
+    });
+  };
+
+  const getHostMic = async () => {
+    if (r.micStream) return true;
+    try {
+      const s = await navigator.mediaDevices.getUserMedia(AC_MIC);
+      r.micStream = s;
+      const src = r.ctx.createMediaStreamSource(s);
+      const g = r.ctx.createGain(); g.gain.value = r.micOn ? 1 : 0; src.connect(g);
+      const an = r.ctx.createAnalyser(); an.fftSize = 512; src.connect(an);
+      r.micGain = g; r.localAn = an; setMicReady(true); rewire(); return true;
+    } catch (e) {
+      setMicReady(false);
+      add({ title: 'Microphone blocked', body: 'Allow microphone access in browser settings, then tap Retry mic.', icon: '🎙️', type: 'd' });
+      return false;
+    }
+  };
+
+  const connectTo = async (sid) => {
+    closePeer(sid);
+    const pc = new RTCPeerConnection({ iceServers: r.ice });
+    const pid = Math.random().toString(36).slice(2);
+    const dest = r.ctx.createMediaStreamDestination();
+    const entry = { pc, pid, dest, cands: [] };
+    r.peers.set(sid, entry);
+    pc.addTransceiver(dest.stream.getAudioTracks()[0], { direction: 'sendrecv', streams: [dest.stream] });
+    pc.onicecandidate = (ev) => { if (ev.candidate) socket.emit('audio_signal', { to: sid, data: { t: 'cand', pid, c: ev.candidate } }); };
+    pc.ontrack = (ev) => {
+      const st = ev.streams[0] || new MediaStream([ev.track]);
+      const el = new Audio(); el.muted = true; el.srcObject = st; el.play().catch(() => {}); entry.el = el;
+      const src = r.ctx.createMediaStreamSource(st); const gain = r.ctx.createGain(); gain.gain.value = 1; src.connect(gain);
+      const an = r.ctx.createAnalyser(); an.fftSize = 512; src.connect(an);
+      entry.src = src; entry.gain = gain; entry.an = an; rewire();
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' && r.peers.get(sid) === entry && r.roster.some(p => p.sid === sid))
+        setTimeout(() => { if (r.peers.get(sid) === entry && r.isHost) connectTo(sid).catch(() => {}); }, 1500);
+    };
+    rewire();
+    await pc.setLocalDescription(await pc.createOffer());
+    socket.emit('audio_signal', { to: sid, data: { t: 'offer', pid, sdp: pc.localDescription } });
+  };
+
+  // MEMBER: answer the tutor's offer; a silent track is swapped for the mic when the tutor lets us speak
+  const handleOffer = async (from, data) => {
+    closePeer(from);
+    const pc = new RTCPeerConnection({ iceServers: r.ice });
+    const entry = { pc, pid: data.pid, cands: [] };
+    r.peers.set(from, entry);
+    pc.onicecandidate = (ev) => { if (ev.candidate) socket.emit('audio_signal', { to: from, data: { t: 'cand', pid: data.pid, c: ev.candidate } }); };
+    pc.onconnectionstatechange = () => setConn(pc.connectionState);
+    const el = r.el || (r.el = new Audio()); el.autoplay = true; el.playsInline = true;
+    pc.ontrack = (ev) => {
+      el.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+      const p = el.play(); if (p && p.catch) p.catch(() => setNeedsTap(true));
+    };
+    await pc.setRemoteDescription(data.sdp);
+    r.silent = r.silent || r.ctx.createMediaStreamDestination();
+    entry.sender = pc.addTrack(r.silent.stream.getAudioTracks()[0], r.silent.stream);
+    await pc.setLocalDescription(await pc.createAnswer());
+    socket.emit('audio_signal', { to: from, data: { t: 'answer', pid: data.pid, sdp: pc.localDescription } });
+    for (const c of entry.cands.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+    if (r.wantSpeak && r.studentMic) entry.sender.replaceTrack(r.studentMic.getAudioTracks()[0]).catch(() => {});
+  };
+
+  const onSignal = async ({ from, data }) => {
+    try {
+      if (data.t === 'offer') { if (!r.isHost) await handleOffer(from, data); return; }
+      const e = r.peers.get(from);
+      if (!e || e.pid !== data.pid) return;
+      if (data.t === 'answer' && r.isHost) {
+        await e.pc.setRemoteDescription(data.sdp);
+        for (const c of e.cands.splice(0)) await e.pc.addIceCandidate(c).catch(() => {});
+      } else if (data.t === 'cand') {
+        if (e.pc.remoteDescription) await e.pc.addIceCandidate(data.c).catch(() => {}); else e.cands.push(data.c);
+      }
+    } catch (x) { console.warn('audio signal', x); }
+  };
+
+  const setSpeakerState = async (on) => {
+    r.wantSpeak = on;
+    const e = [...r.peers.values()][0];
+    if (on) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia(AC_MIC);
+        r.studentMic = s;
+        if (e && e.sender) await e.sender.replaceTrack(s.getAudioTracks()[0]);
+        setSpeaker(true); setMicOn(true); setHand(false);
+        add({ title: 'You can speak now', body: 'The tutor gave you the microphone.', icon: '🎙️', type: 'i' });
+      } catch (x) { add({ title: 'Microphone blocked', body: 'Allow the microphone so you can speak.', icon: '🎙️', type: 'd' }); }
+    } else {
+      if (r.studentMic) { r.studentMic.getTracks().forEach(t => t.stop()); r.studentMic = null; }
+      if (e && e.sender && r.silent) { try { await e.sender.replaceTrack(r.silent.stream.getAudioTracks()[0]); } catch (x) {} }
+      setSpeaker(false);
+    }
+  };
+
+  const cleanup = () => {
+    try { socket && socket.emit('audio_leave'); } catch (e) {}
+    r.joined = false; closeAll();
+    [r.micStream, r.studentMic].forEach(s => { if (s) s.getTracks().forEach(t => t.stop()); });
+    r.micStream = null; r.studentMic = null; r.micGain = null; r.localAn = null;
+    if (r.el) { try { r.el.srcObject = null; } catch (e) {} }
+    try { r.ctx && r.ctx.close(); } catch (e) {} r.ctx = null; r.silent = null;
+  };
+
+  const doJoin = (isRe) => {
+    r.joined = true;
+    socket.emit('audio_join', { classId: cls._id }, async (res) => {
+      if (!res || res.error) { cleanup(); setErr((res && res.error) || 'Could not join the class'); setPhase('error'); return; }
+      r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid;
+      setIsHost(res.isHost);
+      if (!isRe) { setChat(res.chat || []); setNote(res.note || ''); setDraft(res.note || ''); }
+      if (res.isHost) await getHostMic();
+      setPhase('live');
+    });
+  };
+  const join = () => {
+    if (!socket) { setErr('Not connected to the server. Refresh the page and try again.'); setPhase('error'); return; }
+    if (!window.RTCPeerConnection || !navigator.mediaDevices) { setErr('This browser does not support live audio. Use Chrome, Edge, Firefox or Safari.'); setPhase('error'); return; }
+    setPhase('joining');
+    try { if (!r.ctx) r.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (r.ctx.resume) r.ctx.resume(); } catch (e) {}
+    doJoin(false);
+  };
+
+  r.fn = { connectTo, closePeer, closeAll, onSignal, setSpeakerState, cleanup, doJoin };
+
+  useEffect(() => {
+    if (!socket) return;
+    const on = {
+      audio_roster: (d) => {
+        setRoster(d.roster || []); setHostPresent(!!d.hostPresent); r.start = d.startedAt; r.skew = (d.now || Date.now()) - Date.now();
+        const me = (d.roster || []).find(p => p.sid === r.sid); if (me) setHand(me.hand);
+      },
+      audio_connect_to: async (d) => { if (!r.isHost || !r.ctx) return; for (const sid of d.sids || []) { try { await r.fn.connectTo(sid); } catch (e) { console.warn(e); } } },
+      audio_peer_left: (d) => r.fn.closePeer(d.sid),
+      audio_signal: (m) => r.fn.onSignal(m),
+      audio_host_left: () => { if (!r.isHost) { r.fn.closeAll(); setConn(''); } },
+      audio_speaker: (d) => r.fn.setSpeakerState(!!d.on),
+      audio_levels: (d) => setSpeaking(d.speaking || []),
+      audio_note: (d) => setNote(d.text || ''),
+      audio_chat: (m) => { setChat(p => [...p.slice(-99), m]); if (r.tab !== 'chat') setUnread(u => u + 1); },
+      audio_notice: (d) => add({ title: d.text, icon: 'ℹ️', type: 'w' }),
+      audio_kicked: (d) => { r.fn.cleanup(); setErr((d && d.reason) || 'You were removed from the class.'); setPhase('error'); },
+      audio_ended: () => { r.fn.cleanup(); setPhase('ended'); },
+      connect: () => { if (r.joined) { r.fn.closeAll(); r.fn.setSpeakerState(false); r.fn.doJoin(true); } },
+    };
+    Object.entries(on).forEach(([e, f]) => socket.on(e, f));
+    return () => Object.entries(on).forEach(([e, f]) => socket.off(e, f));
+  }, [socket]);
+
+  useEffect(() => () => { r.fn && r.fn.cleanup(); }, []);
+
+  useEffect(() => {
+    if (!r.isHost) return;
+    r.speakers = new Set(roster.filter(p => p.speaker).map(p => p.sid)); rewire();
+  }, [roster]);
+
+  useEffect(() => {
+    if (phase !== 'live') return;
+    const t = setInterval(() => {
+      setElapsed(r.start ? (Date.now() + (r.skew || 0) - r.start) / 1000 : 0);
+      if (!r.isHost) return;
+      const sp = [];
+      if (r.micOn && acLevel(r.localAn) > 8) sp.push(String(profile._id));
+      r.peers.forEach((e, sid) => { if (r.speakers.has(sid) && acLevel(e.an) > 8) { const p = r.roster.find(x => x.sid === sid); if (p) sp.push(String(p.userId)); } });
+      const key = sp.sort().join(',');
+      if (key !== r.lastKey) { r.lastKey = key; setSpeaking(sp); socket.emit('audio_levels', { speaking: sp }); }
+    }, 300);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  const toggleMic = () => {
+    if (isHost) { r.micOn = !r.micOn; setMicOn(r.micOn); if (r.micGain) r.micGain.gain.value = r.micOn ? 1 : 0; }
+    else if (r.studentMic) { const t = r.studentMic.getAudioTracks()[0]; t.enabled = !t.enabled; setMicOn(t.enabled); }
+  };
+  const sendChat = () => { const t = input.trim(); if (!t) return; socket.emit('audio_chat', { text: t }); setInput(''); };
+  const leave = () => { cleanup(); onExit(); };
+  const endClass = () => { if (!confirm('End this class for everyone?')) return; socket.emit('audio_end'); cleanup(); onExit(); };
+
+  // ---------- screens ----------
+  const screen = (icon, title, text, btns) => h('div', { className: 'ac-root' }, h('div', { className: 'ac-center' }, h('div', { className: 'ac-card' },
+    h('div', { style: { fontSize: 44 } }, icon), h('h2', { style: { margin: 0, fontSize: 19 } }, title),
+    text && h('p', { style: { margin: 0, color: '#9db3dc', fontSize: 13, lineHeight: 1.5 } }, text), btns)));
+  if (phase === 'pre' || phase === 'joining') return screen('🎙️', cls.title, (cls.scheduled_date || '') + ' · ' + (cls.scheduled_time || '') + (owner ? '\nYou will be asked to allow your microphone. Use headphones for the best sound.' : '\nUse headphones for the best sound. You can raise your hand to speak.'),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, width: '100%' } },
+      h('button', { className: 'ac-btn green big', disabled: phase === 'joining', onClick: join }, phase === 'joining' ? 'Joining…' : owner ? '▶ Start class' : '🎧 Join class'),
+      h('button', { className: 'ac-btn ghost', onClick: onExit }, 'Back')));
+  if (phase === 'error') return screen('⚠️', 'Cannot join', err, h('button', { className: 'ac-btn', onClick: onExit }, 'Back'));
+  if (phase === 'ended') return screen('🎓', 'Class ended', 'Thank you for attending.', h('button', { className: 'ac-btn', onClick: onExit }, 'Back to classes'));
+
+  const hostEntry = roster.find(p => p.isHost);
+  const hostName = hostEntry ? hostEntry.name : 'Tutor';
+  const meId = String(profile._id);
+  const hostSpeaking = hostEntry && speaking.includes(String(hostEntry.userId));
+  const orbOn = isHost ? (micOn && speaking.includes(meId)) : hostSpeaking;
+  const status = isHost ? (micOn ? 'You are live. Students can hear you.' : 'You are muted.')
+    : !hostPresent ? 'Waiting for the tutor to start…'
+    : conn === 'connected' ? (speaker ? (micOn ? 'You are speaking' : 'You are muted') : hostSpeaking ? hostName + ' is speaking' : 'Listening to ' + hostName)
+    : conn === 'failed' ? 'Connection lost. Tap Leave and join again.' : 'Connecting audio…';
+  const sorted = [...roster].sort((a, b) => (b.isHost - a.isHost) || (b.hand - a.hand) || (b.speaker - a.speaker) || a.name.localeCompare(b.name));
+  const handsUp = roster.filter(p => p.hand).length;
+
+  const stage = h('div', { className: 'ac-stage' },
+    h('div', { style: { fontSize: 13, color: '#9db3dc' } }, hostName + ' · Tutor'),
+    h('div', { className: 'ac-orb ' + (orbOn ? 'on' : (isHost && !micOn) || (!isHost && !hostPresent) ? 'off' : '') }, (isHost && !micOn) ? '🔇' : '🎙️'),
+    h('div', { style: { fontSize: 14, fontWeight: 600, minHeight: 20 } }, status),
+    needsTap && h('button', { className: 'ac-btn amber', style: { marginTop: 8 }, onClick: () => { r.el && r.el.play().then(() => setNeedsTap(false)).catch(() => {}); } }, '🔊 Tap to enable sound'),
+    isHost && !micReady && h('button', { className: 'ac-btn amber', style: { marginTop: 8 }, onClick: getHostMic }, '🎙️ Retry mic'),
+    h('div', { className: 'ac-ctrls' },
+      isHost && h('button', { className: 'ac-btn ' + (micOn ? '' : 'red'), onClick: toggleMic }, micOn ? '🎙️ Mute' : '🔇 Unmute'),
+      isHost && h('button', { className: 'ac-btn ghost', onClick: () => socket.emit('audio_mute_all') }, '🤫 Mute students'),
+      isHost && h('button', { className: 'ac-btn red', onClick: endClass }, '⏹ End class'),
+      !isHost && speaker && h('button', { className: 'ac-btn ' + (micOn ? '' : 'red'), onClick: toggleMic }, micOn ? '🎙️ Mute me' : '🔇 Unmute me'),
+      !isHost && !speaker && h('button', { className: 'ac-btn ' + (hand ? 'amber' : ''), onClick: () => { socket.emit('audio_hand', { raised: !hand }); setHand(!hand); } }, hand ? '✋ Lower hand' : '✋ Raise hand'),
+      !isHost && h('button', { className: 'ac-btn ghost', onClick: leave }, 'Leave')));
+
+  const people = h('div', { className: 'ac-scroll' },
+    sorted.map(p => h('div', { key: p.sid, className: 'ac-row' },
+      h('div', { className: 'ac-av' + (speaking.includes(String(p.userId)) ? ' sp' : '') }, acInit(p.name)),
+      h('div', { style: { flex: 1, minWidth: 0, fontSize: 13 } }, p.name + (p.sid === r.sid ? ' (You)' : '') + (p.isHost ? ' · Tutor' : ''),
+        speaking.includes(String(p.userId)) && h(AcWave, null)),
+      p.hand && h('span', null, '✋'), p.speaker && h('span', null, '🎙️'),
+      isHost && !p.isHost && h('button', { className: 'ac-mini' + (p.speaker ? ' r' : ''), onClick: () => socket.emit('audio_grant', { sid: p.sid, on: !p.speaker }) }, p.speaker ? 'Mute' : 'Let speak'),
+      isHost && !p.isHost && h('button', { className: 'ac-mini g', onClick: () => { if (confirm('Remove ' + p.name + '?')) socket.emit('audio_kick', { sid: p.sid }); } }, '✕'))));
+
+  const chatView = h('div', { style: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } },
+    h('div', { className: 'ac-scroll', ref: (el) => { if (el) el.scrollTop = el.scrollHeight; } },
+      chat.length === 0 && h('div', { style: { color: '#7f93ba', fontSize: 13 } }, 'No messages yet.'),
+      chat.map(m => h('div', { key: m.id, className: 'ac-msg' + (m.host ? ' h' : '') }, h('b', null, m.name + (m.host ? ' (Tutor)' : '') + ': '), m.text))),
+    h('div', { style: { display: 'flex', gap: 8, padding: 10 } },
+      h('input', { className: 'ac-inp', value: input, placeholder: 'Type a message…', maxLength: 400, onChange: e => setInput(e.target.value), onKeyDown: e => e.key === 'Enter' && sendChat() }),
+      h('button', { className: 'ac-btn', onClick: sendChat }, '➤')));
+
+  const notesView = h('div', { className: 'ac-scroll' },
+    isHost ? h('div', null,
+      h('div', { style: { fontSize: 12, color: '#9db3dc', marginBottom: 6 } }, 'Write the lesson outline, formulas or links. Students see it instantly when you tap Share.'),
+      h('textarea', { className: 'ac-inp', style: { width: '100%', minHeight: 180, boxSizing: 'border-box', resize: 'vertical' }, value: draft, onChange: e => setDraft(e.target.value) }),
+      h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
+        h('button', { className: 'ac-btn green', onClick: () => { socket.emit('audio_note', { text: draft }); add({ title: 'Notes shared', icon: '📝', type: 'i' }); } }, 'Share with students'),
+        h('button', { className: 'ac-btn ghost', onClick: () => { setDraft(''); socket.emit('audio_note', { text: '' }); } }, 'Clear')))
+      : (note ? h('div', { style: { whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6 } }, note) : h('div', { style: { color: '#7f93ba', fontSize: 13 } }, 'No notes shared yet.')));
+
+  const tb = (id, label, badge) => h('button', { className: 'ac-tab' + (tab === id ? ' on' : ''), onClick: () => { setTab(id); if (id === 'chat') setUnread(0); } }, label + (badge ? ' (' + badge + ')' : ''));
+
+  return h('div', { className: 'ac-root' },
+    h('div', { className: 'ac-top' },
+      h('div', { style: { fontSize: 22 } }, '🎙️'),
+      h('div', { style: { flex: 1, minWidth: 0 } }, h('div', { className: 'ac-title' }, cls.title), h('div', { className: 'ac-sub' }, roster.length + ' in class' + (isHost && handsUp ? ' · ✋ ' + handsUp : ''))),
+      h('span', { className: 'ac-live' + (hostPresent ? '' : ' ac-wait') }, hostPresent ? 'LIVE' : 'WAITING'),
+      h('span', { className: 'ac-time' }, acFmt(elapsed)),
+      h('span', { className: 'ac-dot ' + (isHost || conn === 'connected' ? 'ok' : conn ? 'bad' : '') }),
+      isHost ? null : h('button', { className: 'ac-mini g', onClick: leave }, 'Leave')),
+    h('div', { className: 'ac-body' }, stage,
+      h('div', { className: 'ac-panel' },
+        h('div', { className: 'ac-tabs' }, tb('people', '👥 People', roster.length), tb('chat', '💬 Chat', unread || 0), tb('notes', '📝 Notes')),
+        tab === 'people' ? people : tab === 'chat' ? chatView : notesView)));
+}
+
+// ---------- TUTOR: schedule + manage audio / Google Meet classes ----------
+function AudioClassManager() {
+  const h = React.createElement;
+  const { profile, socket } = useAuth();
+  const { add } = useToast();
+  const { data: classes, refetch } = useApiData('/live-classes');
+  const [mySubj, setMySubj] = useState([]);
+  const [room, setRoom] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const d0 = new Date();
+  const [f, setF] = useState({ title: '', subject_id: '', scheduled_date: d0.toISOString().slice(0, 10), scheduled_time: String(d0.getHours()).padStart(2, '0') + ':' + String(d0.getMinutes()).padStart(2, '0'), description: '', delivery: 'audio', meet_link: '' });
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  useEffect(() => { apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(x => setMySubj((x && x.subjects) || [])).catch(() => {}); }, []);
+  const mine = classes.filter(c => String(c.tutor_id) === String(profile?._id) && c.delivery && c.delivery !== 'classic');
+  const upcoming = mine.filter(c => c.status !== 'ended'), past = mine.filter(c => c.status === 'ended');
+  const IN = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 14, marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' };
+  const B = (bg) => ({ background: bg || '#064d2c', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' });
+
+  const save = async () => {
+    if (!f.title.trim() || !f.subject_id) { add({ title: 'Enter a title and choose a subject', icon: '⚠️', type: 'w' }); return; }
+    if (f.delivery === 'meet' && !/^https:\/\/meet\.google\.com\//i.test(f.meet_link.trim())) { add({ title: 'Paste your Google Meet link', body: 'It starts with https://meet.google.com/', icon: '⚠️', type: 'w' }); return; }
+    setBusy(true);
+    try {
+      await apiFetch('POST', '/live-classes', { ...f, title: f.title.trim(), meet_link: f.delivery === 'meet' ? f.meet_link.trim() : '', subject_id: Number(f.subject_id), presenter_type: 'human' }, tok());
+      add({ title: '✅ Class scheduled', icon: '🎙️', type: 'i' }); setF(p => ({ ...p, title: '', description: '', meet_link: '' })); refetch();
+    } catch (e) { add({ title: 'Could not schedule', body: e.message, icon: '❌', type: 'd' }); }
+    finally { setBusy(false); }
+  };
+  const copy = (c) => {
+    const link = window.location.origin + '/?class=' + c._id;
+    (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => add({ title: 'Join link copied', body: 'Only students who paid you can enter.', icon: '🔗', type: 'i' })).catch(() => prompt('Copy this join link:', link));
+  };
+  const meetStart = async (c) => { try { await apiFetch('PUT', '/live-classes/' + c._id, { status: 'live' }, tok()); } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); return; } window.open(c.meet_link, '_blank'); refetch(); };
+  const setStatus = async (c, status) => { try { await apiFetch('PUT', '/live-classes/' + c._id, { status }, tok()); refetch(); } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); } };
+  const del = async (c) => { if (!confirm('Delete this class?')) return; try { await apiFetch('DELETE', '/live-classes/' + c._id, null, tok()); refetch(); } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); } };
+
+  if (room) return h(AudioClassRoom, { cls: room, profile, socket, onExit: () => { setRoom(null); refetch(); } });
+
+  const card = { background: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: '0 2px 10px rgba(0,0,0,.07)' };
+  const subs = (mySubj.length ? SUBJECTS.filter(s => mySubj.includes(s.id)) : SUBJECTS);
+  return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
+    h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, '🎙️ Live Audio & Meet Classes'),
+    h('div', { style: card },
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 10 } },
+        [['audio', '🎙️ Audio class on this site'], ['meet', '📹 Google Meet link']].map(([v, l]) => h('button', { key: v, onClick: () => set('delivery', v), style: { flex: 1, padding: '10px 6px', borderRadius: 10, border: '2px solid ' + (f.delivery === v ? '#064d2c' : '#e5e7eb'), background: f.delivery === v ? '#ecfdf5' : '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' } }, l))),
+      h('input', { style: IN, placeholder: 'Class title (e.g. Algebra revision)', value: f.title, onChange: e => set('title', e.target.value) }),
+      h('select', { style: IN, value: f.subject_id, onChange: e => set('subject_id', e.target.value) }, h('option', { value: '' }, 'Select subject...'), subs.map(s => h('option', { key: s.id, value: s.id }, s.i + ' ' + s.n))),
+      h('div', { style: { display: 'flex', gap: 8 } }, h('input', { type: 'date', style: IN, value: f.scheduled_date, onChange: e => set('scheduled_date', e.target.value) }), h('input', { type: 'time', style: IN, value: f.scheduled_time, onChange: e => set('scheduled_time', e.target.value) })),
+      f.delivery === 'meet' && h('input', { style: IN, placeholder: 'https://meet.google.com/abc-defg-hij', value: f.meet_link, onChange: e => set('meet_link', e.target.value) }),
+      h('input', { style: IN, placeholder: 'Short description (optional)', value: f.description, onChange: e => set('description', e.target.value) }),
+      h('button', { style: { ...B(), width: '100%', padding: 12, opacity: busy ? .6 : 1 }, disabled: busy, onClick: save }, busy ? 'Scheduling...' : 'Schedule class')),
+    upcoming.length === 0 && h('div', { style: { ...card, textAlign: 'center', color: '#6b7280' } }, 'No scheduled audio or Meet classes yet.'),
+    upcoming.map(c => h('div', { key: c._id, style: card },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8 } },
+        h('div', null, h('div', { style: { fontWeight: 700 } }, c.title), h('div', { style: { fontSize: 12, color: '#6b7280' } }, c.scheduled_date + ' · ' + c.scheduled_time + ' · ' + (c.delivery === 'audio' ? '🎙️ Audio' : '📹 Meet'))),
+        c.status === 'live' && h('span', { style: { background: '#fee2e2', color: '#991b1b', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700, height: 'fit-content' } }, 'LIVE')),
+      h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 } },
+        c.delivery === 'audio'
+          ? h('button', { style: B('#059669'), onClick: () => setRoom(c) }, c.status === 'live' ? '🎙️ Open room' : '▶ Start class')
+          : h('button', { style: B('#059669'), onClick: () => meetStart(c) }, '📹 Open Meet'),
+        h('button', { style: B('#1d4ed8'), onClick: () => copy(c) }, '🔗 Copy join link'),
+        c.delivery === 'meet' && c.status === 'live' && h('button', { style: B('#d97706'), onClick: () => setStatus(c, 'ended') }, 'End'),
+        h('button', { style: B('#dc2626'), onClick: () => del(c) }, '🗑')))),
+    past.length > 0 && h('div', { style: { fontSize: 12, color: '#6b7280', margin: '10px 0 6px' } }, 'Past classes'),
+    past.slice(0, 5).map(c => h('div', { key: c._id, style: { ...card, padding: 10, fontSize: 13, display: 'flex', justifyContent: 'space-between' } }, h('span', null, c.title), h('span', { style: { color: '#6b7280' } }, c.scheduled_date))));
+}
+/* ===== END LIVE AUDIO CLASS ===== */
+
 function TutorSubscribe() {
   const { socket } = useAuth();
   const { add } = useToast();
@@ -8103,12 +8534,21 @@ function EnhancedLiveClassesPage({ subs, pays }) {
   const [activeClass, setActiveClass] = useState(null);
   const [lobbyClass, setLobbyClass] = useState(null);
   const [viewMode, setViewMode] = useState('upcoming');
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('class');
+    if (!id || !classes.length || window.__classDeepDone) return;
+    const c = classes.find(x => String(x._id) === id);
+    if (!c) return;
+    window.__classDeepDone = true;
+    if (c.locked) window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: c.tutor_id } }));
+    else if (c.delivery === 'audio') setActiveClass(c);
+  }, [classes]);
   const autoRef = useRef();
   useEffect(() => {
     if (!socket) return;
     const f = () => refetch();
     const tm = setInterval(f, 30000);
-    const evs = ['access_granted', 'access_expired', 'class_went_live'];
+    const evs = ['access_granted', 'access_expired', 'class_went_live', 'class_ended'];
     evs.forEach(e => socket.on(e, f));
     return () => { clearInterval(tm); evs.forEach(e => socket.off(e, f)); };
   }, [socket]);
@@ -8126,6 +8566,7 @@ function EnhancedLiveClassesPage({ subs, pays }) {
     chk(); autoRef.current = setInterval(chk, 30000); return () => clearInterval(autoRef.current);
   }, [classes, socket]);
 
+  if (activeClass && activeClass.delivery === 'audio') return React.createElement(AudioClassRoom, { cls: activeClass, profile, socket, onExit: () => { setActiveClass(null); refetch(); } });
   if (activeClass) return React.createElement(LiveClassRoom, { classData: activeClass, onExit: () => { setActiveClass(null); setLobbyClass(null); refetch(); }, profile, socket });
   if (lobbyClass) return React.createElement(ClassLobby, {
     cls: lobbyClass, profile,
@@ -8154,13 +8595,13 @@ function EnhancedLiveClassesPage({ subs, pays }) {
       const canJoin = isLive && !cls.locked;
       const canAccess = !cls.locked;
       const isOwner = profile?.role === 'admin' || String(cls.tutor_id) === String(profile?._id);
-      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
+      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? (cls.delivery === 'audio' ? setActiveClass(cls) : setLobbyClass(cls)) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
         React.createElement('div', { style: { padding: '14px 16px' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
             React.createElement('div', { style: { width: 42, height: 42, borderRadius: 12, background: ch ? 'linear-gradient(135deg,' + LC.gold + ',#f0b429)' : 'linear-gradient(135deg,' + C.gd + ',' + C.g + ')', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#000', flexShrink: 0 } }, ch ? ch.avatar : 'LIVE'),
             React.createElement('div', { style: { flex: 1, minWidth: 0 } },
               React.createElement('div', { style: { fontWeight: 700, fontSize: 15, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, cls.title),
-              React.createElement('div', { style: { fontSize: 12, color: C.gr } }, cls.scheduled_date + ' · ' + cls.scheduled_time + (ch ? ' · ' + ch.name : ''))
+              React.createElement('div', { style: { fontSize: 12, color: C.gr } }, cls.scheduled_date + ' · ' + cls.scheduled_time + (ch ? ' · ' + ch.name : '') + (cls.delivery === 'audio' ? ' · 🎙️ Audio' : cls.delivery === 'meet' ? ' · 📹 Meet' : ''))
             ),
             React.createElement('div', { style: { background: isLive ? C.dl : cls.status === 'upcoming' ? '#dbeafe' : '#f3f4f6', color: isLive ? C.d : cls.status === 'upcoming' ? '#1d4ed8' : C.gr, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0 } }, isLive ? 'LIVE' : cls.status === 'upcoming' ? 'Soon' : 'Ended')
           ),
@@ -8259,6 +8700,7 @@ function StudentApp() {
   const [an, setAn] = useState('home');
   useEffect(() => {
     const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; setAn(e.detail && e.detail.page ? e.detail.page : 'pay'); };
+    if (new URLSearchParams(window.location.search).get('class')) setAn('live');
     window.addEventListener('goto-subscribe', g);
     return () => window.removeEventListener('goto-subscribe', g);
   }, []);
@@ -9965,6 +10407,10 @@ function TutorApp() {
     icon: '🎥',
     label: 'Schedule Class'
   }, {
+    id: 'audio',
+    icon: '🎙️',
+    label: 'Live Audio'
+  }, {
     id: 'materials',
     icon: '📤',
     label: 'Upload Materials'
@@ -10225,6 +10671,7 @@ function TutorApp() {
   })));
   const pages = {
     home: /*#__PURE__*/React.createElement(Dash, null),
+    audio: React.createElement(AudioClassManager, null),
     schedule: /*#__PURE__*/React.createElement(ScheduleClass, {
       onDone: () => setAn('home')
     }),

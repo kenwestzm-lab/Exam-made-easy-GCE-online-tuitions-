@@ -32,6 +32,9 @@ router.get('/live-classes', auth, async (req, res) => {
 router.post('/live-classes', auth, tutorOrAdmin, requireTutorFee, async (req, res) => {
   try {
     const body = { ...req.body }; delete body._id;
+    if (body.delivery && !['classic','audio','meet'].includes(body.delivery)) return res.status(400).json({ error: 'Invalid class type' });
+    if (body.delivery === 'meet' && !/^https:\/\/meet\.google\.com\/[a-z0-9-]+/i.test(String(body.meet_link || ''))) return res.status(400).json({ error: 'Paste a valid Google Meet link (https://meet.google.com/...)' });
+    if (body.delivery === 'audio') body.meet_link = '';
     if (req.user.role === 'tutor' && (req.user.subjects || []).length && !req.user.subjects.includes(Number(body.subject_id))) return res.status(403).json({ error: 'You can only use subjects you teach' });
     
     res.status(201).json(await LiveClass.create({ ...body, tutor_id: req.user._id }));

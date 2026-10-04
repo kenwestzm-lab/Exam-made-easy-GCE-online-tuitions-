@@ -16,6 +16,7 @@ module.exports = (io) => {
             const ids = await LiveClass.find({ tutor_id: a.tutor_id }).select('_id');
             const op = io.in('user_' + a.student_id);
             if (ids.length && typeof op.socketsLeave === 'function') op.socketsLeave(ids.map(c => 'class_' + c._id));
+            require('./audioRoom').evictUser(io, String(a.student_id), ids.map(c => String(c._id)));
           } catch (e) {}
         }
       }

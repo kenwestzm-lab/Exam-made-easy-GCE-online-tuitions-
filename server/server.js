@@ -69,6 +69,7 @@ io.on('connection', (socket) => {
 
   // Auto-join personal room
   const userId = socket.data.userId;
+  require('./services/audioRoom').register(io, socket);
   const CONTROL_EVENTS = new Set(['whiteboard_stroke','whiteboard_text','whiteboard_image','whiteboard_image_update','whiteboard_clear','whiteboard_full_sync','class_quiz','class_announcement','class_status_change']);
   const CLASS_EVENTS = new Set(['class_question','hand_raise','whiteboard_stroke','whiteboard_text','whiteboard_image','whiteboard_image_update','whiteboard_clear','whiteboard_full_sync','ai_speaking','ai_done_speaking','class_quiz','student_quiz_done','class_announcement','ai_correction','class_status_change']);
   // Drop class events from sockets that were not admitted to that class room

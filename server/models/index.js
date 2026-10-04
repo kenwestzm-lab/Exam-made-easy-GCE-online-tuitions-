@@ -110,6 +110,7 @@ const LiveSchema = new Schema({
   class_type: { type: String, default: 'whiteboard' },
   lesson_topic: String, lesson_script: String,
   auto_start: { type: Boolean, default: false },
+  delivery: { type: String, enum: ['classic','audio','meet'], default: 'classic' },
   whiteboard_data: Schema.Types.Mixed,
   tutor_id: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
