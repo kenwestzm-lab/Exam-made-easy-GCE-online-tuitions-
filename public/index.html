@@ -2527,7 +2527,7 @@ function EnhancedAIClassRoom({
   const lessonChunks = useRef([]);
   const currentChunk = useRef(0);
   const inputRef = useRef();
-  const isPresenter = ['tutor', 'admin'].includes(profile?.role);
+  const isPresenter = (profile?.role==='admin'||(profile?.role==='tutor'&&String(classData?.tutor_id)===String(profile?._id)));
   const ck = classData?.ai_character || 'ken';
   const ch = AI_CHARS[ck] || AI_CHARS.ken;
   const chGender = ck === 'msimbi' ? 'female' : 'male';
@@ -4404,7 +4404,7 @@ function MaterialsPanel(){
 
 function ClassLobby({cls,profile,onJoin,onStart,onBack}){
   const [countdown,setCountdown]=useState('--:--');
-  const isPresenter=profile?.role==='tutor'||profile?.role==='admin';
+  const isPresenter=(profile?.role==='admin'||(profile?.role==='tutor'&&String(cls?.tutor_id)===String(profile?._id)));
   const ch={ken:{name:'Teacher Ken',avatar:'👨‍🏫'},msimbi:{name:"Mis M'simbi",avatar:'👩‍🏫'}}[cls.ai_character]||null;
   useEffect(()=>{const tick=()=>{if(!cls.scheduled_date||!cls.scheduled_time)return;const start=new Date(cls.scheduled_date+'T'+cls.scheduled_time+':00');const diff=start-new Date();if(diff<=0){setCountdown('00:00');return;}const m=Math.floor(diff/60000);const s=Math.floor((diff%60000)/1000);setCountdown(String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'));};tick();const t=setInterval(tick,1000);return()=>clearInterval(t);},[cls]);
   return React.createElement('div',{style:{minHeight:'100vh',background:'linear-gradient(160deg,#07160a,#0d2b17)',color:LC.white,display:'flex',flexDirection:'column'}},
@@ -4440,7 +4440,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
   const ck=classData?.ai_character||'ken';
   const isAI=classData?.presenter_type==='ai';
   const ch={ken:{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'},msimbi:{name:"Mis M'simbi",gender:'female',avatar:'👩‍🏫',color:'#a78bfa'}}[ck]||{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'};
-  const isPresenter=profile?.role==='tutor'||profile?.role==='admin';
+  const isPresenter=(profile?.role==='admin'||(profile?.role==='tutor'&&String(classData?.tutor_id)===String(profile?._id)));
   const subName=()=>classData?.subject_name||SUBJECTS.find(s=>s.id===Number(classData?.subject_id))?.n||'General';
 
   // State
