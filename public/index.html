@@ -8153,6 +8153,7 @@ function EnhancedLiveClassesPage({ subs, pays }) {
       const ch = cls.presenter_type === 'ai' ? (AI_CHARS[cls.ai_character] || AI_CHARS.ken) : null;
       const canJoin = isLive && !cls.locked;
       const canAccess = !cls.locked;
+      const isOwner = profile?.role === 'admin' || String(cls.tutor_id) === String(profile?._id);
       return React.createElement('div', { key: cls._id, onClick: () => canAccess ? setLobbyClass(cls) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
         React.createElement('div', { style: { padding: '14px 16px' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
@@ -8166,8 +8167,8 @@ function EnhancedLiveClassesPage({ subs, pays }) {
           React.createElement('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
             canJoin && React.createElement('button', { onClick: e => { e.stopPropagation(); setActiveClass(cls); }, style: { ...BT('p', true), fontSize: 13, flex: 1 } }, 'Join Class'),
             !canAccess && React.createElement('div', { style: { fontSize: 12, color: '#ef4444', fontWeight: 600 } }, '🔒 Subscribe to access this class'),
-            isPresenter && cls.status === 'upcoming' && React.createElement('button', { onClick: async e => { e.stopPropagation(); await apiFetch('PUT', '/live-classes/' + cls._id, { status: 'live' }, tok()); refetch(); }, style: { ...BT('d', true), fontSize: 12 } }, 'Start'),
-            isPresenter && cls.status === 'live' && React.createElement('button', { onClick: e => { e.stopPropagation(); setActiveClass(cls); }, style: { ...BT('p', true), fontSize: 12 } }, 'Open'),
+            isOwner && cls.status === 'upcoming' && React.createElement('button', { onClick: async e => { e.stopPropagation(); await apiFetch('PUT', '/live-classes/' + cls._id, { status: 'live' }, tok()); refetch(); }, style: { ...BT('d', true), fontSize: 12 } }, 'Start'),
+            isOwner && cls.status === 'live' && React.createElement('button', { onClick: e => { e.stopPropagation(); setActiveClass(cls); }, style: { ...BT('p', true), fontSize: 12 } }, 'Open'),
             cls.meet_link && cls.presenter_type === 'human' && React.createElement('a', { href: cls.meet_link, target: '_blank', rel: 'noreferrer', onClick: e => e.stopPropagation(), style: { ...BT('gh', true), textDecoration: 'none', fontSize: 12 } }, 'Video Call'),
             cls.recording_url && React.createElement('a', { href: cls.recording_url, target: '_blank', rel: 'noreferrer', onClick: e => e.stopPropagation(), style: { ...BT('gh', true), textDecoration: 'none', fontSize: 12 } }, 'Recording')
           )

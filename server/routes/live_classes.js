@@ -14,7 +14,7 @@ const isOwner = (u, c) => String(c.tutor_id) === String(u._id);
 // Single server-side rule used everywhere
 async function canView(user, cls) {
   if (user.role === 'admin') return true;
-  if (user.role === 'tutor') return isOwner(user, cls);
+  if (user.role === 'tutor') return !!user.approved;
   return !!cls.tutor_id && (await studentHasAccess(user._id, cls.tutor_id));
 }
 
@@ -22,7 +22,7 @@ router.get('/live-classes', auth, async (req, res) => {
   try {
     const list = await LiveClass.find().sort('-createdAt');
     if (req.user.role === 'admin') return res.json(list);
-    if (req.user.role === 'tutor') return res.json(list.map(c => isOwner(req.user, c) ? c : lockView(c)));
+    if (req.user.role === 'tutor') return res.json(list.map(c => req.user.approved ? { ...c.toObject(), locked: false, is_owner: isOwner(req.user, c) } : lockView(c)));
     const ok = new Set(await activeTutorIds(req.user._id));
     res.json(list.map(c => (c.tutor_id && ok.has(String(c.tutor_id))) ? { ...c.toObject(), locked: false } : lockView(c)));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -83,6 +83,7 @@ router.get('/live-classes/:id/whiteboard', auth, async (req, res) => {
 
 router.post('/live-classes/:id/whiteboard-upload', auth, tutorOrAdmin, upload.single('file'), async (req, res) => {
   try {
+    if (req.user.role === 'tutor') { const c = await LiveClass.findById(req.params.id).select('tutor_id'); if (!c || !isOwner(req.user, c)) return res.status(403).json({ error: 'Not your class' }); }
     if (!req.file) return res.status(400).json({ error: 'No file' });
     const r = await uploadToCloudinary(req.file.buffer, 'peace-mindset/whiteboard', 'image');
     res.json({ url: r.secure_url, type: 'image' });

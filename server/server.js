@@ -56,10 +56,10 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth && socket.handshake.auth.token;
     if (!token) return next(new Error('AUTH_REQUIRED'));
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'peacemindset_secret');
-    const u = await User.findById(decoded.id).select('name role');
+    const u = await User.findById(decoded.id).select('name role approved');
     if (!u) return next(new Error('AUTH_REQUIRED'));
     socket.data.userId = String(u._id);
-    socket.data.user = { _id: String(u._id), name: u.name, role: u.role };
+    socket.data.user = { _id: String(u._id), name: u.name, role: u.role, approved: !!u.approved };
     next();
   } catch (e) { next(new Error('AUTH_REQUIRED')); }
 });
@@ -69,6 +69,7 @@ io.on('connection', (socket) => {
 
   // Auto-join personal room
   const userId = socket.data.userId;
+  const CONTROL_EVENTS = new Set(['whiteboard_stroke','whiteboard_text','whiteboard_image','whiteboard_image_update','whiteboard_clear','whiteboard_full_sync','class_quiz','class_announcement','class_status_change']);
   const CLASS_EVENTS = new Set(['class_question','hand_raise','whiteboard_stroke','whiteboard_text','whiteboard_image','whiteboard_image_update','whiteboard_clear','whiteboard_full_sync','ai_speaking','ai_done_speaking','class_quiz','student_quiz_done','class_announcement','ai_correction','class_status_change']);
   // Drop class events from sockets that were not admitted to that class room
   socket.use(async (packet, next) => {
@@ -77,6 +78,7 @@ io.on('connection', (socket) => {
       if (CLASS_EVENTS.has(ev)) {
         if (socket.data.joining) await socket.data.joining.catch(() => {});
         if (!data || !socket.rooms.has('class_' + data.classId)) return;
+        if (CONTROL_EVENTS.has(ev) && !(socket.data.controls && socket.data.controls.has(String(data.classId)))) return;
       }
       next();
     } catch (e) { /* drop packet */ }
@@ -124,9 +126,11 @@ io.on('connection', (socket) => {
         const me = socket.data.user;
         let ok = false;
         if (me.role === 'admin') ok = true;
-        else if (me.role === 'tutor') ok = String(cls.tutor_id) === me._id;
+        else if (me.role === 'tutor') ok = !!me.approved;
         else ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id);
         if (!ok) { socket.emit('class_join_denied', { classId }); return; }
+        socket.data.controls = socket.data.controls || new Set();
+        if (me.role === 'admin' || (me.role === 'tutor' && String(cls.tutor_id) === me._id)) socket.data.controls.add(String(classId));
         socket.join(`class_${classId}`);
         socket.to(`class_${classId}`).emit('student_joined', { user: { _id: me._id, name: me.name } });
       } catch (e) { console.error('join_class error:', e.message); }
