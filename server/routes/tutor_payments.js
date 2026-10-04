@@ -44,6 +44,7 @@ router.put('/my-details', auth, tutorOnly, async (req, res) => {
         ...(Array.isArray(req.body.subjects) ? { subjects: req.body.subjects.map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 20) } : {}) },
       { upsert: true, new: true, runValidators: true }
     );
+    if (Array.isArray(info.subjects)) await User.updateOne({ _id: req.user._id }, { subjects: info.subjects });
     res.json(info);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
