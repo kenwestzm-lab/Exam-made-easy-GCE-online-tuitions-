@@ -14,6 +14,9 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#064d2c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -11702,5 +11705,59 @@ if (Notification.permission === 'default') {
   setTimeout(() => Notification.requestPermission(), 3000);
 }
 </script>
+<script>
+(function () {
+  if (window.__pmUpdater) return; window.__pmUpdater = 1;
+  var base = null, ready = false;
+  function sig(r) {
+    var s = r.headers.get('etag') || ((r.headers.get('content-length') || '') + '|' + (r.headers.get('last-modified') || ''));
+    return s === '|' ? null : s;
+  }
+  function probe() {
+    return fetch('/?_v=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+      .then(function (r) { return r.ok ? sig(r) : null; }).catch(function () { return null; });
+  }
+  function banner() {
+    if (document.getElementById('pm-upd')) return;
+    var d = document.createElement('div'); d.id = 'pm-upd';
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:99999;background:#064d2c;color:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 14px system-ui,sans-serif';
+    d.innerHTML = '<span style="flex:1">\uD83D\uDD04 A new version is ready</span><button id="pm-upd-go" style="background:#f5b301;color:#000;border:0;border-radius:10px;padding:8px 14px;font-weight:700">Update</button>';
+    document.body.appendChild(d);
+    document.getElementById('pm-upd-go').onclick = function () { location.reload(); };
+  }
+  function check() {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration)
+      navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {});
+    probe().then(function (s) {
+      if (!s) return;
+      if (base === null) { base = s; return; }
+      if (s !== base && !ready) {
+        ready = true;
+        var loggedIn = false; try { loggedIn = !!localStorage.getItem('pms_t'); } catch (e) {}
+        if (!loggedIn) location.reload(); else banner(); // never reload a logged-in user mid-class
+      }
+    });
+  }
+  check();
+  setInterval(check, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+  window.addEventListener('online', check);
+
+  var dp = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); dp = e;
+    try { if (localStorage.getItem('pm-inst-x')) return; } catch (x) {}
+    if (document.getElementById('pm-inst')) return;
+    var b = document.createElement('div'); b.id = 'pm-inst';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:99998;background:#fff;color:#064d2c;border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.3);font:600 13px system-ui,sans-serif';
+    b.innerHTML = '<span style="flex:1">\uD83D\uDCF2 Install the Peace Mindset app</span><button id="pm-inst-go" style="background:#064d2c;color:#fff;border:0;border-radius:10px;padding:7px 12px;font-weight:700">Install</button><button id="pm-inst-x" style="background:none;border:0;font-size:16px;color:#666">\u2715</button>';
+    document.body.appendChild(b);
+    document.getElementById('pm-inst-go').onclick = function () { dp.prompt(); b.remove(); };
+    document.getElementById('pm-inst-x').onclick = function () { try { localStorage.setItem('pm-inst-x', '1'); } catch (x) {} b.remove(); };
+  });
+  window.addEventListener('appinstalled', function () { var b = document.getElementById('pm-inst'); if (b) b.remove(); });
+})();
+</script>
+
 </body>
 </html>

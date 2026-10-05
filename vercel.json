@@ -2,11 +2,17 @@
   "version": 2,
   "builds": [
     { "src": "server/server.js", "use": "@vercel/node" },
-    { "src": "public/index.html", "use": "@vercel/static" }
+    { "src": "public/index.html", "use": "@vercel/static" },
+    { "src": "public/manifest.json", "use": "@vercel/static" },
+    { "src": "public/sw.js", "use": "@vercel/static" },
+    { "src": "public/icons/*", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "server/server.js" },
     { "src": "/socket.io/(.*)", "dest": "server/server.js" },
-    { "src": "/(.*)", "dest": "public/index.html" }
+    { "src": "/sw.js", "headers": { "cache-control": "no-cache, no-store, must-revalidate", "service-worker-allowed": "/" }, "dest": "public/sw.js" },
+    { "src": "/manifest.json", "headers": { "cache-control": "no-cache" }, "dest": "public/manifest.json" },
+    { "src": "/icons/(.*)", "dest": "public/icons/$1" },
+    { "src": "/(.*)", "headers": { "cache-control": "no-cache" }, "dest": "public/index.html" }
   ]
 }
