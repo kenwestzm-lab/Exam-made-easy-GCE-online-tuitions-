@@ -11,6 +11,21 @@ const iceServers = () => {
   try { const v = JSON.parse(process.env.ICE_SERVERS || ''); if (Array.isArray(v) && v.length) return v; } catch (e) {}
   return [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 };
+let iceCache = { t: 0, v: null };
+const getIce = async () => {
+  const dom = process.env.METERED_DOMAIN, key = process.env.METERED_API_KEY;
+  if (dom && key) {
+    if (iceCache.v && Date.now() - iceCache.t < 10 * 60 * 1000) return iceCache.v;
+    try {
+      const r = await fetch('https://' + dom + '/api/v1/turn/credentials?apiKey=' + encodeURIComponent(key));
+      const v = await r.json();
+      if (Array.isArray(v) && v.length) { iceCache = { t: Date.now(), v }; return v; }
+      console.error('Metered returned no servers');
+    } catch (e) { console.error('Metered fetch failed:', e.message); }
+    if (iceCache.v) return iceCache.v;
+  }
+  return iceServers();
+};
 const rosterOf = (room) => [...room.peers.values()].map(p => ({ sid: p.sid, userId: p.userId, name: p.name, isHost: p.isHost, hand: p.hand, speaker: p.speaker }));
 const pushRoster = (io, room) => io.to(RN(room.id)).emit('audio_roster', { roster: rosterOf(room), hostPresent: !!room.hostSid, startedAt: room.startedAt, now: Date.now() });
 
@@ -92,7 +107,8 @@ function register(io, socket) {
         }
       }
       if (!socket.connected) { leave(); return; }
-      reply({ ok: true, isHost: asHost, sid: socket.id, ice: iceServers(), hasTurn: iceServers().some(s => JSON.stringify(s.urls).includes('turn')), note: room.note, chat: room.chat.slice(-50), title: cls.title });
+      const ice = await getIce();
+      reply({ ok: true, isHost: asHost, sid: socket.id, ice, hasTurn: ice.some(s => JSON.stringify(s.urls).includes('turn')), note: room.note, chat: room.chat.slice(-50), title: cls.title });
       pushRoster(io, room);
       if (asHost) socket.emit('audio_connect_to', { sids: [...room.peers.values()].filter(p => !p.isHost).map(p => p.sid) });
       else if (room.hostSid) io.to(room.hostSid).emit('audio_connect_to', { sids: [socket.id] });
