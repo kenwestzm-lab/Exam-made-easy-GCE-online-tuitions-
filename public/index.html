@@ -6486,7 +6486,13 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     const entry = { pc, pid: data.pid, cands: [] };
     r.peers.set(from, entry);
     pc.onicecandidate = (ev) => { if (ev.candidate) socket.emit('audio_signal', { to: from, data: { t: 'cand', pid: data.pid, c: ev.candidate } }); };
-    pc.onconnectionstatechange = () => setConn(pc.connectionState);
+    pc.onconnectionstatechange = () => {
+      setConn(pc.connectionState);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        clearTimeout(entry.redo);
+        entry.redo = setTimeout(() => { if (r.peers.get(from) === entry && pc.connectionState !== 'connected') socket.emit('audio_signal', { to: from, data: { t: 'redo' } }); }, pc.connectionState === 'failed' ? 500 : 5000);
+      }
+    };
     const el = r.el || (r.el = new Audio()); el.autoplay = true; el.playsInline = true;
     pc.ontrack = (ev) => {
       el.srcObject = ev.streams[0] || new MediaStream([ev.track]);
@@ -6504,6 +6510,14 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
   const onSignal = async ({ from, data }) => {
     try {
       if (data.t === 'offer') { if (!r.isHost) await handleOffer(from, data); return; }
+      if (data.t === 'redo') {
+        if (r.isHost && r.roster.some(p => p.sid === from) && Date.now() - ((r.lastRedo && r.lastRedo[from]) || 0) > 3000) {
+          (r.lastRedo = r.lastRedo || {})[from] = Date.now();
+          await connectTo(from);
+          r.speakers = new Set(r.roster.filter(p => p.speaker).map(p => p.sid)); rewire();
+        }
+        return;
+      }
       const e = r.peers.get(from);
       if (!e || e.pid !== data.pid) return;
       if (data.t === 'answer' && r.isHost) {

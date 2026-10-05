@@ -11,20 +11,36 @@ const iceServers = () => {
   try { const v = JSON.parse(process.env.ICE_SERVERS || ''); if (Array.isArray(v) && v.length) return v; } catch (e) {}
   return [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 };
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+const providers = {
+  metered: async () => {
+    const dom = process.env.METERED_DOMAIN, key = process.env.METERED_API_KEY;
+    if (!dom || !key) return [];
+    const r = await fetch('https://' + dom + '/api/v1/turn/credentials?apiKey=' + encodeURIComponent(key));
+    const v = await r.json();
+    return Array.isArray(v) ? v : [];
+  },
+  cloudflare: async () => {
+    const id = process.env.CF_TURN_KEY_ID, tok = process.env.CF_TURN_API_TOKEN;
+    if (!id || !tok) return [];
+    const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + id + '/credentials/generate', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ ttl: 86400 })
+    });
+    const v = await r.json();
+    return v && v.iceServers ? [].concat(v.iceServers) : [];
+  },
+};
 let iceCache = { t: 0, v: null };
 const getIce = async () => {
-  const dom = process.env.METERED_DOMAIN, key = process.env.METERED_API_KEY;
-  if (dom && key) {
-    if (iceCache.v && Date.now() - iceCache.t < 10 * 60 * 1000) return iceCache.v;
-    try {
-      const r = await fetch('https://' + dom + '/api/v1/turn/credentials?apiKey=' + encodeURIComponent(key));
-      const v = await r.json();
-      if (Array.isArray(v) && v.length) { iceCache = { t: Date.now(), v }; return v; }
-      console.error('Metered returned no servers');
-    } catch (e) { console.error('Metered fetch failed:', e.message); }
-    if (iceCache.v) return iceCache.v;
-  }
-  return iceServers();
+  if (iceCache.v && Date.now() - iceCache.t < 10 * 60 * 1000) return iceCache.v;
+  const names = Object.keys(providers);
+  const res = await Promise.all(names.map(n => withTimeout(providers[n](), 4000).catch(e => { console.error('ICE provider ' + n + ' failed:', e.message); return []; })));
+  const ok = names.filter((n, i) => res[i].length);
+  console.log('ICE providers working:', ok.join(', ') || 'none');
+  const merged = [].concat(...res, iceServers());
+  if (ok.length) iceCache = { t: Date.now(), v: merged };
+  else if (iceCache.v) return iceCache.v;
+  return merged;
 };
 const rosterOf = (room) => [...room.peers.values()].map(p => ({ sid: p.sid, userId: p.userId, name: p.name, isHost: p.isHost, hand: p.hand, speaker: p.speaker }));
 const pushRoster = (io, room) => io.to(RN(room.id)).emit('audio_roster', { roster: rosterOf(room), hostPresent: !!room.hostSid, startedAt: room.startedAt, now: Date.now() });
