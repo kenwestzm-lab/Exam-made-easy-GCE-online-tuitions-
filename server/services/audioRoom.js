@@ -92,7 +92,7 @@ function register(io, socket) {
         }
       }
       if (!socket.connected) { leave(); return; }
-      reply({ ok: true, isHost: asHost, sid: socket.id, ice: iceServers(), note: room.note, chat: room.chat.slice(-50), title: cls.title });
+      reply({ ok: true, isHost: asHost, sid: socket.id, ice: iceServers(), hasTurn: iceServers().some(s => JSON.stringify(s.urls).includes('turn')), note: room.note, chat: room.chat.slice(-50), title: cls.title });
       pushRoster(io, room);
       if (asHost) socket.emit('audio_connect_to', { sids: [...room.peers.values()].filter(p => !p.isHost).map(p => p.sid) });
       else if (room.hostSid) io.to(room.hostSid).emit('audio_connect_to', { sids: [socket.id] });

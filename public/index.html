@@ -6399,6 +6399,7 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
   const [elapsed, setElapsed] = useState(0);
   const [unread, setUnread] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
+  const [diag, setDiag] = useState('');
   const R = useRef({ peers: new Map(), speakers: new Set(), micOn: true });
   const r = R.current;
   r.roster = roster; r.tab = tab;
@@ -6542,7 +6543,7 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     r.joined = true;
     socket.emit('audio_join', { classId: cls._id }, async (res) => {
       if (!res || res.error) { cleanup(); setErr((res && res.error) || 'Could not join the class'); setPhase('error'); return; }
-      r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid;
+      r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid; r.hasTurn = !!res.hasTurn;
       setIsHost(res.isHost);
       if (!isRe) { setChat(res.chat || []); setNote(res.note || ''); setDraft(res.note || ''); }
       if (res.isHost) await getHostMic();
@@ -6594,6 +6595,9 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     if (phase !== 'live') return;
     const t = setInterval(() => {
       setElapsed(r.start ? (Date.now() + (r.skew || 0) - r.start) / 1000 : 0);
+      { const st = {}; r.peers.forEach(e => { const k = e.pc.iceConnectionState; st[k] = (st[k] || 0) + 1; });
+        const d = (r.hasTurn ? 'TURN: on' : 'TURN: OFF') + ' · links: ' + (Object.keys(st).length ? Object.entries(st).map(([k, v]) => k + ' ' + v).join(', ') : 'none yet');
+        setDiag(prev => prev === d ? prev : d); }
       if (!r.isHost) return;
       const sp = [];
       if (r.micOn && acLevel(r.localAn) > 8) sp.push(String(profile._id));
@@ -6639,6 +6643,7 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     h('div', { style: { fontSize: 13, color: '#9db3dc' } }, hostName + ' · Tutor'),
     h('div', { className: 'ac-orb ' + (orbOn ? 'on' : (isHost && !micOn) || (!isHost && !hostPresent) ? 'off' : '') }, (isHost && !micOn) ? '🔇' : '🎙️'),
     h('div', { style: { fontSize: 14, fontWeight: 600, minHeight: 20 } }, status),
+    h('div', { style: { fontSize: 11, color: '#7f93ba', marginTop: 4 } }, diag),
     needsTap && h('button', { className: 'ac-btn amber', style: { marginTop: 8 }, onClick: () => { r.el && r.el.play().then(() => setNeedsTap(false)).catch(() => {}); } }, '🔊 Tap to enable sound'),
     isHost && !micReady && h('button', { className: 'ac-btn amber', style: { marginTop: 8 }, onClick: getHostMic }, '🎙️ Retry mic'),
     h('div', { className: 'ac-ctrls' },
