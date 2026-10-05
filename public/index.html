@@ -6759,6 +6759,7 @@ function AudioClassManager() {
 }
 /* ===== END LIVE AUDIO CLASS ===== */
 
+/* ===== PER-SUBJECT SUBSCRIPTIONS (injected) ===== */
 function TutorSubscribe() {
   const { socket } = useAuth();
   const { add } = useToast();
@@ -6766,8 +6767,9 @@ function TutorSubscribe() {
   const [tutors, setTutors] = useState([]);
   const [access, setAccess] = useState([]);
   const [pays, setPays] = useState([]);
-  const [sel, setSel] = useState(null);
+  const [tutor, setTutor] = useState(null);
   const [det, setDet] = useState(null);
+  const [subj, setSubj] = useState(null);
   const [method, setMethod] = useState('');
   const [months, setMonths] = useState(1);
   const [txn, setTxn] = useState('');
@@ -6775,12 +6777,19 @@ function TutorSubscribe() {
   const [busy, setBusy] = useState(false);
   const [, setTick] = useState(0);
   const skew = useRef(0);
+  const sName = (id) => { const s = SUBJECTS.find(x => x.id === Number(id)); return s ? s.i + ' ' + s.n : 'Subject ' + id; };
+  const tid = (x) => String(x && (x._id || x));
   const load = () => {
     apiFetch('GET', '/tutor-pay/tutors', null, tok()).then(d => setTutors(Array.isArray(d) ? d : [])).catch(() => {});
     apiFetch('GET', '/tutor-pay/access/mine', null, tok()).then(d => { if (Array.isArray(d)) { setAccess(d); if (d[0]) skew.current = new Date(d[0].server_time).getTime() - Date.now(); } }).catch(() => {});
     apiFetch('GET', '/tutor-pay/mine', null, tok()).then(d => setPays(Array.isArray(d) ? d : [])).catch(() => {});
   };
-  useEffect(() => { load(); const t = setInterval(() => setTick(x => x + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    load();
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    const l = setInterval(load, 30000);
+    return () => { clearInterval(t); clearInterval(l); };
+  }, []);
   useEffect(() => {
     if (!socket) return;
     const f = () => load();
@@ -6789,85 +6798,106 @@ function TutorSubscribe() {
     return () => evs.forEach(e => socket.off(e, f));
   }, [socket]);
 
-  const accFor = (id) => access.find(a => a.tutor && String(a.tutor._id) === String(id));
-  const pendFor = (id) => pays.find(p => p.tutor_id && String(p.tutor_id._id || p.tutor_id) === String(id) && p.status === 'pending');
+  const accFor = (t, s) => access.find(a => a.tutor && tid(a.tutor) === String(t) && Number(a.subject_id) === Number(s));
+  const pendFor = (t, s) => pays.find(p => p.status === 'pending' && tid(p.tutor_id) === String(t) && Number(p.subject_id) === Number(s));
+  const priceOf = (s) => det && (det.subject_prices || []).find(p => Number(p.subject_id) === Number(s));
 
-  const pick = async (t) => {
-    setSel(t); setDet(null); setMethod('');
+  const openTutor = async (t, preset) => {
+    setTutor(t); setDet(null); setSubj(preset || null); setMethod(''); setTxn(''); setReceipt(null); setMonths(1);
     try {
       const d = await apiFetch('GET', '/tutor-pay/tutors/' + t._id + '/details', null, tok());
       setDet(d); if (d.methods && d.methods[0]) setMethod(d.methods[0].method);
-    } catch (e) { add({ title: 'Not available', body: e.message, icon: '⚠️', type: 'w' }); setSel(null); }
+    } catch (e) { add({ title: 'Not available', body: e.message, icon: '⚠️', type: 'w' }); setTutor(null); }
   };
-  const submit = async () => {
-    if (!txn.trim() || !method) { add({ title: 'Missing info', body: 'Choose a method and enter the reference number', icon: '⚠️', type: 'w' }); return; }
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append('tutor_id', sel._id); fd.append('method', method); fd.append('months', months);
-      fd.append('amount', det.price_per_month * months); fd.append('transaction_id', txn.trim());
-      if (receipt) fd.append('receipt', receipt);
-      await apiFetch('POST', '/tutor-pay/submit', null, tok(), fd);
-      add({ title: '✅ Payment submitted', body: sel.name + ' will review and approve it.', icon: '💳', type: 'i' });
-      setTxn(''); setReceipt(null); setSel(null); setDet(null); load();
-    } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
-    finally { setBusy(false); }
-  };
-
   useEffect(() => {
     if (window.__subTutor && tutors.length) {
       const t = tutors.find(x => String(x._id) === String(window.__subTutor));
-      window.__subTutor = null;
-      if (t) pick(t);
+      const ps = window.__subSubject; window.__subTutor = null; window.__subSubject = null;
+      if (t) openTutor(t, ps ? Number(ps) : null);
     }
   }, [tutors]);
-  if (sel) return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
-    h('button', { onClick: () => { setSel(null); setDet(null); }, style: { ...TP_btn('#6b7280'), marginBottom: 12 } }, '← Back to tutors'),
-    h('div', { style: TP_card },
-      h('h3', { style: { margin: '0 0 6px', color: '#064d2c' } }, 'Subscribe to ' + sel.name),
-      !det ? h('p', null, 'Loading payment details...') : h('div', null,
-        h('p', { style: { fontSize: 13, color: '#374151' } }, 'Price: ', h('b', null, 'K' + det.price_per_month + ' per month')),
-        h('div', { style: { fontWeight: 700, margin: '8px 0', color: '#064d2c' } }, '💳 Send money to:'),
-        det.methods.map((m, i) => h('div', { key: i, onClick: () => setMethod(m.method), style: { border: '2px solid ' + (method === m.method ? '#064d2c' : '#e5e7eb'), borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer', background: method === m.method ? '#ecfdf5' : '#fff' } },
-          h('div', { style: { fontWeight: 700 } }, m.method),
-          h('div', { style: { fontSize: 18, fontWeight: 800, color: '#064d2c', letterSpacing: 1 } }, m.account_number),
-          h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'Name: ' + m.account_name),
-          m.instructions && h('div', { style: { fontSize: 12, color: '#6b7280' } }, m.instructions))),
-        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Months'),
-        h('select', { value: months, onChange: e => setMonths(Number(e.target.value)), style: TP_inp }, [1, 2, 3, 4, 5, 6, 12].map(n => h('option', { key: n, value: n }, n + ' month(s) – K' + det.price_per_month * n))),
-        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Reference / Transaction ID (from your SMS)'),
-        h('input', { value: txn, onChange: e => setTxn(e.target.value), placeholder: 'e.g. MP260103.1234.A56789', style: TP_inp }),
-        h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Screenshot (optional)'),
-        h('input', { type: 'file', accept: 'image/*', onChange: e => setReceipt(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
-        h('button', { onClick: submit, disabled: busy, style: { ...TP_btn(), width: '100%', opacity: busy ? .6 : 1 } }, busy ? 'Submitting...' : 'Submit payment of K' + det.price_per_month * months)))
-  );
 
-  return h('div', { style: { maxWidth: 640, paddingBottom: 28 } },
-    h('h2', { style: { color: '#064d2c', marginBottom: 4, fontSize: 19 } }, '💳 Subscribe to a Tutor'),
-    h('p', { style: { color: '#6b7280', fontSize: 13, marginBottom: 14 } }, 'Choose a tutor, pay using their details, and the tutor will approve your payment. You can only join classes of tutors you have paid.'),
-    tutors.length === 0 && h('div', { style: { ...TP_card, textAlign: 'center', color: '#6b7280' } }, 'No tutors are accepting payments yet.'),
-    tutors.map(t => {
-      const a = accFor(t._id), left = a ? TP_left(a.expires_at, skew.current) : null, pend = pendFor(t._id);
-      return h('div', { key: t._id, style: TP_card },
+  const submit = async () => {
+    const pr = priceOf(subj);
+    if (!pr || !txn.trim() || !method) { add({ title: 'Missing info', body: 'Choose a method and enter the reference number', icon: '⚠️', type: 'w' }); return; }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('tutor_id', tutor._id); fd.append('subject_id', subj); fd.append('method', method);
+      fd.append('months', months); fd.append('amount', pr.price * months); fd.append('transaction_id', txn.trim());
+      if (receipt) fd.append('receipt', receipt);
+      await apiFetch('POST', '/tutor-pay/submit', null, tok(), fd);
+      add({ title: '✅ Payment submitted', body: tutor.name + ' will review it for ' + sName(subj) + '.', icon: '💳', type: 'i' });
+      setTxn(''); setReceipt(null); setSubj(null); load();
+    } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
+    finally { setBusy(false); }
+  };
+  const wrap = { maxWidth: 640, paddingBottom: 28 };
+
+  if (tutor && subj) {
+    const pr = priceOf(subj);
+    return h('div', { style: wrap },
+      h('button', { onClick: () => setSubj(null), style: { ...TP_btn('#6b7280'), marginBottom: 12 } }, '← Back to subjects'),
+      h('div', { style: TP_card },
+        h('h3', { style: { margin: '0 0 6px', color: '#064d2c' } }, sName(subj) + ' with ' + tutor.name),
+        !det || !pr ? h('p', null, 'Loading payment details...') : h('div', null,
+          h('p', { style: { fontSize: 13, color: '#374151' } }, 'Price: ', h('b', null, 'K' + pr.price + ' per month'), ' · You get access to ', h('b', null, sName(subj)), ' only.'),
+          h('div', { style: { fontWeight: 700, margin: '8px 0', color: '#064d2c' } }, '💳 Send money to:'),
+          det.methods.map((m, i) => h('div', { key: i, onClick: () => setMethod(m.method), style: { border: '2px solid ' + (method === m.method ? '#064d2c' : '#e5e7eb'), borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer', background: method === m.method ? '#ecfdf5' : '#fff' } },
+            h('div', { style: { fontWeight: 700 } }, m.method),
+            h('div', { style: { fontSize: 18, fontWeight: 800, color: '#064d2c', letterSpacing: 1 } }, m.account_number),
+            h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'Name: ' + m.account_name),
+            m.instructions && h('div', { style: { fontSize: 12, color: '#6b7280' } }, m.instructions))),
+          h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Months'),
+          h('select', { value: months, onChange: e => setMonths(Number(e.target.value)), style: TP_inp }, [1, 2, 3, 4, 5, 6, 12].map(n => h('option', { key: n, value: n }, n + ' month(s) – K' + pr.price * n))),
+          h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Reference / Transaction ID (from your SMS)'),
+          h('input', { value: txn, onChange: e => setTxn(e.target.value), placeholder: 'e.g. MP260103.1234.A56789', style: TP_inp }),
+          h('label', { style: { fontSize: 12, fontWeight: 600 } }, 'Screenshot (optional)'),
+          h('input', { type: 'file', accept: 'image/*', onChange: e => setReceipt(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
+          h('button', { onClick: submit, disabled: busy, style: { ...TP_btn(), width: '100%', opacity: busy ? .6 : 1 } }, busy ? 'Submitting...' : 'Submit payment of K' + pr.price * months))));
+  }
+
+  if (tutor) return h('div', { style: wrap },
+    h('button', { onClick: () => { setTutor(null); setDet(null); }, style: { ...TP_btn('#6b7280'), marginBottom: 12 } }, '← Back to tutors'),
+    h('h3', { style: { color: '#064d2c', margin: '0 0 4px' } }, tutor.name),
+    h('p', { style: { color: '#6b7280', fontSize: 13, marginBottom: 12 } }, 'Choose the subject you want to learn. You only get access to the subjects you pay for.'),
+    !det ? h('p', null, 'Loading...') : det.subject_prices.map(p => {
+      const a = accFor(tutor._id, p.subject_id), left = a ? TP_left(a.expires_at, skew.current) : null, pend = pendFor(tutor._id, p.subject_id);
+      return h('div', { key: p.subject_id, style: TP_card },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
-          h('div', null, h('div', { style: { fontWeight: 700, fontSize: 15 } }, t.name), h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'K' + t.price_per_month + ' / month'), t.subjects && t.subjects.length > 0 && h('div', { style: { fontSize: 11, color: '#064d2c', marginTop: 2 } }, t.subjects.map(id => { const s = SUBJECTS.find(x => x.id === id); return s ? s.i + ' ' + s.n : ''; }).join(' · '))),
-          h('button', { onClick: () => pick(t), disabled: !!pend, style: { ...TP_btn(), opacity: pend ? .5 : 1 } }, left ? 'Renew' : pend ? 'Awaiting approval' : 'Subscribe')),
+          h('div', null, h('div', { style: { fontWeight: 700 } }, sName(p.subject_id)), h('div', { style: { fontSize: 12, color: '#6b7280' } }, 'K' + p.price + ' / month')),
+          h('button', { onClick: () => setSubj(p.subject_id), disabled: !!pend, style: { ...TP_btn(), opacity: pend ? .5 : 1 } }, pend ? 'Awaiting approval' : left ? 'Renew' : 'Subscribe')),
         left && h('div', { style: { marginTop: 8, fontSize: 12, color: '#065f46', fontWeight: 600 } }, '🔓 Unlocked · expires in ' + left + ' (' + TP_date(a.expires_at) + ')'),
         !left && a && h('div', { style: { marginTop: 8, fontSize: 12, color: '#991b1b', fontWeight: 600 } }, '🔒 Expired on ' + TP_date(a.expires_at) + '. Renew to unlock again.'));
-    }),
+    }));
+
+  const myAcc = access.filter(a => a.tutor);
+  return h('div', { style: wrap },
+    h('h2', { style: { color: '#064d2c', marginBottom: 4, fontSize: 19 } }, '💳 Subscribe by Subject'),
+    h('p', { style: { color: '#6b7280', fontSize: 13, marginBottom: 14 } }, 'Choose a tutor, then the subject. Pay that tutor monthly price for the subject. Only the subjects you pay for are unlocked.'),
+    myAcc.length > 0 && h('div', { style: TP_card },
+      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My subscriptions'),
+      myAcc.map(a => { const left = TP_left(a.expires_at, skew.current);
+        return h('div', { key: tid(a.tutor) + a.subject_id, style: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderTop: '1px solid #f3f4f6', fontSize: 13 } },
+          h('span', null, sName(a.subject_id) + ' · ' + a.tutor.name),
+          h('span', { style: { fontWeight: 700, color: left ? '#065f46' : '#991b1b', textAlign: 'right' } }, left ? '⏳ ' + left : '🔒 Expired')); })),
+    tutors.length === 0 && h('div', { style: { ...TP_card, textAlign: 'center', color: '#6b7280' } }, 'No tutors are accepting payments yet.'),
+    tutors.map(t => h('div', { key: t._id, style: TP_card },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
+        h('div', null, h('div', { style: { fontWeight: 700, fontSize: 15 } }, t.name), h('div', { style: { fontSize: 12, color: '#6b7280' } }, t.subject_prices.length + ' subject(s) · from K' + t.price_per_month + ' / month')),
+        h('button', { onClick: () => openTutor(t), style: TP_btn() }, 'Choose subject')),
+      h('div', { style: { fontSize: 11, color: '#064d2c', marginTop: 6 } }, t.subject_prices.slice(0, 6).map(p => sName(p.subject_id) + ' K' + p.price).join(' · ') + (t.subject_prices.length > 6 ? ' …' : '')))),
     pays.length > 0 && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payments'),
-      pays.map(p => h('div', { key: p._id, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #f3f4f6', fontSize: 13 } },
-        h('span', null, (p.tutor_id && p.tutor_id.name || 'Tutor') + ' · K' + p.amount + ' · ' + p.months + 'm',
-          (p.status === 'approved' && p.expires_at && pays.find(x => x.status === 'approved' && String(x.tutor_id && x.tutor_id._id || x.tutor_id) === String(p.tutor_id && p.tutor_id._id || p.tutor_id)) === p)
-            ? h('div', { style: { fontSize: 11, fontWeight: 700, color: TP_left(p.expires_at, skew.current) ? '#065f46' : '#991b1b' } },
-                TP_left(p.expires_at, skew.current) ? '⏳ ' + TP_left(p.expires_at, skew.current) + ' left' : '🔒 Expired ' + TP_date(p.expires_at))
-            : null),
-        TP_badge(p.status))))
-  );
+      pays.map(p => {
+        const latest = p.status === 'approved' && p.expires_at && pays.find(x => x.status === 'approved' && tid(x.tutor_id) === tid(p.tutor_id) && Number(x.subject_id) === Number(p.subject_id)) === p;
+        const left = latest ? TP_left(p.expires_at, skew.current) : null;
+        return h('div', { key: p._id, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #f3f4f6', fontSize: 13 } },
+          h('span', null, (p.tutor_id && p.tutor_id.name || 'Tutor') + ' · ' + sName(p.subject_id) + ' · K' + p.amount + ' · ' + p.months + 'm',
+            latest && h('div', { style: { fontSize: 11, fontWeight: 700, color: left ? '#065f46' : '#991b1b' } }, left ? '⏳ ' + left + ' left' : '🔒 Expired ' + TP_date(p.expires_at))),
+          TP_badge(p.status)); })));
 }
 
-// ---------- TUTOR: payment details, approvals, K20 fee ----------
 function TutorPayPanel(props) {
   const mode = (props && props.mode) || 'pay';
   const { socket } = useAuth();
@@ -6877,8 +6907,7 @@ function TutorPayPanel(props) {
   const [fee, setFee] = useState(null);
   const [inc, setInc] = useState([]);
   const [studs, setStuds] = useState([]);
-  const [price, setPrice] = useState('');
-  const [mySubj, setMySubj] = useState([]);
+  const [prices, setPrices] = useState({});
   const [rows, setRows] = useState([{ ...blank(), method: 'MTN Mobile Money' }, { ...blank(), method: 'Airtel Money' }, blank()]);
   const [fm, setFm] = useState('');
   const [fmo, setFmo] = useState(1);
@@ -6887,13 +6916,19 @@ function TutorPayPanel(props) {
   const [busy, setBusy] = useState(false);
   const [, setTick] = useState(0);
   const skew = useRef(0);
+  const sName = (id) => { const s = SUBJECTS.find(x => x.id === Number(id)); return s ? s.i + ' ' + s.n : 'Subject ' + id; };
   const load = () => {
     apiFetch('GET', '/tutor-pay/fee/status', null, tok()).then(d => { if (d) { setFee(d); skew.current = new Date(d.server_time).getTime() - Date.now(); if (d.pay_to && d.pay_to[0]) setFm(x => x || d.pay_to[0].method); } }).catch(() => {});
-    apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(d => { if (d) { setPrice(d.price_per_month ? String(d.price_per_month) : ''); setMySubj(d.subjects || []); const r = (d.methods || []).map(m => ({ method: m.method, account_name: m.account_name, account_number: m.account_number, instructions: m.instructions || '' })); while (r.length < 3) r.push(blank()); setRows(r); } }).catch(() => {});
+    apiFetch('GET', '/tutor-pay/my-details', null, tok()).then(d => {
+      if (!d) return;
+      const o = {}; (d.subject_prices || []).forEach(p => { o[p.subject_id] = String(p.price); }); setPrices(o);
+      const r = (d.methods || []).map(m => ({ method: m.method, account_name: m.account_name, account_number: m.account_number, instructions: m.instructions || '' }));
+      if (r.length) { while (r.length < 3) r.push(blank()); setRows(r); }
+    }).catch(() => {});
     apiFetch('GET', '/tutor-pay/incoming', null, tok()).then(d => setInc(Array.isArray(d) ? d : [])).catch(() => {});
     apiFetch('GET', '/tutor-pay/my-students', null, tok()).then(d => setStuds(Array.isArray(d) ? d : [])).catch(() => {});
   };
-  useEffect(() => { load(); const t = setInterval(() => setTick(x => x + 1), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { load(); const t = setInterval(() => setTick(x => x + 1), 1000); const l = setInterval(load, 30000); return () => { clearInterval(t); clearInterval(l); }; }, []);
   useEffect(() => {
     if (!socket) return;
     const f = () => load();
@@ -6903,11 +6938,13 @@ function TutorPayPanel(props) {
   }, [socket]);
 
   const setRow = (i, k, v) => setRows(p => p.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  const toggleSubj = (id) => setPrices(p => { const n = { ...p }; if (n[id] !== undefined) delete n[id]; else n[id] = ''; return n; });
   const saveDetails = async () => {
-    if (!mySubj.length) { add({ title: 'Choose the subjects you teach', icon: '⚠️', type: 'w' }); return; }
+    const subject_prices = Object.entries(prices).filter(([, v]) => Number(v) > 0).map(([id, v]) => ({ subject_id: Number(id), price: Number(v) }));
+    if (!subject_prices.length) { add({ title: 'Tick a subject and set its monthly price', icon: '⚠️', type: 'w' }); return; }
     try {
-      await apiFetch('PUT', '/tutor-pay/my-details', { price_per_month: Number(price), subjects: mySubj, methods: rows.filter(r => r.method && r.account_number) }, tok());
-      add({ title: '✅ Payment details saved', icon: '💳', type: 'i' }); load();
+      await apiFetch('PUT', '/tutor-pay/my-details', { subject_prices, methods: rows.filter(r => r.method && r.account_number) }, tok());
+      add({ title: '✅ Prices and payment details saved', icon: '💳', type: 'i' }); load();
     } catch (e) { add({ title: 'Error', body: e.message, icon: '❌', type: 'd' }); }
   };
   const review = async (id, act) => {
@@ -6928,10 +6965,10 @@ function TutorPayPanel(props) {
   };
 
   const left = fee && fee.expires_at ? TP_left(fee.expires_at, skew.current) : null;
+  const sameStud = (a, b) => String(a.student_id && a.student_id._id) === String(b.student_id && b.student_id._id);
   return h('div', { style: { maxWidth: 680, paddingBottom: 28 } },
     h('h2', { style: { color: '#064d2c', fontSize: 19, marginBottom: 10 } }, mode === 'fee' ? '🎫 Membership Fee' : '💰 Payments'),
     mode !== 'fee' && fee && !left && h('div', { style: { background: '#fef2f2', color: '#991b1b', borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 10 } }, '🔒 Your K20 membership is unpaid. Open the Membership tab to pay.'),
-    // K20 fee
     mode === 'fee' && h('div', { style: { ...TP_card, border: '2px solid ' + (left ? '#10b981' : '#ef4444') } },
       h('div', { style: { fontWeight: 700, marginBottom: 4 } }, 'Monthly membership fee: K20'),
       left ? h('div', { style: { color: '#065f46', fontSize: 13, fontWeight: 600 } }, '✅ Paid · expires in ' + left)
@@ -6945,39 +6982,44 @@ function TutorPayPanel(props) {
         h('input', { value: ft, onChange: e => setFt(e.target.value), placeholder: 'Reference / Transaction ID', style: TP_inp }),
         h('input', { type: 'file', accept: 'image/*', onChange: e => setFr(e.target.files[0] || null), style: { ...TP_inp, padding: 6 } }),
         h('button', { onClick: payFee, disabled: busy || (fee && fee.pending), style: { ...TP_btn(), opacity: busy || (fee && fee.pending) ? .5 : 1 } }, busy ? 'Submitting...' : 'Pay K' + 20 * fmo))),
-    // incoming payments
     mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Student payments'),
       inc.length === 0 && h('div', { style: { color: '#6b7280', fontSize: 13 } }, 'No payments yet.'),
-      inc.map(p => h('div', { key: p._id, style: { borderTop: '1px solid #f3f4f6', padding: '8px 0', fontSize: 13 } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('b', null, p.student_id ? p.student_id.name : 'Student'), TP_badge(p.status)),
-        h('div', { style: { color: '#6b7280' } }, 'K' + p.amount + ' · ' + p.months + ' month(s) · ' + p.method + ' · Ref: ' + p.transaction_id),
-        (p.status === 'approved' && p.expires_at && inc.find(x => x.status === 'approved' && String(x.student_id && x.student_id._id) === String(p.student_id && p.student_id._id)) === p)
-          ? h('div', { style: { fontSize: 12, fontWeight: 700, color: TP_left(p.expires_at, skew.current) ? '#065f46' : '#991b1b' } },
-              TP_left(p.expires_at, skew.current) ? '⏳ Access ends in ' + TP_left(p.expires_at, skew.current) : '🔒 Student access expired ' + TP_date(p.expires_at))
-          : null,
-        p.receipt_url && h('a', { href: p.receipt_url, target: '_blank', rel: 'noreferrer', style: { fontSize: 12 } }, 'View screenshot'),
-        p.status === 'pending' && h('div', { style: { display: 'flex', gap: 8, marginTop: 6 } },
-          h('button', { onClick: () => review(p._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
-          h('button', { onClick: () => review(p._id, 'reject'), style: TP_btn('#dc2626') }, 'Reject'))))),
-    // active students
+      inc.map(p => {
+        const latest = p.status === 'approved' && p.expires_at && inc.find(x => x.status === 'approved' && sameStud(x, p) && Number(x.subject_id) === Number(p.subject_id)) === p;
+        const lf = latest ? TP_left(p.expires_at, skew.current) : null;
+        return h('div', { key: p._id, style: { borderTop: '1px solid #f3f4f6', padding: '8px 0', fontSize: 13 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('b', null, (p.student_id ? p.student_id.name : 'Student') + ' · ' + sName(p.subject_id)), TP_badge(p.status)),
+          h('div', { style: { color: '#6b7280' } }, 'K' + p.amount + ' · ' + p.months + ' month(s) · ' + p.method + ' · Ref: ' + p.transaction_id),
+          latest && h('div', { style: { fontSize: 12, fontWeight: 700, color: lf ? '#065f46' : '#991b1b' } }, lf ? '⏳ Access ends in ' + lf : '🔒 Student access expired ' + TP_date(p.expires_at)),
+          p.receipt_url && h('a', { href: p.receipt_url, target: '_blank', rel: 'noreferrer', style: { fontSize: 12 } }, 'View screenshot'),
+          p.status === 'pending' && h('div', { style: { display: 'flex', gap: 8, marginTop: 6 } },
+            h('button', { onClick: () => review(p._id, 'approve'), style: TP_btn('#059669') }, 'Approve'),
+            h('button', { onClick: () => review(p._id, 'reject'), style: TP_btn('#dc2626') }, 'Reject'))); })),
     mode !== 'fee' && h('div', { style: TP_card },
       h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'Active students (' + studs.length + ')'),
-      studs.map(s => h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } }, (s.student_id ? s.student_id.name : 'Student') + ' · ' + (TP_left(s.expires_at, skew.current) ? '⏳ ' + TP_left(s.expires_at, skew.current) + ' left' : '🔒 expired') + ' (until ' + TP_date(s.expires_at) + ')'))),
-    // payment details
+      studs.map(s => { const lf = TP_left(s.expires_at, skew.current);
+        return h('div', { key: s._id, style: { fontSize: 13, padding: '4px 0', borderTop: '1px solid #f3f4f6' } },
+          (s.student_id ? s.student_id.name : 'Student') + ' · ' + sName(s.subject_id) + ' · ' + (lf ? '⏳ ' + lf + ' left' : '🔒 expired') + ' (until ' + TP_date(s.expires_at) + ')'); })),
     mode !== 'fee' && h('div', { style: TP_card },
-      h('div', { style: { fontWeight: 700, marginBottom: 8 } }, 'My payment details (students pay you here)'),
-      h('input', { type: 'number', value: price, onChange: e => setPrice(e.target.value), placeholder: 'Price per month (K)', style: TP_inp }),
-      h('div', { style: { marginBottom: 8 } }, h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 4 } }, 'Subjects you teach'), h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }, SUBJECTS.map(s => h('button', { key: s.id, type: 'button', onClick: () => setMySubj(p => p.includes(s.id) ? p.filter(x => x !== s.id) : [...p, s.id]), style: { padding: '5px 10px', borderRadius: 20, border: '1px solid #064d2c', cursor: 'pointer', fontSize: 12, background: mySubj.includes(s.id) ? '#064d2c' : '#fff', color: mySubj.includes(s.id) ? '#fff' : '#064d2c' } }, s.i + ' ' + s.n)))),
+      h('div', { style: { fontWeight: 700, marginBottom: 4 } }, 'Subjects I teach and my monthly price'),
+      h('div', { style: { fontSize: 12, color: '#6b7280', marginBottom: 8 } }, 'Tap a subject to offer it, then set what a student pays per month for that subject.'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 } }, SUBJECTS.map(s => h('button', { key: s.id, type: 'button', onClick: () => toggleSubj(s.id),
+        style: { padding: '5px 10px', borderRadius: 20, border: '1px solid #064d2c', cursor: 'pointer', fontSize: 12, background: prices[s.id] !== undefined ? '#064d2c' : '#fff', color: prices[s.id] !== undefined ? '#fff' : '#064d2c' } }, s.i + ' ' + s.n))),
+      SUBJECTS.filter(s => prices[s.id] !== undefined).map(s => h('div', { key: s.id, style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 } },
+        h('div', { style: { flex: 1, fontSize: 13, fontWeight: 600 } }, s.i + ' ' + s.n),
+        h('span', { style: { fontSize: 13 } }, 'K'),
+        h('input', { type: 'number', min: 1, value: prices[s.id], onChange: e => setPrices(p => ({ ...p, [s.id]: e.target.value })), placeholder: 'per month', style: { ...TP_inp, width: 110, marginBottom: 0 } }))),
+      h('div', { style: { fontWeight: 700, margin: '12px 0 8px' } }, 'Where students pay you'),
       rows.map((r, i) => h('div', { key: i, style: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 8, marginBottom: 8 } },
         h('input', { value: r.method, onChange: e => setRow(i, 'method', e.target.value), placeholder: 'Method (MTN Mobile Money, Airtel Money, Bank...)', style: TP_inp }),
         h('input', { value: r.account_name, onChange: e => setRow(i, 'account_name', e.target.value), placeholder: 'Account name', style: TP_inp }),
         h('input', { value: r.account_number, onChange: e => setRow(i, 'account_number', e.target.value), placeholder: 'Number / account', style: TP_inp }),
         h('input', { value: r.instructions, onChange: e => setRow(i, 'instructions', e.target.value), placeholder: 'Instructions (optional)', style: TP_inp }))),
-      h('button', { onClick: saveDetails, style: TP_btn() }, 'Save payment details')));
+      h('button', { onClick: saveDetails, style: TP_btn() }, 'Save prices and payment details')));
 }
+/* ===== END PER-SUBJECT SUBSCRIPTIONS ===== */
 
-// ---------- ADMIN: approve tutor K20 fees ----------
 function AdminTutorFees() {
   const { socket } = useAuth();
   const { add } = useToast();
@@ -7717,7 +7759,7 @@ function MaterialsPage({
         cursor: 'pointer',
         textDecoration: 'underline'
       }
-    , onClick: () => window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: m.tutor_id } })), role: 'button' }, "\uD83D\uDD12 Subscribe")))));
+    , onClick: () => window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: m.tutor_id, subject_id: m.subject_id } })), role: 'button' }, "\uD83D\uDD12 Subscribe")))));
   })));
 }
 function AssignmentsPage({
@@ -8540,7 +8582,7 @@ function EnhancedLiveClassesPage({ subs, pays }) {
     const c = classes.find(x => String(x._id) === id);
     if (!c) return;
     window.__classDeepDone = true;
-    if (c.locked) window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: c.tutor_id } }));
+    if (c.locked) window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: c.tutor_id, subject_id: c.subject_id } }));
     else if (c.delivery === 'audio') setActiveClass(c);
   }, [classes]);
   const autoRef = useRef();
@@ -8595,7 +8637,7 @@ function EnhancedLiveClassesPage({ subs, pays }) {
       const canJoin = isLive && !cls.locked;
       const canAccess = !cls.locked;
       const isOwner = profile?.role === 'admin' || String(cls.tutor_id) === String(profile?._id);
-      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? (cls.delivery === 'audio' ? setActiveClass(cls) : setLobbyClass(cls)) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
+      return React.createElement('div', { key: cls._id, onClick: () => canAccess ? (cls.delivery === 'audio' ? setActiveClass(cls) : setLobbyClass(cls)) : window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: cls.tutor_id, subject_id: cls.subject_id } })), style: { margin: '10px 12px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', overflow: 'hidden', cursor: 'pointer', border: isLive ? '2px solid ' + C.d : '1px solid #e5e7eb' } },
         React.createElement('div', { style: { padding: '14px 16px' } },
           React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 } },
             React.createElement('div', { style: { width: 42, height: 42, borderRadius: 12, background: ch ? 'linear-gradient(135deg,' + LC.gold + ',#f0b429)' : 'linear-gradient(135deg,' + C.gd + ',' + C.g + ')', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#000', flexShrink: 0 } }, ch ? ch.avatar : 'LIVE'),
@@ -8699,7 +8741,7 @@ function StudentApp() {
   } = useAuth();
   const [an, setAn] = useState('home');
   useEffect(() => {
-    const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; setAn(e.detail && e.detail.page ? e.detail.page : 'pay'); };
+    const g = e => { window.__subTutor = e.detail && e.detail.tutor_id; window.__subSubject = e.detail && e.detail.subject_id; setAn(e.detail && e.detail.page ? e.detail.page : 'pay'); };
     if (new URLSearchParams(window.location.search).get('class')) setAn('live');
     window.addEventListener('goto-subscribe', g);
     return () => window.removeEventListener('goto-subscribe', g);

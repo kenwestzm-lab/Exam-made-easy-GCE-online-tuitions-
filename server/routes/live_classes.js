@@ -3,7 +3,7 @@ const router = express.Router();
 const { LiveClass } = require('../models');
 const { auth, tutorOrAdmin } = require('../middleware/auth');
 const { requireTutorFee } = require('../middleware/tutorFee');
-const { studentHasAccess, activeTutorIds, tutorFeeExpiry } = require('../services/access');
+const { studentHasAccess, activeKeys, accessKey, tutorFeeExpiry } = require('../services/access');
 const { upload, uploadToCloudinary } = require('../config/cloudinary');
 const mongoose = require('mongoose');
 
@@ -15,7 +15,7 @@ const isOwner = (u, c) => String(c.tutor_id) === String(u._id);
 async function canView(user, cls) {
   if (user.role === 'admin') return true;
   if (user.role === 'tutor') return !!user.approved;
-  return !!cls.tutor_id && (await studentHasAccess(user._id, cls.tutor_id));
+  return !!cls.tutor_id && (await studentHasAccess(user._id, cls.tutor_id, cls.subject_id));
 }
 
 router.get('/live-classes', auth, async (req, res) => {
@@ -23,8 +23,8 @@ router.get('/live-classes', auth, async (req, res) => {
     const list = await LiveClass.find().sort('-createdAt');
     if (req.user.role === 'admin') return res.json(list);
     if (req.user.role === 'tutor') return res.json(list.map(c => req.user.approved ? { ...c.toObject(), locked: false, is_owner: isOwner(req.user, c) } : lockView(c)));
-    const ok = new Set(await activeTutorIds(req.user._id));
-    res.json(list.map(c => (c.tutor_id && ok.has(String(c.tutor_id))) ? { ...c.toObject(), locked: false } : lockView(c)));
+    const ok = new Set(await activeKeys(req.user._id));
+    res.json(list.map(c => (c.tutor_id && ok.has(accessKey(c.tutor_id, c.subject_id))) ? { ...c.toObject(), locked: false } : lockView(c)));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -3,7 +3,7 @@ const router = express.Router();
 const { Material } = require('../models');
 const { auth, tutorOrAdmin } = require('../middleware/auth');
 const { requireTutorFee } = require('../middleware/tutorFee');
-const { activeTutorIds, studentHasAccess, tutorFeeExpiry } = require('../services/access');
+const { activeKeys, accessKey, studentHasAccess, tutorFeeExpiry } = require('../services/access');
 const { upload, uploadToCloudinary, getViewUrl, getDownloadUrl } = require('../config/cloudinary');
 
 const withUrls = (m) => {
@@ -15,7 +15,7 @@ const withUrls = (m) => {
 async function canAccess(user, m) {
   if (user.role === 'admin') return true;
   if (user.role === 'tutor') return !!(await tutorFeeExpiry(user._id));
-  return !!m.tutor_id && (await studentHasAccess(user._id, m.tutor_id));
+  return !!m.tutor_id && (await studentHasAccess(user._id, m.tutor_id, m.subject_id));
 }
 
 router.get('/', auth, async (req, res) => {
@@ -27,9 +27,9 @@ router.get('/', auth, async (req, res) => {
         return res.status(402).json({ error: 'Your K20 monthly fee is unpaid. Pay it to access materials.', code: 'TUTOR_FEE_REQUIRED' });
       return res.json(mats.map(withUrls));
     }
-    const ok = new Set(await activeTutorIds(req.user._id));
+    const ok = new Set(await activeKeys(req.user._id));
     res.json(mats.map(m => {
-      if (m.tutor_id && ok.has(String(m.tutor_id))) return { ...withUrls(m), locked: false };
+      if (m.tutor_id && ok.has(accessKey(m.tutor_id, m.subject_id))) return { ...withUrls(m), locked: false };
       const o = m.toObject(); delete o.file_url;
       return { ...o, locked: true };
     }));

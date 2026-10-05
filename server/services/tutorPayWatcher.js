@@ -1,24 +1,30 @@
 const { TutorAccess, TutorFee } = require('../models/tutorpay');
 const { tutorFeeExpiry } = require('./access');
 
-// Pushes live "expired" events. Security does NOT depend on this: every request checks the clock itself.
+// Pushes live "expired" events and removes students from rooms. Security does NOT depend on this:
+// every request checks the clock itself.
 module.exports = (io) => {
+  // One-time migration: access used to be unique per tutor, it is now unique per tutor + subject
+  (async () => {
+    try { await TutorAccess.collection.dropIndex('student_id_1_tutor_id_1'); console.log('Dropped old access index'); } catch (e) {}
+    try { await TutorAccess.createIndexes(); } catch (e) { console.error('access index error:', e.message); }
+  })();
+
   const run = async () => {
     try {
       const now = new Date();
       const acc = await TutorAccess.find({ expires_at: { $lte: now }, expiry_notified: false });
       for (const a of acc) {
         const r = await TutorAccess.updateOne({ _id: a._id, expiry_notified: false }, { expiry_notified: true });
-        if (r.modifiedCount) {
-          io.to('user_' + a.student_id).emit('access_expired', { tutor_id: a.tutor_id });
-          try {
-            const { LiveClass } = require('../models');
-            const ids = await LiveClass.find({ tutor_id: a.tutor_id }).select('_id');
-            const op = io.in('user_' + a.student_id);
-            if (ids.length && typeof op.socketsLeave === 'function') op.socketsLeave(ids.map(c => 'class_' + c._id));
-            require('./audioRoom').evictUser(io, String(a.student_id), ids.map(c => String(c._id)));
-          } catch (e) {}
-        }
+        if (!r.modifiedCount) continue;
+        io.to('user_' + a.student_id).emit('access_expired', { tutor_id: a.tutor_id, subject_id: a.subject_id });
+        try {
+          const { LiveClass } = require('../models');
+          const ids = await LiveClass.find({ tutor_id: a.tutor_id, subject_id: a.subject_id }).select('_id');
+          const op = io.in('user_' + a.student_id);
+          if (ids.length && typeof op.socketsLeave === 'function') op.socketsLeave(ids.map(c => 'class_' + c._id));
+          require('./audioRoom').evictUser(io, String(a.student_id), ids.map(c => String(c._id)));
+        } catch (e) {}
       }
       const fees = await TutorFee.find({ status: 'approved', expires_at: { $lte: now }, expiry_notified: false });
       for (const f of fees) {

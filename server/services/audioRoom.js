@@ -58,7 +58,7 @@ function register(io, socket) {
       let ok = owner;
       if (!ok) {
         if (me.role === 'tutor') ok = !!me.approved;
-        else if (me.role === 'student') ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id);
+        else if (me.role === 'student') ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id, cls.subject_id);
       }
       if (!ok) return reply({ error: 'Locked. Subscribe to this tutor to join.', code: 'LOCKED' });
       if (owner && me.role === 'tutor' && !(await tutorFeeExpiry(me._id)))

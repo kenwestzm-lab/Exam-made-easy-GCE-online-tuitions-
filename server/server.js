@@ -122,13 +122,13 @@ io.on('connection', (socket) => {
         if (!mongoose.isValidObjectId(classId)) return;
         const { LiveClass } = require('./models');
         const { studentHasAccess } = require('./services/access');
-        const cls = await LiveClass.findById(classId).select('tutor_id');
+        const cls = await LiveClass.findById(classId).select('tutor_id subject_id');
         if (!cls) return;
         const me = socket.data.user;
         let ok = false;
         if (me.role === 'admin') ok = true;
         else if (me.role === 'tutor') ok = !!me.approved;
-        else ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id);
+        else ok = !!cls.tutor_id && await studentHasAccess(me._id, cls.tutor_id, cls.subject_id);
         if (!ok) { socket.emit('class_join_denied', { classId }); return; }
         socket.data.controls = socket.data.controls || new Set();
         if (me.role === 'admin' || (me.role === 'tutor' && String(cls.tutor_id) === me._id)) socket.data.controls.add(String(classId));

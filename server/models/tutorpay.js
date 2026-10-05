@@ -7,12 +7,13 @@ const PayInfo = new Schema({
   tutor_id: { ...ref, unique: true },
   price_per_month: { type: Number, required: true, min: 1 },
   subjects: [Number],
+  subject_prices: [{ _id: false, subject_id: Number, price: Number }],
   methods: [{ method: String, account_name: String, account_number: String, instructions: String }],
   active: { type: Boolean, default: true },
 }, { timestamps: true });
 
 const TutorPaymentS = new Schema({
-  student_id: ref, tutor_id: ref,
+  student_id: ref, tutor_id: ref, subject_id: Number,
   amount: Number, months: { type: Number, default: 1 }, method: String,
   transaction_id: { type: String, required: true },
   receipt_url: String,
@@ -23,11 +24,12 @@ TutorPaymentS.index({ tutor_id: 1, transaction_id: 1 }, { unique: true });
 
 const TutorAccessS = new Schema({
   student_id: ref, tutor_id: ref,
+  subject_id: { type: Number, required: true },
   expires_at: { type: Date, required: true },
   expiry_notified: { type: Boolean, default: false },
   last_payment_id: Schema.Types.ObjectId,
 }, { timestamps: true });
-TutorAccessS.index({ student_id: 1, tutor_id: 1 }, { unique: true });
+TutorAccessS.index({ student_id: 1, tutor_id: 1, subject_id: 1 }, { unique: true });
 
 const TutorFeeS = new Schema({
   tutor_id: ref,

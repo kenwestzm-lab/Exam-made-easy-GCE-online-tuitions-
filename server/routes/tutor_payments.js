@@ -22,16 +22,28 @@ const tutorOnly = (req, res, next) =>
   (req.user.role === 'tutor' && req.user.approved) ? next() : res.status(403).json({ error: 'Approved tutors only' });
 const months = (v) => Math.min(Math.max(parseInt(v) || 1, 1), 12);
 
-// ───────── TUTOR: payment details ─────────
+const pricesOf = (info) => (info.subject_prices && info.subject_prices.length)
+  ? info.subject_prices.map(p => ({ subject_id: p.subject_id, price: p.price }))
+  : (info.subjects || []).map(id => ({ subject_id: id, price: info.price_per_month }));
+
 router.get('/my-details', auth, tutorOnly, async (req, res) => {
-  try { res.json(await PayInfo.findOne({ tutor_id: req.user._id }) || { subjects: req.user.subjects || [] }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const info = await PayInfo.findOne({ tutor_id: req.user._id });
+    if (!info) return res.json({ subjects: req.user.subjects || [], subject_prices: [], methods: [] });
+    res.json({ ...info.toObject(), subject_prices: pricesOf(info) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/my-details', auth, tutorOnly, async (req, res) => {
   try {
-    const price = Number(req.body.price_per_month);
-    if (!(price > 0)) return res.status(400).json({ error: 'Enter a valid monthly price' });
+    const raw = Array.isArray(req.body.subject_prices) ? req.body.subject_prices.slice(0, 40) : [];
+    const seen = new Set(); const sp = [];
+    for (const x of raw) {
+      const id = Number(x.subject_id), price = Number(x.price);
+      if (!Number.isInteger(id) || id < 1 || id > 200 || !(price > 0) || price > 100000 || seen.has(id)) continue;
+      seen.add(id); sp.push({ subject_id: id, price: Math.round(price * 100) / 100 });
+    }
+    if (!sp.length) return res.status(400).json({ error: 'Tick at least one subject and set its monthly price' });
     const list = Array.isArray(req.body.methods) ? req.body.methods.slice(0, 6) : [];
     const methods = list.map(m => ({
       method: str(m.method, 40), account_name: str(m.account_name, 80),
@@ -40,24 +52,23 @@ router.put('/my-details', auth, tutorOnly, async (req, res) => {
     if (!methods.length) return res.status(400).json({ error: 'Add at least one payment method with name and number' });
     const info = await PayInfo.findOneAndUpdate(
       { tutor_id: req.user._id },
-      { tutor_id: req.user._id, price_per_month: price, methods, active: req.body.active !== false,
-        ...(Array.isArray(req.body.subjects) ? { subjects: req.body.subjects.map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 20) } : {}) },
+      { tutor_id: req.user._id, price_per_month: Math.min(...sp.map(p => p.price)), subject_prices: sp, subjects: sp.map(p => p.subject_id), methods, active: req.body.active !== false },
       { upsert: true, new: true, runValidators: true }
     );
-    if (Array.isArray(info.subjects)) await User.updateOne({ _id: req.user._id }, { subjects: info.subjects });
-    res.json(info);
+    await User.updateOne({ _id: req.user._id }, { subjects: info.subjects });
+    res.json({ ...info.toObject(), subject_prices: pricesOf(info) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ───────── STUDENT: choose tutor, see details, submit ─────────
 router.get('/tutors', auth, async (req, res) => {
   try {
     const infos = await PayInfo.find({ active: true });
-    const tutors = await User.find({ _id: { $in: infos.map(i => i.tutor_id) }, role: 'tutor', approved: true })
-      .select('name avatarUrl avatar bio');
-    const price = new Map(infos.map(i => [String(i.tutor_id), i.price_per_month]));
-    const subj = new Map(infos.map(i => [String(i.tutor_id), i.subjects || []]));
-    res.json(tutors.map(t => ({ _id: t._id, name: t.name, avatarUrl: t.avatarUrl, avatar: t.avatar, bio: t.bio, price_per_month: price.get(String(t._id)), subjects: subj.get(String(t._id)) || [] })));
+    const tutors = await User.find({ _id: { $in: infos.map(i => i.tutor_id) }, role: 'tutor', approved: true }).select('name avatarUrl avatar bio');
+    const byId = new Map(infos.map(i => [String(i.tutor_id), i]));
+    res.json(tutors.map(t => {
+      const info = byId.get(String(t._id)); const sp = pricesOf(info);
+      return { _id: t._id, name: t.name, avatarUrl: t.avatarUrl, avatar: t.avatar, bio: t.bio, subject_prices: sp, price_per_month: sp.length ? Math.min(...sp.map(p => p.price)) : 0 };
+    }).filter(t => t.subject_prices.length));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -67,34 +78,38 @@ router.get('/tutors/:id/details', auth, async (req, res) => {
     const tutor = await User.findOne({ _id: req.params.id, role: 'tutor', approved: true }).select('name');
     const info = await PayInfo.findOne({ tutor_id: req.params.id, active: true });
     if (!tutor || !info) return res.status(404).json({ error: 'This tutor has not set up payment details yet' });
-    res.json({ tutor: { _id: tutor._id, name: tutor.name }, price_per_month: info.price_per_month, subjects: info.subjects || [], methods: info.methods });
+    res.json({ tutor: { _id: tutor._id, name: tutor.name }, subject_prices: pricesOf(info), methods: info.methods });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/submit', auth, studentOnly, upload.single('receipt'), async (req, res) => {
   try {
     const { tutor_id, method } = req.body;
+    const subject_id = Number(req.body.subject_id);
     const m = months(req.body.months);
     const txn = str(req.body.transaction_id, 60).toUpperCase();
-    if (!isId(tutor_id) || !txn || !method) return res.status(400).json({ error: 'Tutor, payment method and reference number are required' });
+    if (!isId(tutor_id) || !Number.isInteger(subject_id) || !txn || !method)
+      return res.status(400).json({ error: 'Tutor, subject, payment method and reference number are required' });
     const tutor = await User.findOne({ _id: tutor_id, role: 'tutor', approved: true });
     const info = await PayInfo.findOne({ tutor_id, active: true });
     if (!tutor || !info) return res.status(404).json({ error: 'This tutor is not accepting payments yet' });
+    const entry = pricesOf(info).find(p => Number(p.subject_id) === subject_id);
+    if (!entry) return res.status(400).json({ error: 'This tutor does not offer that subject' });
     if (!info.methods.some(x => x.method === method)) return res.status(400).json({ error: 'Invalid payment method for this tutor' });
-    const expected = info.price_per_month * m;
+    const expected = entry.price * m;
     const amount = Number(req.body.amount);
     if (!(amount >= expected)) return res.status(400).json({ error: `Amount must be at least K${expected} for ${m} month(s)` });
-    if (await TutorPayment.exists({ student_id: req.user._id, tutor_id, status: 'pending' }))
-      return res.status(409).json({ error: 'You already have a pending payment for this tutor. Wait for approval.' });
+    if (await TutorPayment.exists({ student_id: req.user._id, tutor_id, subject_id, status: 'pending' }))
+      return res.status(409).json({ error: 'You already have a pending payment for this subject. Wait for approval.' });
     const receipt_url = await uploadReceipt(req.file);
     let p;
     try {
-      p = await TutorPayment.create({ student_id: req.user._id, tutor_id, amount, months: m, method, transaction_id: txn, receipt_url });
+      p = await TutorPayment.create({ student_id: req.user._id, tutor_id, subject_id, amount, months: m, method, transaction_id: txn, receipt_url });
     } catch (e) {
       if (e.code === 11000) return res.status(409).json({ error: 'This reference number was already submitted' });
       throw e;
     }
-    req.app.get('io')?.to('user_' + tutor_id).emit('new_tutor_payment', { _id: p._id, student: req.user.name, amount, months: m });
+    req.app.get('io')?.to('user_' + tutor_id).emit('new_tutor_payment', { _id: p._id, student: req.user.name, amount, months: m, subject_id });
     res.status(201).json(p);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -107,12 +122,11 @@ router.get('/mine', auth, studentOnly, async (req, res) => {
 router.get('/access/mine', auth, studentOnly, async (req, res) => {
   try {
     const now = new Date();
-    const list = await TutorAccess.find({ student_id: req.user._id }).populate('tutor_id', 'name');
-    res.json(list.map(a => ({ tutor: a.tutor_id, expires_at: a.expires_at, active: a.expires_at > now, server_time: now })));
+    const list = await TutorAccess.find({ student_id: req.user._id }).populate('tutor_id', 'name').sort('expires_at');
+    res.json(list.map(a => ({ tutor: a.tutor_id, subject_id: a.subject_id, expires_at: a.expires_at, active: a.expires_at > now, server_time: now })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ───────── TUTOR: review payments ─────────
 router.get('/incoming', auth, tutorOnly, async (req, res) => {
   try { res.json(await TutorPayment.find({ tutor_id: req.user._id }).populate('student_id', 'name email phone grade').sort('-createdAt')); }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -128,24 +142,20 @@ router.get('/my-students', auth, tutorOnly, async (req, res) => {
 router.put('/:id/approve', auth, tutorOnly, async (req, res) => {
   try {
     if (!isId(req.params.id)) return res.status(400).json({ error: 'Invalid payment' });
-    // Atomic: only a pending payment owned by THIS tutor can be approved, and only once
     const p = await TutorPayment.findOneAndUpdate(
-      { _id: req.params.id, tutor_id: req.user._id, status: 'pending' },
+      { _id: req.params.id, tutor_id: req.user._id, status: 'pending', subject_id: { $exists: true, $ne: null } },
       { status: 'approved', reviewed_at: new Date(), note: str(req.body.note, 300) },
       { new: true }
     );
     if (!p) return res.status(404).json({ error: 'Payment not found or already reviewed' });
     const now = new Date();
-    const cur = await TutorAccess.findOne({ student_id: p.student_id, tutor_id: p.tutor_id });
-    const start = cur && cur.expires_at > now ? cur.expires_at : now; // renewal adds to remaining time
+    const key = { student_id: p.student_id, tutor_id: p.tutor_id, subject_id: p.subject_id };
+    const cur = await TutorAccess.findOne(key);
+    const start = cur && cur.expires_at > now ? cur.expires_at : now;
     const exp = addMonths(start, p.months);
-    await TutorAccess.findOneAndUpdate(
-      { student_id: p.student_id, tutor_id: p.tutor_id },
-      { expires_at: exp, expiry_notified: false, last_payment_id: p._id },
-      { upsert: true, new: true }
-    );
+    await TutorAccess.findOneAndUpdate(key, { ...key, expires_at: exp, expiry_notified: false, last_payment_id: p._id }, { upsert: true, new: true });
     await TutorPayment.updateOne({ _id: p._id }, { expires_at: exp });
-    req.app.get('io')?.to('user_' + p.student_id).emit('access_granted', { tutor_id: p.tutor_id, tutor_name: req.user.name, expires_at: exp });
+    req.app.get('io')?.to('user_' + p.student_id).emit('access_granted', { tutor_id: p.tutor_id, subject_id: p.subject_id, tutor_name: req.user.name, expires_at: exp });
     res.json({ ...p.toObject(), expires_at: exp });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -159,20 +169,16 @@ router.put('/:id/reject', auth, tutorOnly, async (req, res) => {
       { new: true }
     );
     if (!p) return res.status(404).json({ error: 'Payment not found or already reviewed' });
-    req.app.get('io')?.to('user_' + p.student_id).emit('payment_rejected', { tutor_id: p.tutor_id, note: p.note });
+    req.app.get('io')?.to('user_' + p.student_id).emit('payment_rejected', { tutor_id: p.tutor_id, subject_id: p.subject_id, note: p.note });
     res.json(p);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ───────── TUTOR: K20 monthly fee (approved by ADMIN) ─────────
 router.get('/fee/status', auth, tutorOnly, async (req, res) => {
   try {
     const exp = await tutorFeeExpiry(req.user._id);
     const pending = await TutorFee.exists({ tutor_id: req.user._id, status: 'pending' });
-    res.json({
-      paid: !!exp, expires_at: exp, amount: FEE_AMOUNT, pending: !!pending, server_time: new Date(),
-      pay_to: PLATFORM_METHODS
-    });
+    res.json({ paid: !!exp, expires_at: exp, amount: FEE_AMOUNT, pending: !!pending, server_time: new Date(), pay_to: PLATFORM_METHODS });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -215,7 +221,7 @@ router.put('/fee/:id/approve', auth, adminOnly, async (req, res) => {
     const f = await TutorFee.findOneAndUpdate({ _id: req.params.id, status: 'pending' },
       { status: 'approved', reviewed_at: new Date(), admin_note: str(req.body.admin_note, 300) }, { new: true });
     if (!f) return res.status(404).json({ error: 'Fee not found or already reviewed' });
-    const exp = await grantFee(f.tutor_id, f.months); // computed from OTHER approved rows
+    const exp = await grantFee(f.tutor_id, f.months);
     await TutorFee.updateOne({ _id: f._id }, { expires_at: exp, expiry_notified: false });
     req.app.get('io')?.to('user_' + f.tutor_id).emit('tutor_fee_approved', { expires_at: exp });
     res.json({ ...f.toObject(), expires_at: exp });
@@ -233,7 +239,6 @@ router.put('/fee/:id/reject', auth, adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Admin can grant months directly (e.g. for your existing tutors on day one)
 router.post('/fee/grant', auth, adminOnly, async (req, res) => {
   try {
     const { tutor_id } = req.body;
