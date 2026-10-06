@@ -4593,12 +4593,12 @@ function LiveClassRoom({classData,onExit,profile,socket}){
         if(r.intro)intro=r.intro;
       }catch(e){}
       if(gone)return;
-      if(classData?.lesson_script){
+      if(classData?.lesson_script||classData?.lesson_topic){
         try{
-          const lb=await apiFetch('POST','/ai/build-lesson',{subject:subName(),topic:classData?.lesson_topic||subName(),notes:classData.lesson_script,character:ck},tok());
+          const lb=await apiFetch('POST','/ai/build-lesson',{subject:subName(),topic:classData?.lesson_topic||subName(),notes:classData.lesson_script||'',character:ck},tok());
           if(lb?.chunks?.length){chunks.current=lb.chunks.map(c=>({type:'teach',text:c.text||c.question||''})).filter(c=>c.text);setLessonReady(true);}
         }catch(e){
-          chunks.current=classData.lesson_script.split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:'teach',question:null}));
+          chunks.current=(classData.lesson_script||classData.lesson_topic||'').split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:'teach',question:null}));
           setLessonReady(true);
         }
       }

@@ -483,38 +483,55 @@ Respond with ONLY the introduction text, nothing else.`;
 });
 
 // ── POST /api/ai/build-lesson ─────────────────────────
+function toChunks(raw) {
+  let t = String(raw || '').replace(/```[a-z]*/gi, '').trim();
+  if (/"chunks"\s*:/.test(t)) {
+    try { const j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); if (Array.isArray(j.chunks)) t = j.chunks.map(c => c.text || '').join('\n\n'); } catch (e) {}
+  }
+  const out = [];
+  for (let p of t.split(/\n\s*\n/)) {
+    p = p.replace(/^[\s#*\->\d.)]+/, '').replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim();
+    if (p.length < 20) continue;
+    if (p.length <= 450) { out.push(p); continue; }
+    let cur = '';
+    for (const sent of p.split(/(?<=[.!?])\s+/)) {
+      if ((cur + ' ' + sent).length > 400 && cur) { out.push(cur.trim()); cur = sent; } else cur += ' ' + sent;
+    }
+    if (cur.trim().length >= 20) out.push(cur.trim());
+  }
+  return out.slice(0, 26).map(scrubAI);
+}
+
 router.post('/build-lesson', auth, async (req, res) => {
   try {
     const { subject, topic, notes, character } = req.body;
     const ch = AI[character] || AI.ken;
-    const prompt = `You are ${ch.name}, a professional GCE teacher in Zambia.
-Convert these lesson notes into a complete spoken lesson. The teacher talks the whole time. There are NO questions to the student.
+    const src = String(notes || '').trim().substring(0, 4000);
+    const tp = String(topic || '').trim();
+    if (!src && !tp) return res.status(400).json({ error: 'Add a lesson topic or notes' });
+    const prompt = `You are ${ch.name}, a warm, expert teacher at Peace Mindset Private School, Mufulira, Zambia, teaching Zambian students for ECZ and GCE exams.
+Deliver one complete spoken lesson on "${tp || subject}" (Subject: ${subject}).
+${src ? 'Teaching notes to build the lesson from. Cover EVERY point in them, explain each one clearly and add what a student needs to truly understand it:\n' + src : 'No notes were given. Use your knowledge of the Zambian ECZ syllabus to teach this topic properly.'}
 
-Notes: ${notes.substring(0, 1500)}
-Subject: ${subject}. Topic: ${topic}.
-
-Create 14-20 chunks. Rules:
-- "teach" chunks: clear explanation in simple English, 2-3 sentences max
-- Every chunk is type "teach". NEVER include a question to the student.
-- Include at least one fully worked example with numbers, one common exam mistake, and a short recap in the last chunk
-- Sound like a warm human teacher speaking, with natural openers like "Alright" and "Now watch this"
-- No strange words like "jamani" or informal slang
-- Never say AI, robot, virtual or computer. The teacher is simply a teacher.
-- Sound professional and encouraging
-- Use Zambian examples where relevant
-
-Respond with ONLY valid JSON:
-{"chunks":[
-  {"type":"teach","text":"explanation here"},
-  {"type":"teach","text":"more explanation"}
-]}`;
-    const raw = await callAI(prompt, 'Build lesson chunks', [], 3500);
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-    parsed.chunks = (parsed.chunks || []).map(c => ({ type: 'teach', text: c.text || c.question || '' })).filter(c => c.text);
-    parsed.chunks = (parsed.chunks || []).map(c => ({ type: 'teach', text: scrubAI(c.text || c.question || '') })).filter(c => c.text);
-    res.json(parsed);
-  } catch(e) {
+Write the lesson as plain speech, in paragraphs separated by one blank line.
+- Write 14 to 20 paragraphs. Each paragraph is 2 to 3 short spoken sentences.
+- Start with a friendly welcome and what we will learn today and why it matters.
+- Explain ideas step by step, from simple to harder, with Zambian examples (kwacha, markets, minibuses, nshima, farms, the Copperbelt).
+- Include at least one fully worked example with real numbers or a real situation, checking each step.
+- Include one mistake students often make in ECZ exams, and one exam tip.
+- End with a short recap and an encouraging closing.
+- Never ask the student a question. No headings, no bullet points, no numbering, no asterisks, no markdown.
+- Never mention AI, robots, computers or being virtual. You are simply the teacher.
+- Natural spoken openers are good: "Alright", "Now listen", "Watch this step".`;
+    let chunks = [];
+    for (let i = 0; i < 2 && chunks.length < 6; i++) {
+      const raw = await callAI(prompt, 'Teach the full lesson now.', [], 3500);
+      chunks = toChunks(raw);
+    }
+    if (chunks.length < 3) return res.status(502).json({ error: 'Could not build the lesson. Try again.' });
+    res.json({ chunks: chunks.map(text => ({ type: 'teach', text })) });
+  } catch (e) {
+    console.error('build-lesson error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
