@@ -1,4 +1,11 @@
 require('dotenv').config();
+
+const { initializeApp, cert } = require('firebase-admin/app');
+const firebaseServiceAccount = require('./private/firebase-admin.json');
+
+const firebaseAdmin = initializeApp({
+  credential: cert(firebaseServiceAccount)
+});
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -34,6 +41,7 @@ app.get('/api/health', (req, res) => {
 
 // ── Routes ────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/firebase-auth', require('./routes/firebase_auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/tutor-pay', require('./routes/tutor_payments'));

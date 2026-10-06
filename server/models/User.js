@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const s = new mongoose.Schema({
   name:{type:String,required:true},
   email:{type:String,required:true,unique:true,lowercase:true},
+  firebaseUid:{type:String,unique:true,sparse:true},
   password:{type:String,required:true},
   role:{type:String,enum:['student','tutor','admin'],default:'student'},
   avatar:{type:String,default:''},
