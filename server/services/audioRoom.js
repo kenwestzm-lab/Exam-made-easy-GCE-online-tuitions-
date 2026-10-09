@@ -8,7 +8,10 @@ const RN = (id) => 'audio_' + id;
 const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
 
 const iceServers = () => {
-  try { const v = JSON.parse(process.env.ICE_SERVERS || ''); if (Array.isArray(v) && v.length) return v; } catch (e) {}
+  if (process.env.ICE_SERVERS) {
+    try { const v = JSON.parse(process.env.ICE_SERVERS); if (Array.isArray(v) && v.length) return v; console.error('ICE_SERVERS is set but is not a non-empty JSON array - ignoring it'); }
+    catch (e) { console.error('ICE_SERVERS is set but is not valid JSON - ignoring it:', e.message); }
+  }
   return [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 };
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
@@ -77,7 +80,8 @@ function register(io, socket) {
   };
 
   socket.on('audio_join', async (payload, ack) => {
-    const reply = typeof ack === 'function' ? ack : () => {};
+    const ack0 = typeof ack === 'function' ? ack : () => {};
+    const reply = (o) => { if (o && o.error) console.log('audio_join denied:', me.role, '-', o.error); return ack0(o); };
     try {
       const classId = payload && payload.classId;
       if (!mongoose.isValidObjectId(classId)) return reply({ error: 'Invalid class' });
@@ -124,7 +128,10 @@ function register(io, socket) {
       }
       if (!socket.connected) { leave(); return; }
       const ice = await getIce();
-      reply({ ok: true, isHost: asHost, sid: socket.id, ice, hasTurn: ice.some(s => JSON.stringify(s.urls).includes('turn')), note: room.note, chat: room.chat.slice(-50), title: cls.title });
+      const hasTurn = ice.some(s => JSON.stringify(s.urls).includes('turn'));
+      const srv = (process.env.RENDER_SERVICE_NAME || 'local') + '@' + String(process.env.RENDER_GIT_COMMIT || '').slice(0, 7);
+      console.log('audio_join ok:', me.role, asHost ? 'HOST' : 'member', 'class', id, '| people', room.peers.size, '| host present', !!room.hostSid, '| relay servers', ice.length, '| turn', hasTurn);
+      reply({ ok: true, isHost: asHost, sid: socket.id, ice, hasTurn, srv, note: room.note, chat: room.chat.slice(-50), title: cls.title });
       pushRoster(io, room);
       if (asHost) socket.emit('audio_connect_to', { sids: [...room.peers.values()].filter(p => !p.isHost).map(p => p.sid) });
       else if (room.hostSid) io.to(room.hostSid).emit('audio_connect_to', { sids: [socket.id] });

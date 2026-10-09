@@ -25,7 +25,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid #12a05c!important;bord
 <script type="text/babel" data-presets="react,env">
 const {useState,useEffect,useRef,useCallback,createContext,useContext} = React;
 
-const BACKEND = "https://exam-made-easy-gce-online-tuitions.onrender.com";
+const BACKEND = "https://exam-made-easy-gce-online-tuitions-1.onrender.com";
 const apiFetch = async(method,path,body,token,fd)=>{
   const o={method,headers:{}};
   if(token)o.headers['Authorization']=`Bearer ${token}`;
