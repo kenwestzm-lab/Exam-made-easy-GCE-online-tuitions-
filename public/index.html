@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="preconnect" href="https://unpkg.com" crossorigin/>
-<link rel="preconnect" href="https://exam-made-easy-gce-online-tuitions-1-ges6.onrender.com" crossorigin/>
+<link rel="preconnect" href="https://exam-made-easy-gce-online-tuitions-1.onrender.com" crossorigin/>
 <link rel="dns-prefetch" href="https://api.groq.com"/>
 <link rel="dns-prefetch" href="https://res.cloudinary.com"/>
 <meta name="theme-color" content="#064d2c"/>
@@ -6564,7 +6564,7 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     r.joined = true;
     socket.emit('audio_join', { classId: cls._id }, async (res) => {
       if (!res || res.error) { cleanup(); setErr((res && res.error) || 'Could not join the class'); setPhase('error'); return; }
-      r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid; r.hasTurn = !!res.hasTurn;
+      r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid; r.hasTurn = !!res.hasTurn; r.srv = res.srv || '';
       setIsHost(res.isHost);
       if (!isRe) { setChat(res.chat || []); setNote(res.note || ''); setDraft(res.note || ''); }
       if (res.isHost) await getHostMic();
@@ -6617,7 +6617,7 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     const t = setInterval(() => {
       setElapsed(r.start ? (Date.now() + (r.skew || 0) - r.start) / 1000 : 0);
       { const st = {}; r.peers.forEach(e => { const k = e.pc.iceConnectionState; st[k] = (st[k] || 0) + 1; });
-        const d = (r.hasTurn ? 'TURN: on' : 'TURN: OFF') + ' · links: ' + (Object.keys(st).length ? Object.entries(st).map(([k, v]) => k + ' ' + v).join(', ') : 'none yet');
+        const d = (r.hasTurn ? 'TURN: on' : 'TURN: OFF (no relay - voice may not reach other networks)') + (r.srv ? ' · server: ' + r.srv : '') + ' · links: ' + (Object.keys(st).length ? Object.entries(st).map(([k, v]) => k + ' ' + v).join(', ') : 'none yet');
         setDiag(prev => prev === d ? prev : d); }
       if (!r.isHost) return;
       const sp = [];
