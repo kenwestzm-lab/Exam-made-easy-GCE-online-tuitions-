@@ -47,6 +47,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Routes ────────────────────────────────────────────
+app.use(require('express').static(require('path').join(__dirname, '..', 'public')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/firebase-auth', require('./routes/firebase_auth'));
 app.use('/api/users', require('./routes/users'));
@@ -55,8 +56,10 @@ app.use('/api/tutor-pay', require('./routes/tutor_payments'));
 app.use('/api/materials', require('./routes/materials'));
 app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/tests', require('./routes/tests'));
+app.use(['/api/ai/debug-test', '/api/ai/debug-chat'], (q, r) => r.status(404).json({ error: 'Not found' }));
 app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api/ai-tokens', require('./routes/ai_tokens'));
+app.use('/api/classroom', require('./routes/classroom'));
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/users', require('./routes/user_prefs'));
 app.use('/api', require('./routes/live_classes'));

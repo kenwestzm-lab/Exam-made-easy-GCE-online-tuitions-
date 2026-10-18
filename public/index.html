@@ -20,9 +20,9 @@
 <meta name="theme-color" content="#064d2c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Peace Mindset">
-<title>Peace Mindset Private School — GCE Online · Mufulira, Zambia</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>"/>
+<meta name="apple-mobile-web-app-title" content="Ken Exam Made Easy">
+<title>KEN EXAM MADE EASY — GCE Online Tuitions · Zambia</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -64,7 +64,7 @@ const {
   createContext,
   useContext
 } = React;
-const BACKEND = 'https://exam-made-easy-gce-online-tuitions-1.onrender.com';
+const BACKEND = (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname)) ? location.origin : 'https://exam-made-easy-gce-online-tuitions-1.onrender.com';
 const apiFetch = async (method, path, body, token, fd) => {
   try {
     const o = {
@@ -759,14 +759,14 @@ function AuthScreen() {
       fontSize: 28,
       marginBottom: 4
     }
-  }, "PEACE MINDSET"), /*#__PURE__*/React.createElement("h2", {
+  }, "KEN EXAM MADE EASY"), /*#__PURE__*/React.createElement("h2", {
     style: {
       color: 'rgba(255,255,255,0.88)',
       fontSize: 14,
       fontWeight: 500,
       marginBottom: 3
     }
-  }, "PRIVATE SCHOOL"), /*#__PURE__*/React.createElement("p", {
+  }, "GCE ONLINE TUITIONS"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'rgba(255,255,255,0.65)',
       fontSize: 11,
@@ -925,7 +925,7 @@ function AuthScreen() {
     style: {
       color: C.g
     }
-  }, "0772799672"), /*#__PURE__*/React.createElement("br", null), "\uD83C\uDFEB Peace Mindset \xB7 Mufulira, Zambia")) : /*#__PURE__*/React.createElement("form", {
+  }, "0772799672"), /*#__PURE__*/React.createElement("br", null), "\uD83C\uDFEB Ken Exam Made Easy \xB7 Mufulira, Zambia")) : /*#__PURE__*/React.createElement("form", {
     onSubmit: doReg,
     autoComplete: "on"
   }, /*#__PURE__*/React.createElement("label", {
@@ -1106,7 +1106,7 @@ function DraggableWhatsApp({ profile }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const waLink = "https://wa.me/260772799672?text=" + encodeURIComponent("Hello Peace Mindset! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform"));
+  const waLink = "https://wa.me/260772799672?text=" + encodeURIComponent("Hello Ken Exam Made Easy! I need help with " + (profile?.name ? "my account (" + profile.name + ")" : "the platform"));
 
   return React.createElement('a', {
     ref: btnRef,
@@ -1258,7 +1258,7 @@ function Layout({
       fontSize: 11,
       fontFamily: "'Playfair Display',serif"
     }
-  }, "PEACE MINDSET"), /*#__PURE__*/React.createElement("div", {
+  }, "KEN EXAM MADE EASY"), /*#__PURE__*/React.createElement("div", {
     style: {
       color: 'rgba(255,255,255,0.6)',
       fontSize: 9,
@@ -1854,7 +1854,7 @@ function Whiteboard({
 /* ═══════════════════════════════════════════════════════════════
    ENHANCED LIVE CLASSROOM SYSTEM v5
    Real-time AI Tutor + Live Class + Quiz + Attendance
-   Peace Mindset Private School, Mufulira, Zambia
+   KEN EXAM MADE EASY, Mufulira, Zambia
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── ZAMBIAN AI TUTOR VOICE ENGINE ─────────────────────────── */
@@ -4368,8 +4368,8 @@ function ChatPanel({msgs,input,setInput,onSend,chAvatar}){
 function QuizPanel({quiz,setQuiz,socket,classId,isPresenter,character}){
   const [answers,setAnswers]=useState({});const [submitted,setSubmitted]=useState(false);const [score,setScore]=useState(null);
   const gen=async()=>{try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:'General',topic:'lesson',count:5,type:'mcq',character:character||'ken'},tok());if(qr?.questions)setQuiz({questions:qr.questions,pending:true});}catch(e){}};
-  const post=()=>{if(!quiz||!socket)return;socket.emit('class_quiz',{...quiz,classId});setQuiz(p=>({...p,pending:false}));};
-  const submit=()=>{let c=0;quiz.questions.forEach((q,i)=>{if(answers[i]===q.correct_answer)c++;});setScore(c);setSubmitted(true);if(socket)socket.emit('student_quiz_done',{classId,score:c,total:quiz.questions.length});};
+  const post=async()=>{if(!quiz)return;try{const x=await apiFetch('POST','/classroom/'+classId+'/quiz',{questions:quiz.questions},tok());if(x&&x.quizId)setQuiz(p=>({...p,pending:false,quizId:x.quizId}));else alert((x&&x.error)||'Could not post the quiz');}catch(e){alert(e.message||'Could not post the quiz');}};
+  const submit=async()=>{try{const x=await apiFetch('POST','/classroom/'+classId+'/quiz/'+quiz.quizId+'/answer',{answers},tok());setScore(x.score);setSubmitted(true);setQuiz(p=>({...p,questions:p.questions.map((q,i)=>({...q,correct_answer:x.review[i].correct,explanation:x.review[i].explanation}))}));}catch(e){alert(e.message||'Could not submit');}};
   return React.createElement('div',{style:{height:'100%',overflowY:'auto',padding:14}},
     !quiz&&React.createElement('div',{style:{textAlign:'center',padding:32}},
       React.createElement('div',{style:{fontSize:44,marginBottom:12}},'Quiz'),
@@ -4443,7 +4443,90 @@ function ClassLobby({cls,profile,onJoin,onStart,onBack}){
   );
 }
 
-function LiveClassRoom({classData,onExit,profile,socket}){
+function AIClassRoom({classData,onExit,profile,socket}){
+  const e=React.createElement,id=classData._id;
+  const isP=(profile?.role==='admin'||(profile?.role==='tutor'&&String(classData?.tutor_id)===String(profile?._id)));
+  const subN=()=>classData?.subject_name||SUBJECTS.find(s=>s.id===Number(classData?.subject_id))?.n||'General';
+  const G={bg:'linear-gradient(160deg,#0a0a0a,#1a1200,#0d0a00)',gold:'#f59e0b',goldb:'rgba(245,158,11,0.3)',white:'#fff',grey:'rgba(255,255,255,0.55)',red:'#ef4444'};
+  const [board,setBoard]=useState(null),[imgs,setImgs]=useState([]),[prog,setProg]=useState(0),[playing,setPlaying]=useState(true),[ended,setEnded]=useState(false),[note,setNote]=useState(isP?'Building your lesson...':'Joining the class...'),[msgs,setMsgs]=useState([]),[people,setPeople]=useState([]),[input,setInput]=useState(''),[panel,setPanel]=useState('board'),[quiz,setQuiz]=useState(null),[spk,setSpk]=useState(false),[muted,setMuted]=useState(false),[up,setUp]=useState(false);
+  const seen=useRef(''),mu=useRef(false);mu.current=muted;
+  const addMsg=useCallback((role,text,meta={})=>setMsgs(p=>[...p.slice(-100),{id:Date.now()+Math.random(),role,text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),...meta}]),[]);
+  const speak=useCallback(t=>{if(mu.current||!t)return;try{ZambianVoice.stop();setSpk(true);ZambianVoice.speak(t,'male',null,()=>setSpk(false));}catch(x){setSpk(false);}},[]);
+  const mergeImgs=useCallback(u=>setImgs(p=>{const n=[...p];(u||[]).forEach(x=>{if(x&&!n.includes(x))n.push(x);});return n.length===p.length?p:n;}),[]);
+  const apply=useCallback(d=>{if(!d||!d.chunk)return;const k=d.index+'|'+String(d.chunk.text).slice(0,40);if(seen.current===k)return;seen.current=k;setBoard({...(d.chunk.board||{}),text:d.chunk.text});setProg(d.total?Math.round((d.index+1)/d.total*100):0);setNote('');addMsg('ai',d.chunk.text);speak(d.chunk.text);},[addMsg,speak]);
+  useEffect(()=>{let dead=false;
+    const poll=()=>Promise.resolve(apiFetch('GET','/classroom/'+id+'/state',null,tok())).then(x=>{if(dead||!x)return;if(x.error){setNote(x.error);return;}
+      if(x.images)mergeImgs(x.images.map(i=>i.url));if(x.attendees)setPeople(x.attendees);if(x.run)setPlaying(!!x.run.playing);
+      if(x.session&&x.session.status==='ended'){setEnded(true);return;}
+      if(x.current)apply({index:x.session.index,total:x.session.total,chunk:x.current});
+      if(x.quiz&&!x.quiz.answered&&!isP)setQuiz(q=>q||{questions:x.quiz.questions,quizId:x.quiz.quizId});
+    }).catch(()=>{if(!dead)setNote('Reconnecting...');});
+    poll();const t=setInterval(poll,3000);return()=>{dead=true;clearInterval(t);try{ZambianVoice.stop();}catch(x){}};
+  },[id]);
+  useEffect(()=>{if(!isP)return;Promise.resolve(apiFetch('POST','/classroom/'+id+'/run',{subject:subN(),topic:classData.lesson_topic||'',notes:classData.lesson_script||''},tok())).then(x=>{if(x&&x.error)setNote('Could not start the lesson: '+x.error);}).catch(er=>setNote('Could not start the lesson: '+((er&&er.message)||'error')));},[id]);
+  useEffect(()=>{if(!socket)return;
+    const join=()=>socket.emit('join_class',{classId:id,user:{_id:profile?._id,name:profile?.name,role:profile?.role}});join();socket.on('connect',join);
+    const H={cr_state:apply,cr_answer:d=>{addMsg('ai',d.text);speak(d.text);},cr_question:d=>addMsg('student',d.text,{name:d.name}),cr_image:d=>mergeImgs([d.url]),cr_playback:d=>setPlaying(!!d.playing),cr_hand:d=>addMsg('system','✋ '+d.name+(d.raised?' raised':' lowered')+' a hand'),
+      cr_quiz:d=>{if(!isP){setQuiz({questions:d.questions,quizId:d.quizId});setPanel('quiz');addMsg('system','Quick check received!');}},
+      class_status_change:d=>{if(d.status==='ended'){setEnded(true);try{ZambianVoice.stop();}catch(x){}}},
+      student_joined:d=>setPeople(p=>[...p.filter(s=>s._id!==d.user?._id),d.user].filter(Boolean)),class_announcement:d=>addMsg('system',d.text)};
+    Object.entries(H).forEach(([k,f])=>socket.on(k,f));
+    return()=>{socket.off('connect',join);Object.keys(H).forEach(k=>socket.off(k));};
+  },[socket,id]);
+  const send=async()=>{const q=input.trim();if(!q)return;setInput('');
+    if(isP){if(socket)socket.emit('class_announcement',{classId:id,text:q,type:'info'});return;}
+    addMsg('me',q,{name:profile?.name});
+    try{const x=await apiFetch('POST','/classroom/'+id+'/question',{text:q},tok());if(x&&x.error)addMsg('system',x.error);}catch(er){addMsg('system',(er&&er.message)||'Could not send your question');}};
+  const pb=a=>Promise.resolve(apiFetch('POST','/classroom/'+id+'/playback',{action:a},tok())).catch(()=>{});
+  const endC=async()=>{if(!window.confirm('End this class for everyone?'))return;try{await apiFetch('POST','/classroom/'+id+'/end',{},tok());}catch(er){}setEnded(true);try{ZambianVoice.stop();}catch(x){}};
+  const upload=async ev=>{const f=ev.target.files&&ev.target.files[0];if(!f||up)return;setUp(true);
+    try{const fd=new FormData();fd.append('image',f);fd.append('classId',id);const r=await fetch(BACKEND+'/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();
+      if(!d.url)throw new Error(d.error||'Upload failed');mergeImgs([d.url]);const x=await apiFetch('POST','/classroom/'+id+'/image',{url:d.url,caption:'Lesson picture'},tok());if(x&&x.error)addMsg('system','Picture not shared with students: '+x.error);}
+    catch(er){addMsg('system','Could not upload the picture: '+((er&&er.message)||''));}setUp(false);ev.target.value='';};
+  const dg=d=>{if(!d)return null;const sp={fill:'#12a05c22',stroke:'#12a05c',strokeWidth:3},ds={stroke:'#c9930a',strokeDasharray:'5 4',strokeWidth:2,fill:'none'},tx={fill:'#111827',fontSize:12,fontWeight:700};let k=null;
+    if(d.type==='triangle')k=[e('path',{key:1,d:'M25 110 L170 110 L105 25Z',...sp}),e('path',{key:2,d:'M105 25V110',...ds}),e('text',{key:3,x:90,y:130,...tx},d.base),e('text',{key:4,x:110,y:70,...tx},d.height)];
+    else if(d.type==='rectangle')k=[e('rect',{key:1,x:35,y:25,width:130,height:85,...sp}),e('text',{key:2,x:95,y:130,...tx},d.width),e('text',{key:3,x:172,y:72,...tx},d.height)];
+    else if(d.type==='circle')k=[e('circle',{key:1,cx:100,cy:70,r:52,...sp}),e('path',{key:2,d:'M100 70H152',...ds}),e('text',{key:3,x:112,y:64,...tx},'r = '+d.radius)];
+    return k&&e('svg',{viewBox:'0 0 200 140',style:{maxWidth:'min(100%,460px)',width:'100%',display:'block',margin:'8px auto'}},k);};
+  if(ended)return e('div',{style:{minHeight:'100vh',background:G.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:G.white,padding:20,textAlign:'center'}},e('div',{style:{fontSize:60}},'🎓'),e('h2',{style:{color:G.gold,margin:'8px 0'}},'Class Completed!'),e('p',{style:{color:G.grey,marginBottom:20}},'Well done for attending today.'),e('button',{onClick:onExit,style:{background:G.gold,color:'#000',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:700,cursor:'pointer'}},'← Back to Classes'));
+  const b=board||{},bd=(x)=>({background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',color:G.white,borderRadius:8,padding:'5px 10px',cursor:'pointer',fontSize:12,...x});
+  const boardEl=e('div',{style:{flex:1,minHeight:0,overflow:'auto',padding:'8px 10px'}},
+    e('div',{style:{display:'flex',gap:10,alignItems:'center',marginBottom:8}},
+      e('div',{style:{width:60,height:72,borderRadius:12,overflow:'hidden',border:'2px solid '+(spk?G.gold:G.goldb),boxShadow:spk?'0 0 16px '+G.gold:'none',flexShrink:0,background:'#222'}},e('img',{src:'/tutor/mr-ken.jpg?v=2',alt:'Mr Ken',style:{width:'100%',height:'100%',objectFit:'cover'}})),
+      e('div',{style:{flex:1,fontSize:12,color:note?G.gold:G.grey}},note||(spk?'Mr Ken is speaking...':playing?'Mr Ken is teaching...':'Lesson paused'))),
+    e('div',{style:{background:'#fff',color:'#111827',borderRadius:14,padding:18,minHeight:'60vh'}},
+      e('span',{style:{background:'#12a05c22',color:'#0a6e3f',fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 10px'}},String(classData?.lesson_topic||subN()).toUpperCase()),
+      b.heading&&e('h3',{style:{margin:'8px 0 4px',fontSize:26}},b.heading),
+      (b.points||[]).map((p,i)=>e('div',{key:i,style:{margin:'8px 0',fontSize:18}},'✦ '+p)),
+      b.formula&&e('div',{style:{font:'700 30px Georgia,serif',color:'#8a6508',background:'#fef9e7',borderRadius:10,padding:12,margin:'10px 0',textAlign:'center'}},b.formula),
+      dg(b.diagram),
+      (!b.points||!b.points.length)&&!b.formula&&!b.diagram&&b.text&&e('div',{style:{fontSize:18,lineHeight:1.6,marginTop:6}},b.text),
+      imgs.map((u,i)=>e('img',{key:i,src:u,alt:'',style:{maxWidth:'100%',borderRadius:10,marginTop:8,display:'block'}}))));
+  const nav=[['board','📋','Lesson'],['chat','💬','Chat'],['people','👥','People'+(people.length?'('+people.length+')':'')],['quiz','📝','Quiz'],['files','📁','Files']];
+  return e('div',{style:{height:'100dvh',minHeight:'100vh',maxHeight:'100dvh',display:'flex',flexDirection:'column',background:G.bg,color:G.white,overflow:'hidden'}},
+    e('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(0,0,0,0.7)',borderBottom:'1px solid '+G.goldb,flexShrink:0}},
+      e('button',{onClick:()=>{try{ZambianVoice.stop();}catch(x){}onExit();},style:bd({})},'← Back'),
+      e('div',{style:{flex:1,minWidth:0}},e('div',{style:{fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},classData?.title||'Live Class'),e('div',{style:{fontSize:11,color:G.grey}},'Live · '+subN())),
+      e('div',{style:{border:'1px solid '+G.goldb,borderRadius:20,padding:'3px 10px',fontSize:11,color:G.gold,fontWeight:700}},prog+'%'),
+      e('button',{onClick:()=>{if(muted){setMuted(false);}else{setMuted(true);try{ZambianVoice.stop();}catch(x){}}},style:bd({})},muted?'🔇':'🔊'),
+      e('div',{style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.4)',borderRadius:20,padding:'3px 10px',fontSize:11,color:G.red}},'● LIVE')),
+    e('div',{style:{height:3,background:'rgba(255,255,255,0.05)',flexShrink:0}},e('div',{style:{height:'100%',width:prog+'%',background:G.gold,transition:'width 1s'}})),
+    isP&&e('div',{style:{display:'flex',gap:6,padding:'6px 10px',flexShrink:0,background:'rgba(0,0,0,0.5)'}},e('button',{onClick:()=>pb('prev'),style:bd({})},'⏮'),e('button',{onClick:()=>pb(playing?'pause':'resume'),style:bd({})},playing?'⏸ Pause':'▶ Resume'),e('button',{onClick:()=>pb('next'),style:bd({})},'⏭'),e('button',{onClick:endC,style:bd({color:G.red,marginLeft:'auto'})},'End class')),
+    e('div',{style:{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',minHeight:0}},
+      panel==='board'&&boardEl,
+      panel==='chat'&&React.createElement(ChatPanel,{msgs,input,setInput,onSend:send,chAvatar:'👨‍🏫'}),
+      panel==='people'&&React.createElement(ParticipantsPanel,{students:people,hands:[],isPresenter:isP,onCallStudent:()=>{}}),
+      panel==='quiz'&&React.createElement(QuizPanel,{quiz,setQuiz,socket,classId:id,isPresenter:isP,character:'ken'}),
+      panel==='files'&&React.createElement(MaterialsPanel,null)),
+    e('div',{style:{padding:'8px 10px',background:'rgba(0,0,0,0.7)',borderTop:'1px solid '+G.goldb,display:'flex',gap:6,alignItems:'center',flexShrink:0}},
+      e('input',{value:input,onChange:ev=>setInput(ev.target.value),onKeyDown:ev=>ev.key==='Enter'&&send(),placeholder:isP?'Send an announcement...':'Ask Mr Ken a question...',style:{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,padding:'9px 13px',color:G.white,fontSize:13,outline:'none'}}),
+      e('button',{onClick:send,style:{background:G.gold,border:'none',borderRadius:10,padding:'9px 16px',cursor:'pointer',color:'#000',fontWeight:700}},'➤'),
+      isP&&e('label',{style:bd({padding:'9px 12px'})},up?'⏳':'📷',e('input',{type:'file',accept:'image/*',disabled:up,style:{display:'none'},onChange:upload}))),
+    e('div',{style:{display:'flex',background:'rgba(0,0,0,0.8)',borderTop:'1px solid '+G.goldb,flexShrink:0}},nav.map(n=>e('button',{key:n[0],onClick:()=>setPanel(n[0]),style:{flex:1,padding:'8px 2px',background:'none',border:'none',color:panel===n[0]?G.gold:G.grey,fontSize:9,borderTop:'2px solid '+(panel===n[0]?G.gold:'transparent'),cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2}},e('span',{style:{fontSize:16}},n[1]),n[2]))));
+}
+function LiveClassRoom(props){return props.classData&&props.classData.presenter_type==='ai'?React.createElement(AIClassRoom,props):React.createElement(LiveClassRoomOld,props);}
+
+function LiveClassRoomOld({classData,onExit,profile,socket}){
   const ck=classData?.ai_character||'ken';
   const isAI=classData?.presenter_type==='ai';
   const ch={ken:{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'},msimbi:{name:"Mis M'simbi",gender:'female',avatar:'👩‍🏫',color:'#a78bfa'}}[ck]||{name:'Teacher Ken',gender:'male',avatar:'👨‍🏫',color:'#f59e0b'};
@@ -4471,7 +4554,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
   const chunks=useRef([]);const chunkIdx=useRef(0);
   const done=useRef(false);const msgsEnd=useRef();
   const curQ=useRef('');const waiting=useRef(false);
-  const autoTimer=useRef(null);
+  const autoTimer=useRef(null);const boards=useRef([]);const [board,setBoard]=useState(null);const [boardImgs,setBoardImgs]=useState([]);const [syncMsg,setSyncMsg]=useState('');const [syncAt,setSyncAt]=useState('');const lastAtRef=useRef(null);
 
   // Gold theme
   const G={
@@ -4497,10 +4580,10 @@ function LiveClassRoom({classData,onExit,profile,socket}){
 
   const processSpk=useCallback(()=>{
     if(isspk.current||!spkQ.current.length)return;
-    const{text,cb}=spkQ.current.shift();
+    const{text,cb,board:bd}=spkQ.current.shift();
     isspk.current=true;setAiSpk(true);
     addMsg('ai',text);
-    if(socket&&classData?._id)socket.emit('ai_speaking',{classId:classData._id,text,character:ck});
+    if(bd){setBoard({...bd,text});Promise.resolve(apiFetch('POST','/classroom/'+classData._id+'/board',{board:bd,text,index:chunkIdx.current,total:chunks.current.length},tok())).then(x=>{if(x&&x.error)addMsg('system','Board not shared with students: '+x.error);}).catch(e=>addMsg('system','Board not shared with students: '+((e&&e.message)||'error')));}if(socket&&classData?._id)socket.emit('ai_speaking',{classId:classData._id,text,character:ck,board:bd?{...bd}:null,pct:chunks.current.length?Math.round(chunkIdx.current/chunks.current.length*100):0});
     ZambianVoice.speak(text,ch.gender,null,()=>{
       isspk.current=false;setAiSpk(false);
       if(socket&&classData?._id)socket.emit('ai_done_speaking',{classId:classData._id});
@@ -4508,9 +4591,9 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     });
   },[socket,classData,ck,ch.gender,addMsg]);
 
-  const say=useCallback((text,cb=null)=>{
+  const say=useCallback((text,cb=null,bd=null)=>{
     if(!text?.trim())return;
-    spkQ.current.push({text,cb});
+    spkQ.current.push({text,cb,board:bd});
     if(!isspk.current)processSpk();
   },[processSpk]);
 
@@ -4554,7 +4637,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     if(chunk.type==='question'){
       askQuestion(chunk.question||chunk.text+' What do you think?');
     }else{
-      say(chunk.text,()=>setTimeout(next,500));
+      say(chunk.text,()=>setTimeout(next,500),boards.current[chunkIdx.current-1]||{text:chunk.text});
     }
   },[say,askQuestion,classData,ck,socket,subName,addMsg]);
 
@@ -4589,7 +4672,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     if(!classData?._id)return;
     let gone=false;
     if(socket)socket.emit('join_class',{classId:classData._id,user:{_id:profile?._id,name:profile?.name,role:profile?.role}});
-    if(!isAI)return;
+    if(!isAI||!isPresenter)return;Promise.resolve(apiFetch('POST','/classroom/'+classData._id+'/board',{board:{heading:'Starting soon',points:['Mr Ken is preparing the lesson']},text:'Mr Ken is preparing your lesson. Please wait.',index:0,total:0},tok())).catch(()=>{});if(classData.lesson_image_url)Promise.resolve(apiFetch('GET','/classroom/'+classData._id+'/state',null,tok())).then(x=>{const have=((x&&x.images)||[]).some(i=>i.url===classData.lesson_image_url);if(!have){setBoardImgs(p=>[...p,classData.lesson_image_url]);return apiFetch('POST','/classroom/'+classData._id+'/image',{url:classData.lesson_image_url,caption:'Lesson picture'},tok());}}).catch(()=>{});
     (async()=>{
       let intro='Good day, class! I am '+ch.name+'. Welcome. Today we study '+subName()+'. Pay attention!';
       try{
@@ -4600,14 +4683,14 @@ function LiveClassRoom({classData,onExit,profile,socket}){
       if(classData?.lesson_script||classData?.lesson_topic){
         try{
           const lb=await apiFetch('POST','/ai/build-lesson',{subject:subName(),topic:classData?.lesson_topic||subName(),notes:classData.lesson_script||'',character:ck},tok());
-          if(lb?.chunks?.length){chunks.current=lb.chunks.map(c=>({type:'teach',text:c.text||c.question||''})).filter(c=>c.text);setLessonReady(true);}
+          if(lb?.chunks?.length){chunks.current=lb.chunks.map(c=>({type:'teach',text:c.text||c.question||''})).filter(c=>c.text);try{const bp=await apiFetch('POST','/classroom/'+classData._id+'/board-plan',{chunks:chunks.current.map(c=>c.text),subject:subName()},tok());boards.current=(bp&&bp.boards)||[];}catch(e){}setLessonReady(true);}
         }catch(e){
           chunks.current=(classData.lesson_script||classData.lesson_topic||'').split(/[.!?]+/).filter(c=>c.trim().length>15).map((text,i)=>({text:text.trim(),type:'teach',question:null}));
           setLessonReady(true);
         }
       }
       if(gone)return;
-      say(intro,()=>{if(!gone)setTimeout(next,600);});
+      say(intro,()=>{if(!gone)setTimeout(next,600);},{heading:String(classData?.lesson_topic||subName()),points:[]});
     })();
     return()=>{gone=true;};
   },[classData?._id]);
@@ -4628,18 +4711,38 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     const onStatus=({status})=>{if(status==='ended'){setEnded(true);ZambianVoice.stop();done.current=true;}};
     const onQuiz=q=>{setQuiz(q);setPanel('quiz');addMsg('system','Quiz received!');};
     const onAIQuiz=({questions})=>{if(isPresenter){setQuiz({questions,pending:true});setPanel('quiz');addMsg('system','AI quiz ready. Review and post.');}};
-    const onImg=({url,caption})=>{addMsg('ai',caption||'',{image:url});};
-    const onAISpk=({text})=>{if(!isAI)addMsg('ai',text);};
+    const onImg=({url,caption})=>{addMsg('ai',caption||'',{image:url});setBoardImgs(p=>[...p,url]);};
+    const onAISpk=({text,board:bd,pct})=>{if(!isAI){addMsg('ai',text);return;}if(isPresenter)return;addMsg('ai',text);if(bd)setBoard({...bd,text});if(typeof pct==='number')setProgress(pct);setAiSpk(true);try{ZambianVoice.stop();ZambianVoice.speak(text,ch.gender,null,()=>setAiSpk(false));}catch(e){}};
+    const onCrQ=({name,text})=>addMsg('student',text,{name});
+    const onCrAns=d=>{if(isPresenter&&isAI)say(d.text);};
+    const onCrQuiz=d=>{if(isPresenter)return;setQuiz({questions:d.questions,quizId:d.quizId,pending:false});setPanel('quiz');addMsg('system','Quiz received!');};
+    socket.on('cr_question',onCrQ);socket.on('cr_answer',onCrAns);socket.on('cr_quiz',onCrQuiz);
+    
     socket.on('student_joined',onJoin);socket.on('student_left',onLeft);socket.on('class_question',onQ);
     socket.on('class_status_change',onStatus);socket.on('class_quiz',onQuiz);
     socket.on('ai_quiz_ready',onAIQuiz);socket.on('class_image',onImg);socket.on('ai_speaking',onAISpk);
-    return()=>['student_joined','student_left','class_question','class_status_change','class_quiz','ai_quiz_ready','class_image','ai_speaking'].forEach(e=>socket.off(e));
+    return()=>['student_joined','student_left','class_question','class_status_change','class_quiz','ai_quiz_ready','class_image','ai_speaking','cr_question','cr_answer','cr_quiz'].forEach(e=>socket.off(e));
   },[socket,isAI,isPresenter,say,ck,classData,subName,addMsg]);
 
+  useEffect(()=>{
+    if(!isAI||isPresenter||!classData?._id)return;
+    let dead=false;
+    const sync=()=>Promise.resolve(apiFetch('GET','/classroom/'+classData._id+'/state',null,tok())).then(x=>{
+      if(dead)return;
+      if(!x||x.error){setSyncMsg((x&&x.error)||'Could not reach the class');return;}
+      setSyncMsg('');setSyncAt(new Date().toLocaleTimeString());if(x.images)setBoardImgs(x.images.map(i=>i.url));
+      const b=x.board;if(!b||!b.board||b.at===lastAtRef.current)return;
+      if(lastAtRef.current===null&&b.text)addMsg('ai',b.text);
+      lastAtRef.current=b.at;setBoard({...b.board,text:b.text});if(b.total)setProgress(Math.round(b.index/b.total*100));
+    }).catch(e=>{if(!dead)setSyncMsg('Connection problem: '+((e&&e.message)||''));});
+    sync();const t=setInterval(sync,4000);
+    return()=>{dead=true;clearInterval(t);};
+  },[classData?._id,isAI,isPresenter]);
+  useEffect(()=>{if(!isAI||!isPresenter||!classData?._id)return;Promise.resolve(apiFetch('GET','/classroom/'+classData._id+'/state',null,tok())).then(x=>{if(x&&x.images&&x.images.length)setBoardImgs(x.images.map(i=>i.url));}).catch(()=>{});},[classData?._id,isAI,isPresenter]);
   const sendMsg=()=>{
     if(!input.trim())return;
     const q=input.trim();setInput('');
-    if(isAI&&!isPresenter){addMsg('system','Questions are taken after the lesson on the Questions page.');return;}
+    if(isAI&&!isPresenter){Promise.resolve(apiFetch('POST','/classroom/'+classData._id+'/question',{text:q},tok())).then(x=>{if(x&&x.error)addMsg('system',x.error)}).catch(e=>addMsg('system',(e&&e.message)||'Could not send your question'));return;}
     if(waitingAnswer){submitAnswer(q);return;}
     addMsg('me',q,{name:profile?.name});
     if(socket&&classData?._id)socket.emit('class_question',{classId:classData._id,question:q,studentName:profile?.name});
@@ -4670,6 +4773,26 @@ function LiveClassRoom({classData,onExit,profile,socket}){
   ];
 
   // BOARD PANEL - AI lesson display
+  const diag=d=>{if(!d)return null;const e=React.createElement,sp={fill:'#12a05c22',stroke:'#12a05c',strokeWidth:3},ds={stroke:'#c9930a',strokeDasharray:'5 4',strokeWidth:2,fill:'none'},tx={fill:'#111827',fontSize:12,fontWeight:700};let k=null;
+  if(d.type==='triangle')k=[e('path',{key:1,d:'M25 110 L170 110 L105 25Z',...sp}),e('path',{key:2,d:'M105 25V110',...ds}),e('text',{key:3,x:90,y:130,...tx},d.base),e('text',{key:4,x:110,y:70,...tx},d.height)];
+  else if(d.type==='rectangle')k=[e('rect',{key:1,x:35,y:25,width:130,height:85,...sp}),e('text',{key:2,x:95,y:130,...tx},d.width),e('text',{key:3,x:172,y:72,...tx},d.height)];
+  else if(d.type==='circle')k=[e('circle',{key:1,cx:100,cy:70,r:52,...sp}),e('path',{key:2,d:'M100 70H152',...ds}),e('text',{key:3,x:112,y:64,...tx},'r = '+d.radius)];
+  return k&&e('svg',{viewBox:'0 0 200 140',style:{maxWidth:'min(100%,460px)',width:'100%',display:'block',margin:'8px auto'}},k);};
+  const AIBoard=()=>{const e=React.createElement,b=board||{},la=[...msgs].reverse().find(m=>m.role==='ai');
+    return e('div',{style:{flex:1,minHeight:0,overflow:'auto',padding:'8px 10px'}},
+      syncMsg&&e('div',{style:{color:'#b91c1c',background:'#fee2e2',borderRadius:8,padding:'4px 8px',fontSize:12,marginBottom:6}},syncMsg),
+      e('div',{style:{display:'flex',gap:12,alignItems:'center',marginBottom:10}},
+        e('div',{style:{width:60,height:72,borderRadius:14,overflow:'hidden',border:'2px solid '+(aiSpk?G.gold:G.goldb),boxShadow:aiSpk?'0 0 18px '+G.gold:'none',flexShrink:0,background:'#222',display:'flex',alignItems:'center',justifyContent:'center',fontSize:40}},
+          e('img',{src:'/tutor/mr-ken.jpg?v=2',alt:'Mr Ken',style:{width:'100%',height:'100%',objectFit:'cover'},onError:ev=>{ev.target.parentNode.textContent=ch.avatar;}})),
+        e('div',{style:{flex:1,fontSize:13,color:G.grey,lineHeight:1.5}},la?la.text:ch.name+' will start shortly...')),
+      e('div',{style:{background:'#fff',color:'#111827',borderRadius:14,padding:18,minHeight:'58vh'}},
+        e('span',{style:{background:'#12a05c22',color:'#0a6e3f',fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 10px'}},String(classData?.lesson_topic||subName()).toUpperCase()),
+        b.heading&&e('h3',{style:{margin:'8px 0 4px',fontSize:26}},b.heading),
+        (b.points||[]).map((p,i)=>e('div',{key:i,style:{margin:'8px 0',fontSize:18}},'\u2726 '+p)),
+        b.formula&&e('div',{style:{font:'700 30px Georgia,serif',color:'#8a6508',background:'#fef9e7',borderRadius:10,padding:12,margin:'10px 0',textAlign:'center'}},b.formula),
+        diag(b.diagram),(!b.points||!b.points.length)&&!b.formula&&!b.diagram&&b.text&&e('div',{style:{fontSize:18,lineHeight:1.6,marginTop:6}},b.text),
+        boardImgs.map((u,i)=>e('img',{key:i,src:u,alt:'',style:{maxWidth:'100%',borderRadius:10,marginTop:8}})),
+        !board&&!boardImgs.length&&e('div',{style:{color:'#6b7280',fontSize:13,marginTop:10}},'The board will fill as the lesson begins...')));};
   const BoardPanel=()=>React.createElement('div',{style:{flex:1,overflow:'auto',padding:'12px 14px'}},
     msgs.filter(m=>m.role==='ai'||m.role==='system'||m.role==='student'||m.role==='me').map((m,i)=>
       React.createElement('div',{key:m.id||i,style:{marginBottom:10,display:'flex',flexDirection:m.role==='me'?'row-reverse':'row',gap:8,alignItems:'flex-start'}},
@@ -4712,7 +4835,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
     ),
     // Content panels
     React.createElement('div',{style:{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',minHeight:0}},
-      panel==='board'&&(isAI?React.createElement(BoardPanel,null):React.createElement(LiveWhiteboard,{classId:classData._id,socket,isPresenter:isPresenter})),
+      panel==='board'&&(isAI?React.createElement('div',{style:{flex:1,display:'flex',flexDirection:'column',minHeight:0}},AIBoard(),React.createElement('div',{style:{flex:'none',maxHeight:'18%',display:'flex',flexDirection:'column',overflow:'hidden'}},React.createElement(BoardPanel,null))):React.createElement(LiveWhiteboard,{classId:classData._id,socket,isPresenter:isPresenter})),
       panel==='chat'&&React.createElement(ChatPanel,{msgs,input,setInput,onSend:sendMsg,chAvatar:ch.avatar}),
       panel==='participants'&&React.createElement(ParticipantsPanel,{students,hands:[],isPresenter,onCallStudent:()=>{}}),
       panel==='quiz'&&React.createElement(QuizPanel,{quiz,setQuiz,socket,classId:classData._id,isPresenter,character:ck}),
@@ -4733,7 +4856,7 @@ function LiveClassRoom({classData,onExit,profile,socket}){
           const file=e.target.files?.[0];if(!file||scanImg)return;setScanImg(true);
           const fd=new FormData();fd.append('image',file);fd.append('classId',classData._id);fd.append('character',ck);
           try{const r=await fetch(BACKEND+'/api/ai/class-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});const d=await r.json();
-            if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Lesson image'});
+            if(d.url){addMsg('ai','Take a look at this, class.',{image:d.url});setBoardImgs(p=>[...p,d.url]);Promise.resolve(apiFetch('POST','/classroom/'+classData._id+'/image',{url:d.url,caption:'Lesson image'},tok())).catch(()=>{});if(socket)socket.emit('class_image',{classId:classData._id,url:d.url,caption:'Lesson image'});
               const fd2=new FormData();fd2.append('image',file);fd2.append('character',ck);fd2.append('subject',subName());fd2.append('mode','explain');
               const r2=await fetch(BACKEND+'/api/ai/scan-image',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd2});const d2=await r2.json();
               if(isAI)say(d2.result||'Look at this carefully.');else addMsg('ai',d2.result||'Look at this diagram, class.');}}catch(err){addMsg('system','Could not upload image.');}
@@ -5649,7 +5772,7 @@ function QuestionsPage() {
       color: 'rgba(255,255,255,0.7)',
       fontSize: 11
     }
-  }, "Study Assistant \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2"), tokenStatus && React.createElement("div", { style: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } }, tokenStatus.free_remaining > 0 ? "\uD83D\uDFE2 " + tokenStatus.free_remaining + " free questions left" : tokenStatus.paid_tokens > 0 ? "\uD83D\uDFE1 " + tokenStatus.paid_tokens + " tokens" : "\uD83D\uDD34 No tokens - tap to buy")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
+  }, "Study Assistant \xB7 Ken Exam Made Easy \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2"), tokenStatus && React.createElement("div", { style: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } }, tokenStatus.free_remaining > 0 ? "\uD83D\uDFE2 " + tokenStatus.free_remaining + " free questions left" : tokenStatus.paid_tokens > 0 ? "\uD83D\uDFE1 " + tokenStatus.paid_tokens + " tokens" : "\uD83D\uDD34 No tokens - tap to buy")), aiThinking && /*#__PURE__*/React.createElement(SpeakingWaves, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -6475,8 +6598,12 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
       entry.src = src; entry.gain = gain; entry.an = an; rewire();
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' && r.peers.get(sid) === entry && r.roster.some(p => p.sid === sid))
-        setTimeout(() => { if (r.peers.get(sid) === entry && r.isHost) connectTo(sid).catch(() => {}); }, 1500);
+      if ((pc.connectionState === 'failed' || pc.connectionState === 'disconnected') &&
+          r.peers.get(sid) === entry && r.roster.some(p => p.sid === sid)) {
+        setTimeout(() => {
+          if (r.peers.get(sid) === entry && r.isHost) connectTo(sid).catch(() => {});
+        }, pc.connectionState === 'failed' ? 1500 : 3000);
+      }
     };
     rewire();
     await pc.setLocalDescription(await pc.createOffer());
@@ -6560,8 +6687,13 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
     try { r.ctx && r.ctx.close(); } catch (e) {} r.ctx = null; r.silent = null;
   };
 
-  const doJoin = (isRe) => {
+  const doJoin = async (isRe) => {
     r.joined = true;
+    try {
+      if (r.ctx && r.ctx.state !== 'running') await r.ctx.resume();
+    } catch (e) {
+      console.warn('AudioContext resume failed:', e);
+    }
     socket.emit('audio_join', { classId: cls._id }, async (res) => {
       if (!res || res.error) { cleanup(); setErr((res && res.error) || 'Could not join the class'); setPhase('error'); return; }
       r.ice = res.ice; r.isHost = res.isHost; r.sid = res.sid; r.hasTurn = !!res.hasTurn;
@@ -6573,6 +6705,16 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
   };
   const join = () => {
     if (!socket) { setErr('Not connected to the server. Refresh the page and try again.'); setPhase('error'); return; }
+
+    if (!r.audioResumeHandler) {
+      r.audioResumeHandler = () => {
+        if (r.ctx && r.ctx.state !== 'running') {
+          r.ctx.resume().catch(() => {});
+        }
+      };
+      document.addEventListener('visibilitychange', r.audioResumeHandler);
+      window.addEventListener('focus', r.audioResumeHandler);
+    }
     if (!window.RTCPeerConnection || !navigator.mediaDevices) { setErr('This browser does not support live audio. Use Chrome, Edge, Firefox or Safari.'); setPhase('error'); return; }
     setPhase('joining');
     try { if (!r.ctx) r.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (r.ctx.resume) r.ctx.resume(); } catch (e) {}
@@ -9143,11 +9285,11 @@ function ScheduleClass({
           const r = await fetch(BACKEND+'/api/ai/extract-pdf', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body:fd });
           const d = await r.json();
           if (d.text) { set('lesson_script', d.text); }
-          else set('lesson_script', 'Could not read file. Please paste notes manually.');
+          else set('lesson_script', 'Could not read file: ' + (d.error || 'no text found in it') + '. Please paste notes manually.');
         } catch(e) { set('lesson_script', 'Upload failed. Please paste notes manually.'); }
       } else {
         const reader = new FileReader();
-        reader.onload = ev => { set('lesson_script', ev.target.result?.substring(0, 4000) || ''); };
+        reader.onload = ev => { set('lesson_script', ev.target.result?.substring(0, 9000) || ''); };
         reader.readAsText(file);
       }
     }
@@ -10585,7 +10727,7 @@ function TutorApp() {
       opacity: .85,
       fontSize: 13
     }
-  }, "Tutor Dashboard \xB7 Peace Mindset \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2")), /*#__PURE__*/React.createElement("div", {
+  }, "Tutor Dashboard \xB7 Ken Exam Made Easy \xB7 Mufulira \uD83C\uDDFF\uD83C\uDDF2")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill,minmax(90px,1fr))',
@@ -10864,7 +11006,7 @@ function AdminApp() {
       opacity: .85,
       fontSize: 13
     }
-  }, "Peace Mindset Private School \xB7 Mufulira, Zambia \uD83C\uDDFF\uD83C\uDDF2"), pnd > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "KEN EXAM MADE EASY \xB7 Mufulira, Zambia \uD83C\uDDFF\uD83C\uDDF2"), pnd > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 13,
       background: 'rgba(220,38,38,0.3)',
@@ -11609,7 +11751,7 @@ function AppInner() {
       fontFamily: "'Playfair Display',serif",
       letterSpacing: '1px'
     }
-  }, "PEACE MINDSET"), /*#__PURE__*/React.createElement("div", {
+  }, "KEN EXAM MADE EASY"), /*#__PURE__*/React.createElement("div", {
     style: {
       color: 'rgba(255,255,255,0.65)',
       fontSize: 11,
@@ -11617,7 +11759,7 @@ function AppInner() {
       textTransform: 'uppercase',
       marginBottom: 28
     }
-  }, "PRIVATE SCHOOL \xB7 GCE ONLINE \xB7 MUFULIRA"), /*#__PURE__*/React.createElement("div", {
+  }, "GCE ONLINE TUITIONS \xB7 ZAMBIA"), /*#__PURE__*/React.createElement("div", {
     style: {
       width: 38,
       height: 38,
@@ -11768,7 +11910,7 @@ if (Notification.permission === 'default') {
     if (document.getElementById('pm-inst')) return;
     var b = document.createElement('div'); b.id = 'pm-inst';
     b.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:99998;background:#fff;color:#064d2c;border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.3);font:600 13px system-ui,sans-serif';
-    b.innerHTML = '<span style="flex:1">\uD83D\uDCF2 Install the Peace Mindset app</span><button id="pm-inst-go" style="background:#064d2c;color:#fff;border:0;border-radius:10px;padding:7px 12px;font-weight:700">Install</button><button id="pm-inst-x" style="background:none;border:0;font-size:16px;color:#666">\u2715</button>';
+    b.innerHTML = '<span style="flex:1">\uD83D\uDCF2 Install the Ken Exam Made Easy app</span><button id="pm-inst-go" style="background:#064d2c;color:#fff;border:0;border-radius:10px;padding:7px 12px;font-weight:700">Install</button><button id="pm-inst-x" style="background:none;border:0;font-size:16px;color:#666">\u2715</button>';
     document.body.appendChild(b);
     document.getElementById('pm-inst-go').onclick = function () { dp.prompt(); b.remove(); };
     document.getElementById('pm-inst-x').onclick = function () { try { localStorage.setItem('pm-inst-x', '1'); } catch (x) {} b.remove(); };

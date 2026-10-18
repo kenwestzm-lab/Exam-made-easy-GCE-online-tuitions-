@@ -4,3 +4,8 @@ node_modules
 *.log
 .vercel
 .env*
+
+*.bak*
+*.snip
+.env
+server/.env

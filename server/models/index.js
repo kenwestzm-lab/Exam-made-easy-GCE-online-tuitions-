@@ -170,6 +170,8 @@ const AIPaySchema = new Schema({
   admin_note: { type: String },
 }, { timestamps: true });
 
+LiveSchema.add({ lesson_image_url: String, lesson_image_explanation: String });
+
 module.exports = {
   User: mongoose.model('User', UserSchema),
   Subscription: mongoose.model('Subscription', SubSchema),

@@ -46,7 +46,7 @@ ${ctx ? 'LESSON CONTEXT:\n' + ctx.substring(0, 900) : ''}
 Subject: ${subject || 'General'} | Name: ${ch.name}`;
 }
 
-async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300, model = 'llama-3.3-70b-versatile') {
+async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300, model = 'openai/gpt-oss-120b') {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('NO_GROQ_KEY');
 
@@ -62,7 +62,7 @@ async function callGroq(systemPrompt, userMessage, history = [], maxTokens = 300
     body: JSON.stringify({
       model: model,
       messages,
-      max_tokens: maxTokens,
+      reasoning_effort: 'low', max_tokens: maxTokens + 1200,
       temperature: 0.75
     })
   });
@@ -131,7 +131,7 @@ async function callGemini(systemPrompt, userMessage, history = [], maxTokens = 3
     { role: 'user', parts: [{ text: systemPrompt + '\n\nStudent says: ' + userMessage }] }
   ];
 
-  for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash-8b']) {
+  for (const model of ['gemini-3.8-flash', 'gemini-3.8-flash']) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
       {
@@ -206,7 +206,7 @@ async function callMistral(systemPrompt, userMessage, history = [], maxTokens = 
 async function callAI(systemPrompt, userMessage, history = [], maxTokens = 300) {
   const providers = [
     { name: 'Groq 70B', fn: callGroq },
-    { name: 'Groq 8B', fn: (a, b, c, d) => callGroq(a, b, c, d, 'llama-3.1-8b-instant') },
+    { name: 'Groq 8B', fn: (a, b, c, d) => callGroq(a, b, c, d, 'openai/gpt-oss-20b') },
     { name: 'OpenRouter', fn: callOpenRouter },
     { name: 'Gemini', fn: callGemini },
     { name: 'Together', fn: callTogether },
@@ -383,7 +383,7 @@ async function callGeminiVision(prompt, base64Image, mimeType) {
     ]
   }];
 
-  for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash-8b']) {
+  for (const model of ['gemini-3.8-flash', 'gemini-3.8-flash']) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
       {
@@ -418,10 +418,22 @@ router.post('/extract-pdf', auth, upload.single('file'), async (req, res) => {
     const pdfParse = require('pdf-parse');
     const ext = req.file.originalname.split('.').pop().toLowerCase();
     if (ext !== 'pdf') {
-      return res.json({ text: req.file.buffer.toString('utf-8').substring(0, 4000) });
+      if (ext === 'docx') {
+        const o = await require('mammoth').extractRawText({ buffer: req.file.buffer });
+        const t = (o.value || '').trim().substring(0, 9000);
+        return res.json(t ? { text: t } : { text: '', error: 'No readable text found in the Word file' });
+      }
+      if (ext === 'doc') return res.status(400).json({ error: 'Old .doc files are not supported. Save it as .docx or PDF.' });
+      return res.json({ text: req.file.buffer.toString('utf-8').substring(0, 9000) });
     }
-    const data = await pdfParse(req.file.buffer);
-    const text = (data.text || '').trim().substring(0, 6000);
+    let data;
+    if (typeof pdfParse === 'function') data = await pdfParse(req.file.buffer);
+    else if (pdfParse && pdfParse.PDFParse) {
+      const pp = new pdfParse.PDFParse({ data: new Uint8Array(req.file.buffer) });
+      data = await pp.getText();
+      try { await pp.destroy(); } catch (e) {}
+    } else throw new Error('pdf-parse is not installed correctly');
+    const text = (data.text || '').trim().substring(0, 9000);
     if (!text) return res.json({ text: '', error: 'No readable text found in PDF' });
     res.json({ text });
   } catch (e) {
@@ -506,7 +518,7 @@ router.post('/build-lesson', auth, async (req, res) => {
   try {
     const { subject, topic, notes, character } = req.body;
     const ch = AI[character] || AI.ken;
-    const src = String(notes || '').trim().substring(0, 4000);
+    const src = String(notes || '').trim().substring(0, 9000);
     const tp = String(topic || '').trim();
     if (!src && !tp) return res.status(400).json({ error: 'Add a lesson topic or notes' });
     const prompt = `You are ${ch.name}, a warm, expert teacher at Peace Mindset Private School, Mufulira, Zambia, teaching Zambian students for ECZ and GCE exams.
@@ -625,3 +637,4 @@ router.post('/debug-chat', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+router.callAI = callAI;
