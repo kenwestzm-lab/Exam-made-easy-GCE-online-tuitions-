@@ -638,3 +638,4 @@ router.post('/debug-chat', async (req, res) => {
   }
 });
 router.callAI = callAI;
+router.callGeminiVision = callGeminiVision;

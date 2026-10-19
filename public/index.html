@@ -4500,7 +4500,7 @@ function AIClassRoom({classData,onExit,profile,socket}){
       b.heading&&e('h3',{style:{margin:'8px 0 4px',fontSize:26}},b.heading),
       (b.points||[]).map((p,i)=>e('div',{key:i,style:{margin:'8px 0',fontSize:18}},'✦ '+p)),
       b.formula&&e('div',{style:{font:'700 30px Georgia,serif',color:'#8a6508',background:'#fef9e7',borderRadius:10,padding:12,margin:'10px 0',textAlign:'center'}},b.formula),
-      dg(b.diagram),
+      dg(b.diagram),b.image&&e('img',{src:b.image,alt:'',style:{maxWidth:'100%',borderRadius:10,margin:'8px 0',display:'block'}}),b.table&&e('div',{style:{overflowX:'auto',margin:'10px 0'}},e('table',{style:{borderCollapse:'collapse',width:'100%',fontSize:17}},e('tbody',null,b.table.map((r,i)=>e('tr',{key:i,style:{background:i===0?'#edf7f2':'#fff'}},r.map((c,j)=>e(i===0?'th':'td',{key:j,style:{border:'1px solid #c9d6cf',padding:'8px 10px',textAlign:'center',fontWeight:i===0?700:400}},c))))))),
       (!b.points||!b.points.length)&&!b.formula&&!b.diagram&&b.text&&e('div',{style:{fontSize:18,lineHeight:1.6,marginTop:6}},b.text),
       imgs.map((u,i)=>e('img',{key:i,src:u,alt:'',style:{maxWidth:'100%',borderRadius:10,marginTop:8,display:'block'}}))));
   const nav=[['board','📋','Lesson'],['chat','💬','Chat'],['people','👥','People'+(people.length?'('+people.length+')':'')],['quiz','📝','Quiz'],['files','📁','Files']];
@@ -9288,6 +9288,7 @@ function ScheduleClass({
           if (d.text) { set('lesson_script', d.text); }
           else set('lesson_script', 'Could not read file: ' + (d.error || 'no text found in it') + '. Please paste notes manually.');
         } catch(e) { set('lesson_script', 'Upload failed. Please paste notes manually.'); }
+        if (ext === 'pdf') { try { set('lesson_diagram_status', 'Looking for diagrams...'); const fd3 = new FormData(); fd3.append('file', file); const r3 = await fetch(BACKEND+'/api/pdf/diagrams', { method:'POST', headers:{ Authorization:'Bearer '+tok() }, body:fd3 }); const d3 = await r3.json(); set('lesson_diagrams', d3.diagrams || []); set('lesson_tables', d3.tables || []); set('lesson_diagram_status', d3.error ? 'Diagrams: ' + d3.error : ((d3.diagrams || []).length + ' diagram(s) and ' + (d3.tables || []).length + ' table(s) found in the PDF')); } catch(e3) { set('lesson_diagram_status', 'Could not read diagrams (the lesson text still works)'); } }
       } else {
         const reader = new FileReader();
         reader.onload = ev => { set('lesson_script', ev.target.result?.substring(0, 9000) || ''); };
@@ -9319,7 +9320,7 @@ function ScheduleClass({
       setScanningPhoto(false);
     }
   })), /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: C.gr } }, "Reads and builds lesson automatically")))
-  , form.lesson_image_url && /*#__PURE__*/React.createElement("div", {
+  , form.lesson_diagram_status && React.createElement("div", { style: { fontSize: 11, color: C.gr, marginBottom: 8 } }, form.lesson_diagram_status), (form.lesson_tables && form.lesson_tables.length > 0) && React.createElement("div", { style: { marginBottom: 12, fontSize: 12 } }, form.lesson_tables.map((t, i) => React.createElement("span", { key: i, style: { display: 'inline-block', background: C.goldp, borderRadius: 8, padding: '4px 8px', marginRight: 6, marginBottom: 6 } }, 'Table (page ' + t.page + ', ' + t.rows.length + ' rows) ', React.createElement("button", { type: 'button', onClick: () => set('lesson_tables', form.lesson_tables.filter((_, j) => j !== i)), style: { border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' } }, '\u2715')))), (form.lesson_diagrams && form.lesson_diagrams.length > 0) && React.createElement("div", { style: { marginBottom: 12, background: C.goldp, borderRadius: 10, padding: 10 } }, React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, "Diagrams from the PDF (shown during class). Tap \u2715 to remove one."), React.createElement("div", { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }, form.lesson_diagrams.map((g, i) => React.createElement("div", { key: i, style: { position: 'relative' } }, React.createElement("img", { src: g.url, alt: '', style: { width: 72, height: 72, objectFit: 'cover', borderRadius: 8 } }), React.createElement("button", { type: 'button', onClick: () => set('lesson_diagrams', form.lesson_diagrams.filter((_, j) => j !== i)), style: { position: 'absolute', top: -6, right: -6, background: '#dc2626', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 11 } }, '\u2715'))))), form.lesson_image_url && /*#__PURE__*/React.createElement("div", {
     style: { marginBottom: 12, background: C.goldp, borderRadius: 10, padding: 10, display: 'flex', gap: 10, alignItems: 'flex-start' }
   }, /*#__PURE__*/React.createElement("img", { src: form.lesson_image_url, style: { width: 60, height: 60, objectFit: 'cover', borderRadius: 8, flexShrink: 0 } }),
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.dk, flex: 1 } },

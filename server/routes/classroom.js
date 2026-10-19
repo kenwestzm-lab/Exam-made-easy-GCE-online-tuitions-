@@ -73,12 +73,14 @@ Write plain speech in paragraphs separated by one blank line. 14 to 20 paragraph
   throw new Error('The AI could not build the lesson. Please try again in a moment.');
 }
 
-async function planBoards(texts, subject) {
+async function planBoards(texts, subject, pics = [], tbls = []) {
   const sys = `You plan whiteboard content for a spoken lesson. Subject: ${subject}. Reply with ONLY a JSON array of exactly ${texts.length} objects, one per numbered paragraph: {"heading":"2-5 words","points":["up to 3 short lines"],"formula":"optional plain text e.g. A = 1/2 x b x h","diagram":null or {"type":"triangle","base":12,"height":7} or {"type":"rectangle","width":8,"height":5} or {"type":"circle","radius":7}}. Add a diagram ONLY when the paragraph states those numbers. Never invent facts.`;
   try {
-    const raw = await ai.callAI(sys, texts.map((t, i) => `${i + 1}. ${t}`).join('\n'), [], 3500);
+    const extra = pics.length ? ' The teacher also has these pictures from the uploaded PDF: ' + pics.map((p, i) => (i + 1) + '. ' + (p.caption || 'a diagram')).join('; ') + '. In each object also add "image": the number of the ONE picture that belongs with that paragraph, or null. Use each picture at most once and only when the paragraph is clearly about it.' : '';
+    const extraT = tbls.length ? ' The teacher also has these tables from the PDF: ' + tbls.map((t, i) => (i + 1) + '. columns: ' + String((t.rows[0] || []).join(', ')).slice(0, 80)).join('; ') + '. In each object also add "table": the number of the ONE table that belongs with that paragraph, or null. Use each table at most once and only when the paragraph is clearly about it.' : '';
+    const raw = await ai.callAI(sys + extra + extraT, texts.map((t, i) => `${i + 1}. ${t}`).join('\n'), [], 3500);
     const m = String(raw).match(/\[[\s\S]*\]/); const arr = m ? JSON.parse(m[0]) : null;
-    if (Array.isArray(arr) && arr.length === texts.length) return arr.map((b, i) => cleanBoard(b, texts[i]));
+    if (Array.isArray(arr) && arr.length === texts.length) return arr.map((b, i) => { const o = cleanBoard(b, texts[i]); const k = Number(b && b.image); if (pics.length && Number.isInteger(k) && pics[k - 1] && pics[k - 1].url) o.image = pics[k - 1].url; const tk = Number(b && b.table); if (tbls.length && Number.isInteger(tk) && tbls[tk - 1] && tbls[tk - 1].rows) o.table = tbls[tk - 1].rows; return o; });
   } catch (e) { console.error('board plan:', e.message); }
   return texts.map(t => cleanBoard({}, t));
 }
@@ -131,7 +133,9 @@ router.post('/:id/run', auth, load, control, h(async (req, res) => {
   if (req.user.role === 'tutor' && !(await tutorFeeExpiry(req.user._id))) return res.status(402).json({ error: 'K20 monthly fee unpaid. Pay it to start classes.', code: 'TUTOR_FEE_REQUIRED' });
   const subject = String(req.body.subject || req.cls.title || 'General'), topic = String(req.body.topic || req.cls.lesson_topic || ''), notes = req.body.notes || req.cls.lesson_script || '';
   const texts = await buildLesson(subject, topic, notes);
-  const boards = await planBoards(texts, subject);
+  const pics = (req.cls.lesson_diagrams || []).filter(d => d && d.url).slice(0, 8).map(d => ({ url: d.url, caption: d.caption }));
+  const tbls = (req.cls.lesson_tables || []).filter(t => t && Array.isArray(t.rows)).slice(0, 6);
+  const boards = await planBoards(texts, subject, pics, tbls);
   await ClassSession.updateOne({ _id: s._id }, { chunks: texts.map((t, i) => ({ text: t, board: boards[i] })), status: 'live', index: 0, topic, subject, started_at: new Date(), ended_at: null, 'run.playing': true, 'run.done': false });
   const c = await LiveClass.findByIdAndUpdate(req.cls._id, { status: 'live' }, { new: true });
   io && io.emit('class_went_live', { _id: c._id, title: c.title, subject_id: c.subject_id, tutor_id: c.tutor_id });

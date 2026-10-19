@@ -60,6 +60,7 @@ app.use(['/api/ai/debug-test', '/api/ai/debug-chat'], (q, r) => r.status(404).js
 app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api/ai-tokens', require('./routes/ai_tokens'));
 app.use('/api/classroom', require('./routes/classroom'));
+app.use('/api/pdf', require('./routes/pdfdiagrams'));
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/users', require('./routes/user_prefs'));
 app.use('/api', require('./routes/live_classes'));
