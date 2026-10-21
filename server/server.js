@@ -61,6 +61,7 @@ app.use('/api/ai', require('./routes/ai_tutor'));
 app.use('/api/ai-tokens', require('./routes/ai_tokens'));
 app.use('/api/classroom', require('./routes/classroom'));
 app.use('/api/pdf', require('./routes/pdfdiagrams'));
+try { require('./routes/classroom').startScheduler(app); } catch (e) { console.error('scheduler failed to start:', e.message); }
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/users', require('./routes/user_prefs'));
 app.use('/api', require('./routes/live_classes'));

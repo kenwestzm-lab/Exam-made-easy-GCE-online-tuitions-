@@ -97,7 +97,7 @@ async function tick(io) {
   for (const s of live) {
     if (!s.run.section_end || Date.now() < +s.run.section_end) continue;
     if (s.index + 1 < s.chunks.length) await setSection(io, s, s.index + 1);
-    else { await ClassSession.updateOne({ _id: s._id }, { 'run.playing': false, 'run.done': true }); emitTo(io, s.class_id, 'cr_playback', { playing: false }); }
+    else { await ClassSession.updateOne({ _id: s._id }, { 'run.playing': false, 'run.done': true, 'run.done_at': new Date() }); emitTo(io, s.class_id, 'cr_playback', { playing: false }); }
   }
 }
 let timer = null;
@@ -127,22 +127,84 @@ router.get('/:id/state', auth, load, h(async (req, res) => {
 }));
 router.post('/:id/ping', auth, load, h(async (req, res) => res.json({ ok: true })));
 
-router.post('/:id/run', auth, load, control, h(async (req, res) => {
-  const io = req.app.get('io'); let s = await session(req.cls);
-  if (s.status === 'live' && s.run && s.run.section_end) return res.json({ ok: true, already: true });
-  if (req.user.role === 'tutor' && !(await tutorFeeExpiry(req.user._id))) return res.status(402).json({ error: 'K20 monthly fee unpaid. Pay it to start classes.', code: 'TUTOR_FEE_REQUIRED' });
-  const subject = String(req.body.subject || req.cls.title || 'General'), topic = String(req.body.topic || req.cls.lesson_topic || ''), notes = req.body.notes || req.cls.lesson_script || '';
+const starting = new Set();
+const TZ = process.env.CLASS_TZ_OFFSET || '+02:00';
+
+async function prepareLesson(cls, o = {}) {
+  const subject = String(o.subject || cls.subject_name || cls.lesson_topic || cls.title || 'General'), topic = String(o.topic || cls.lesson_topic || ''), notes = o.notes || cls.lesson_script || '';
   const texts = await buildLesson(subject, topic, notes);
-  const pics = (req.cls.lesson_diagrams || []).filter(d => d && d.url).slice(0, 8).map(d => ({ url: d.url, caption: d.caption }));
-  const tbls = (req.cls.lesson_tables || []).filter(t => t && Array.isArray(t.rows)).slice(0, 6);
+  const pics = (cls.lesson_diagrams || []).filter(d => d && d.url).slice(0, 8).map(d => ({ url: d.url, caption: d.caption }));
+  const tbls = (cls.lesson_tables || []).filter(t => t && Array.isArray(t.rows)).slice(0, 6);
   const boards = await planBoards(texts, subject, pics, tbls);
-  await ClassSession.updateOne({ _id: s._id }, { chunks: texts.map((t, i) => ({ text: t, board: boards[i] })), status: 'live', index: 0, topic, subject, started_at: new Date(), ended_at: null, 'run.playing': true, 'run.done': false });
-  const c = await LiveClass.findByIdAndUpdate(req.cls._id, { status: 'live' }, { new: true });
+  const s = await session(cls);
+  await ClassSession.updateOne({ _id: s._id }, { chunks: texts.map((t, i) => ({ text: t, board: boards[i] })), status: 'ready', index: 0, topic, subject });
+  return texts.length;
+}
+async function goLive(io, cls, auto) {
+  const s = await session(cls);
+  await ClassSession.updateOne({ _id: s._id }, { status: 'live', index: 0, started_at: new Date(), ended_at: null, 'run.playing': true, 'run.done': false, 'run.auto': !!auto, 'run.done_at': null });
+  const c = await LiveClass.findByIdAndUpdate(cls._id, { status: 'live' }, { new: true });
   io && io.emit('class_went_live', { _id: c._id, title: c.title, subject_id: c.subject_id, tutor_id: c.tutor_id });
   emitTo(io, c._id, 'class_status_change', { status: 'live', classId: String(c._id) });
-  s = await ClassSession.findById(s._id); await setSection(io, s, 0);
-  res.json({ ok: true, total: texts.length });
+  await setSection(io, await ClassSession.findById(s._id), 0);
+}
+
+router.post('/:id/run', auth, load, control, h(async (req, res) => {
+  const io = req.app.get('io'), id = String(req.cls._id), s = await session(req.cls);
+  if ((s.status === 'live' && s.run && s.run.section_end) || starting.has(id)) return res.json({ ok: true, already: true });
+  if (req.user.role === 'tutor' && !(await tutorFeeExpiry(req.user._id))) return res.status(402).json({ error: 'K20 monthly fee unpaid. Pay it to start classes.', code: 'TUTOR_FEE_REQUIRED' });
+  starting.add(id);
+  try {
+    if (!(s.status === 'ready' && s.chunks.length)) await prepareLesson(req.cls, { subject: req.body.subject, topic: req.body.topic, notes: req.body.notes });
+    await goLive(io, req.cls, false);
+  } finally { starting.delete(id); }
+  res.json({ ok: true });
 }));
+
+function startScheduler(app) {
+  if (startScheduler.on) return; startScheduler.on = true;
+  const sweep = async () => {
+    const io = app.get('io'), now = Date.now();
+    try {
+      const list = await LiveClass.find({ presenter_type: 'ai', status: { $in: ['upcoming', 'live'] } }).lean();
+      for (const c of list) {
+        if (c.auto_start !== true || !c.scheduled_date || !c.scheduled_time) continue;
+        const at = new Date(`${c.scheduled_date}T${String(c.scheduled_time).slice(0, 5)}:00${TZ}`).getTime(), id = String(c._id);
+        if (!Number.isFinite(at) || starting.has(id)) continue;
+        if (now < at - 10 * 60000 || now > at + (c.status === 'live' ? 120 : 30) * 60000) continue;
+        const cls = await LiveClass.findById(c._id); if (!cls) continue;
+        const s = await session(cls);
+        if (s.status === 'live' || s.status === 'ended') continue;
+        const tries = (s.run && s.run.tries) || 0;
+        if (tries >= 4 || (s.run && s.run.last_try && now - +s.run.last_try < 60000)) continue;
+        starting.add(id); let claimed = false;
+        try {
+          await ClassSession.updateOne({ _id: s._id }, { $inc: { 'run.tries': 1 }, $set: { 'run.last_try': new Date() } });
+          if (!(s.status === 'ready' && s.chunks.length)) { console.log('auto: preparing', cls.title); await prepareLesson(cls); }
+          if (now >= at || cls.status === 'live') {
+            if (!(await tutorFeeExpiry(cls.tutor_id))) { console.log('auto: tutor fee unpaid, not starting', cls.title); await ClassSession.updateOne({ _id: s._id }, { $set: { 'run.tries': 99, 'run.last_error': 'Tutor fee unpaid' } }); continue; }
+            if (cls.status === 'upcoming') { claimed = !!(await LiveClass.findOneAndUpdate({ _id: cls._id, status: 'upcoming' }, { status: 'live' })); if (!claimed) continue; }
+            console.log('auto: starting', cls.title); await goLive(io, cls, true);
+          }
+        } catch (e) {
+          console.error('auto-start failed:', e.message);
+          await ClassSession.updateOne({ _id: s._id }, { $set: { 'run.last_error': String(e.message).slice(0, 200) } });
+          if (claimed) await LiveClass.updateOne({ _id: cls._id }, { status: 'upcoming' });
+        } finally { starting.delete(id); }
+      }
+      const fin = await ClassSession.find({ status: 'live', 'run.auto': true, 'run.done': true, 'run.done_at': { $lt: new Date(now - 10 * 60000) } });
+      for (const s of fin) {
+        await ClassSession.updateOne({ _id: s._id }, { status: 'ended', ended_at: new Date(), 'run.playing': false });
+        await LiveClass.findByIdAndUpdate(s.class_id, { status: 'ended' });
+        emitTo(io, s.class_id, 'class_status_change', { status: 'ended', classId: String(s.class_id) });
+        console.log('auto: ended class', String(s.class_id));
+      }
+    } catch (e) { console.error('scheduler:', e.message); }
+  };
+  setInterval(sweep, 20000);
+  console.log('⏰ Class scheduler running (times are read as UTC' + TZ + ')');
+}
+router.startScheduler = startScheduler;
 
 router.post('/:id/playback', auth, load, control, h(async (req, res) => {
   const io = req.app.get('io'), s = await session(req.cls), a = req.body.action;
@@ -221,11 +283,25 @@ router.post('/:id/end', auth, load, control, h(async (req, res) => {
 
 router.get('/:id/report', auth, load, h(async (req, res) => {
   const s = (await session(req.cls)).toObject(), me = String(req.user._id);
-  if (!req.isController) return res.json({ status: s.status, attended: s.attendance.some(a => a.user_id === me), questions: s.questions.filter(q => q.user_id === me),
-    quizzes: s.quizzes.map(q => q.results.find(r => r.user_id === me)).filter(Boolean).map(({ score, total }) => ({ score, total })) });
-  res.json({ status: s.status, started_at: s.started_at, ended_at: s.ended_at, attendance: s.attendance, questions: s.questions, hands: s.hands.length,
-    quizzes: s.quizzes.map(q => ({ _id: q._id, taken: q.results.length, average: q.results.length ? Math.round(q.results.reduce((a, r) => a + r.score / (r.total || 1), 0) / q.results.length * 100) : null,
-      results: q.results.map(({ user_id, name, score, total }) => ({ user_id, name, score, total })) })) });
+  const secName = i => { const c = s.chunks[i] || {}; return String((c.board && c.board.heading) || String(c.text || '').split(/\s+/).slice(0, 5).join(' ') || ('Section ' + (i + 1))).slice(0, 60); };
+  if (!req.isController) return res.json({
+    status: s.status, attended: s.attendance.some(a => a.user_id === me),
+    questions: s.questions.filter(q => q.user_id === me).map(q => ({ text: q.text, answer: q.answer, section: secName(q.at_index) })),
+    quizzes: s.quizzes.map((q, i) => { const r = (q.results || []).find(x => x.user_id === me); return r ? { n: i + 1, score: r.score, total: r.total } : null; }).filter(Boolean) });
+  const perSection = {};
+  s.questions.forEach(q => { const k = secName(q.at_index); perSection[k] = (perSection[k] || 0) + 1; });
+  res.json({
+    status: s.status, title: req.cls.title, started_at: s.started_at, ended_at: s.ended_at, hands: s.hands.length, total_sections: s.chunks.length,
+    attendance: s.attendance.map(a => ({ _id: a.user_id, name: a.name, joined_at: a.joined_at, minutes: Math.max(0, Math.round((new Date(a.last_seen || a.joined_at) - new Date(a.joined_at)) / 60000)) })),
+    questions: s.questions.map(q => ({ name: q.name, text: q.text, answer: q.answer, section: secName(q.at_index) })),
+    hard_sections: Object.entries(perSection).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([section, count]) => ({ section, count })),
+    quizzes: s.quizzes.map((q, qi) => {
+      const rs = q.results || [];
+      return { n: qi + 1, taken: rs.length,
+        average: rs.length ? Math.round(rs.reduce((acc, r) => acc + r.score / (r.total || 1), 0) / rs.length * 100) : null,
+        results: rs.map(({ user_id, name, score, total }) => ({ user_id, name, score, total })),
+        hardest: (q.questions || []).map((qq, i) => ({ question: String(qq.question).slice(0, 100), correct_pct: rs.length ? Math.round(rs.filter(r => String((r.answers || {})[i] || '').trim().charAt(0).toUpperCase() === qq.correct_answer).length / rs.length * 100) : null })).sort((x, y) => (x.correct_pct === null ? 101 : x.correct_pct) - (y.correct_pct === null ? 101 : y.correct_pct)).slice(0, 3) };
+    }) });
 }));
 
 module.exports = router;

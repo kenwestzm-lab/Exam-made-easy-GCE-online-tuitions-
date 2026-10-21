@@ -4368,7 +4368,7 @@ function ChatPanel({msgs,input,setInput,onSend,chAvatar}){
 
 function QuizPanel({quiz,setQuiz,socket,classId,isPresenter,character}){
   const [answers,setAnswers]=useState({});const [submitted,setSubmitted]=useState(false);const [score,setScore]=useState(null);
-  const gen=async()=>{try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:'General',topic:'lesson',count:5,type:'mcq',character:character||'ken'},tok());if(qr?.questions)setQuiz({questions:qr.questions,pending:true});}catch(e){}};
+  const gen=async()=>{try{const qr=await apiFetch('POST','/ai/generate-questions',{subject:window.__crSubject||'General',topic:window.__crTopic||window.__crSubject||'lesson',count:5,type:'mcq',character:character||'ken'},tok());if(qr?.questions)setQuiz({questions:qr.questions,pending:true});}catch(e){}};
   const post=async()=>{if(!quiz)return;try{const x=await apiFetch('POST','/classroom/'+classId+'/quiz',{questions:quiz.questions},tok());if(x&&x.quizId)setQuiz(p=>({...p,pending:false,quizId:x.quizId}));else alert((x&&x.error)||'Could not post the quiz');}catch(e){alert(e.message||'Could not post the quiz');}};
   const submit=async()=>{try{const x=await apiFetch('POST','/classroom/'+classId+'/quiz/'+quiz.quizId+'/answer',{answers},tok());setScore(x.score);setSubmitted(true);setQuiz(p=>({...p,questions:p.questions.map((q,i)=>({...q,correct_answer:x.review[i].correct,explanation:x.review[i].explanation}))}));}catch(e){alert(e.message||'Could not submit');}};
   return React.createElement('div',{style:{height:'100%',overflowY:'auto',padding:14}},
@@ -4447,10 +4447,10 @@ function ClassLobby({cls,profile,onJoin,onStart,onBack}){
 function AIClassRoom({classData,onExit,profile,socket}){
   const e=React.createElement,id=classData._id;
   const isP=(profile?.role==='admin'||(profile?.role==='tutor'&&String(classData?.tutor_id)===String(profile?._id)));
-  const subN=()=>classData?.subject_name||SUBJECTS.find(s=>s.id===Number(classData?.subject_id))?.n||'General';
+  const subN=()=>classData?.subject_name||SUBJECTS.find(s=>s.id===Number(classData?.subject_id))?.n||'General';window.__crSubject=subN();window.__crTopic=classData?.lesson_topic||'';
   const G={bg:'linear-gradient(160deg,#0a0a0a,#1a1200,#0d0a00)',gold:'#f59e0b',goldb:'rgba(245,158,11,0.3)',white:'#fff',grey:'rgba(255,255,255,0.55)',red:'#ef4444'};
   const [board,setBoard]=useState(null),[imgs,setImgs]=useState([]),[prog,setProg]=useState(0),[playing,setPlaying]=useState(true),[ended,setEnded]=useState(false),[note,setNote]=useState(isP?'Building your lesson...':'Joining the class...'),[msgs,setMsgs]=useState([]),[people,setPeople]=useState([]),[input,setInput]=useState(''),[panel,setPanel]=useState('board'),[quiz,setQuiz]=useState(null),[spk,setSpk]=useState(false),[muted,setMuted]=useState(false),[up,setUp]=useState(false);
-  const seen=useRef(''),mu=useRef(false);mu.current=muted;
+  const seen=useRef(''),mu=useRef(false);mu.current=muted;const [rep,setRep]=useState(null),[res,setRes]=useState(null);
   const addMsg=useCallback((role,text,meta={})=>setMsgs(p=>[...p.slice(-100),{id:Date.now()+Math.random(),role,text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),...meta}]),[]);
   const speak=useCallback(t=>{if(mu.current||!t)return;try{ZambianVoice.stop();setSpk(true);ZambianVoice.speak(t,'male',null,()=>setSpk(false));}catch(x){setSpk(false);}},[]);
   const mergeImgs=useCallback(u=>setImgs(p=>{const n=[...p];(u||[]).forEach(x=>{if(x&&!n.includes(x))n.push(x);});return n.length===p.length?p:n;}),[]);
@@ -4474,6 +4474,8 @@ function AIClassRoom({classData,onExit,profile,socket}){
     Object.entries(H).forEach(([k,f])=>socket.on(k,f));
     return()=>{socket.off('connect',join);Object.keys(H).forEach(k=>socket.off(k));};
   },[socket,id]);
+  useEffect(()=>{if(!isP||!(panel==='report'||ended))return;let dead=false;const go=()=>Promise.resolve(apiFetch('GET','/classroom/'+id+'/report',null,tok())).then(x=>{if(!dead&&x&&!x.error)setRep(x);}).catch(()=>{});go();const t=setInterval(go,8000);return()=>{dead=true;clearInterval(t);};},[panel,ended]);
+  useEffect(()=>{if(!ended||isP)return;Promise.all([apiFetch('GET','/classroom/'+id+'/state',null,tok()),apiFetch('GET','/classroom/'+id+'/report',null,tok())]).then(a=>setRes({notes:(a[0]&&a[0].session&&a[0].session.chunks)||[],rep:a[1]})).catch(()=>setRes({notes:[],rep:null}));},[ended]);
   const send=async()=>{const q=input.trim();if(!q)return;setInput('');
     if(isP){if(socket)socket.emit('class_announcement',{classId:id,text:q,type:'info'});return;}
     addMsg('me',q,{name:profile?.name});
@@ -4489,7 +4491,26 @@ function AIClassRoom({classData,onExit,profile,socket}){
     else if(d.type==='rectangle')k=[e('rect',{key:1,x:35,y:25,width:130,height:85,...sp}),e('text',{key:2,x:95,y:130,...tx},d.width),e('text',{key:3,x:172,y:72,...tx},d.height)];
     else if(d.type==='circle')k=[e('circle',{key:1,cx:100,cy:70,r:52,...sp}),e('path',{key:2,d:'M100 70H152',...ds}),e('text',{key:3,x:112,y:64,...tx},'r = '+d.radius)];
     return k&&e('svg',{viewBox:'0 0 200 140',style:{maxWidth:'min(100%,460px)',width:'100%',display:'block',margin:'8px auto'}},k);};
-  if(ended)return e('div',{style:{minHeight:'100vh',background:G.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:G.white,padding:20,textAlign:'center'}},e('div',{style:{fontSize:60}},'🎓'),e('h2',{style:{color:G.gold,margin:'8px 0'}},'Class Completed!'),e('p',{style:{color:G.grey,marginBottom:20}},'Well done for attending today.'),e('button',{onClick:onExit,style:{background:G.gold,color:'#000',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:700,cursor:'pointer'}},'← Back to Classes'));
+  const bx={background:'rgba(255,255,255,0.06)',border:'1px solid '+G.goldb,borderRadius:12,padding:12,marginTop:12},stt=t=>e('div',{style:{color:G.gold,fontWeight:700,fontSize:13,marginBottom:6}},t);
+  const csv=()=>{const r=rep;if(!r)return;const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';const L=[['Class',r.title||""],['Status',r.status],[],['Attendance'],['Name','Minutes in class']].concat(r.attendance.map(a=>[a.name,a.minutes])).concat([[],['Quick check results'],['Quick check','Student','Score','Out of']]).concat(r.quizzes.reduce((o,z)=>o.concat(z.results.map(x=>[z.n,x.name,x.score,x.total])),[])).concat([[],['Questions asked'],['Student','Section','Question']]).concat(r.questions.map(x=>[x.name,x.section,x.text]));const blob=new Blob([L.map(l=>l.map(q).join(',')).join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(r.title||'class')+'-report.csv';a.click();};
+  const RepPanel=()=>{const r=rep;if(!r)return e('div',{style:{padding:16,color:G.grey}},'Loading report...');
+    const card=(t,v)=>e('div',{key:t,style:{flex:1,minWidth:90,background:'rgba(255,255,255,0.06)',border:'1px solid '+G.goldb,borderRadius:10,padding:10,textAlign:'center'}},e('div',{style:{fontSize:22,fontWeight:700,color:G.gold}},v),e('div',{style:{fontSize:11,color:G.grey}},t));
+    const row=(x,y,k)=>e('div',{key:k,style:{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:'1px solid rgba(255,255,255,0.08)',fontSize:12}},e('span',null,x),e('span',{style:{color:G.grey}},y));
+    const none=t=>e('div',{style:{fontSize:12,color:G.grey}},t),last=r.quizzes.length?r.quizzes[r.quizzes.length-1]:null;
+    return e('div',{style:{flex:1,overflow:'auto',padding:14}},
+      e('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},card('Students joined',r.attendance.length),card('Questions',r.questions.length),card('Hands raised',r.hands),card('Last quiz avg',last&&last.average!==null?last.average+'%':'-')),
+      e('div',{style:bx},stt('Who attended'),r.attendance.length?r.attendance.map((a,i)=>row(a.name,a.minutes+' min',i)):none('Nobody has joined yet')),
+      e('div',{style:bx},stt('Topics students asked about most'),r.hard_sections.length?r.hard_sections.map((x,i)=>row(x.section,x.count+' question(s)',i)):none('No questions yet')),
+      e('div',{style:bx},stt('Quick check results'),r.quizzes.length?r.quizzes.map(q=>e('div',{key:q.n,style:{marginBottom:10}},e('div',{style:{fontSize:12,fontWeight:700,marginBottom:4}},'Quick check '+q.n+': '+q.taken+' answered'+(q.average!==null?', average '+q.average+'%':'')),q.results.map((x,i)=>row(x.name,x.score+'/'+x.total,i)),(q.taken>0&&q.hardest.length>0)&&e('div',{style:{fontSize:11,color:G.grey,marginTop:4}},'Hardest: '+q.hardest.map(x=>x.question+' ('+x.correct_pct+'% correct)').join(' | ')))):none('No quick checks yet. Use the Quiz tab.')),
+      e('div',{style:bx},stt('Questions asked'),r.questions.length?r.questions.map((x,i)=>e('div',{key:i,style:{fontSize:12,padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.08)'}},e('b',null,x.name+': '),x.text,e('div',{style:{color:G.grey,marginTop:2}},'In: '+x.section))):none('No questions yet')),
+      e('button',{onClick:csv,style:{marginTop:14,background:G.gold,color:'#000',border:'none',borderRadius:10,padding:'10px 16px',fontWeight:700,cursor:'pointer'}},'Download report (CSV)'));};
+  if(ended)return e('div',{style:{minHeight:'100vh',background:G.bg,color:G.white,display:'flex',flexDirection:'column'}},
+    e('div',{style:{padding:'14px 12px',textAlign:'center',borderBottom:'1px solid '+G.goldb}},e('div',{style:{fontSize:40}},'🎓'),e('h2',{style:{color:G.gold,margin:'4px 0'}},'Class Completed!')),
+    isP?RepPanel():e('div',{style:{flex:1,overflow:'auto',padding:14}},!res?e('div',{style:{color:G.grey}},'Loading your results...'):[
+      e('div',{key:'a',style:bx},stt('Your results'),(res.rep&&res.rep.quizzes&&res.rep.quizzes.length)?res.rep.quizzes.map(q=>e('div',{key:q.n,style:{fontSize:14}},'Quick check '+q.n+': '+q.score+' out of '+q.total)):e('div',{style:{fontSize:13,color:G.grey}},'You did not take a quick check in this class.')),
+      (res.rep&&res.rep.questions&&res.rep.questions.length>0)&&e('div',{key:'q',style:bx},stt('Your questions and the answers'),res.rep.questions.map((x,i)=>e('div',{key:i,style:{fontSize:13,padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.08)'}},e('b',null,x.text),e('div',{style:{color:G.grey,marginTop:2}},x.answer||'No answer was saved')))),
+      e('div',{key:'n',style:bx},stt('Lesson notes'),(res.notes||[]).map((c,i)=>e('div',{key:i,style:{margin:'8px 0',fontSize:13,lineHeight:1.6}},c.board&&c.board.heading&&e('div',{style:{fontWeight:700,color:G.gold}},c.board.heading),c.text,c.board&&c.board.image&&e('img',{src:c.board.image,alt:"",style:{maxWidth:"100%",borderRadius:8,display:"block",marginTop:6}}))))]),
+    e('div',{style:{padding:12}},e('button',{onClick:onExit,style:{background:G.gold,color:'#000',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:700,cursor:'pointer'}},'← Back to Classes')));
   const b=board||{},bd=(x)=>({background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',color:G.white,borderRadius:8,padding:'5px 10px',cursor:'pointer',fontSize:12,...x});
   const boardEl=e('div',{style:{flex:1,minHeight:0,overflow:'auto',padding:'8px 10px'}},
     e('div',{style:{display:'flex',gap:10,alignItems:'center',marginBottom:8}},
@@ -4503,7 +4524,7 @@ function AIClassRoom({classData,onExit,profile,socket}){
       dg(b.diagram),b.image&&e('img',{src:b.image,alt:'',style:{maxWidth:'100%',borderRadius:10,margin:'8px 0',display:'block'}}),b.table&&e('div',{style:{overflowX:'auto',margin:'10px 0'}},e('table',{style:{borderCollapse:'collapse',width:'100%',fontSize:17}},e('tbody',null,b.table.map((r,i)=>e('tr',{key:i,style:{background:i===0?'#edf7f2':'#fff'}},r.map((c,j)=>e(i===0?'th':'td',{key:j,style:{border:'1px solid #c9d6cf',padding:'8px 10px',textAlign:'center',fontWeight:i===0?700:400}},c))))))),
       (!b.points||!b.points.length)&&!b.formula&&!b.diagram&&b.text&&e('div',{style:{fontSize:18,lineHeight:1.6,marginTop:6}},b.text),
       imgs.map((u,i)=>e('img',{key:i,src:u,alt:'',style:{maxWidth:'100%',borderRadius:10,marginTop:8,display:'block'}}))));
-  const nav=[['board','📋','Lesson'],['chat','💬','Chat'],['people','👥','People'+(people.length?'('+people.length+')':'')],['quiz','📝','Quiz'],['files','📁','Files']];
+  const nav=[['board','📋','Lesson'],['chat','💬','Chat'],['people','👥','People'+(people.length?'('+people.length+')':'')],['quiz','📝','Quiz'],['files','📁','Files']].concat(isP?[['report','📊','Report']]:[]);
   return e('div',{style:{height:'100dvh',minHeight:'100vh',maxHeight:'100dvh',display:'flex',flexDirection:'column',background:G.bg,color:G.white,overflow:'hidden'}},
     e('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(0,0,0,0.7)',borderBottom:'1px solid '+G.goldb,flexShrink:0}},
       e('button',{onClick:()=>{try{ZambianVoice.stop();}catch(x){}onExit();},style:bd({})},'← Back'),
@@ -4518,7 +4539,7 @@ function AIClassRoom({classData,onExit,profile,socket}){
       panel==='chat'&&React.createElement(ChatPanel,{msgs,input,setInput,onSend:send,chAvatar:'👨‍🏫'}),
       panel==='people'&&React.createElement(ParticipantsPanel,{students:people,hands:[],isPresenter:isP,onCallStudent:()=>{}}),
       panel==='quiz'&&React.createElement(QuizPanel,{quiz,setQuiz,socket,classId:id,isPresenter:isP,character:'ken'}),
-      panel==='files'&&React.createElement(MaterialsPanel,null)),
+      panel==='files'&&React.createElement(MaterialsPanel,null),panel==='report'&&isP&&RepPanel()),
     e('div',{style:{padding:'8px 10px',background:'rgba(0,0,0,0.7)',borderTop:'1px solid '+G.goldb,display:'flex',gap:6,alignItems:'center',flexShrink:0}},
       e('input',{value:input,onChange:ev=>setInput(ev.target.value),onKeyDown:ev=>ev.key==='Enter'&&send(),placeholder:isP?'Send an announcement...':'Ask Mr Ken a question...',style:{flex:1,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,padding:'9px 13px',color:G.white,fontSize:13,outline:'none'}}),
       e('button',{onClick:send,style:{background:G.gold,border:'none',borderRadius:10,padding:'9px 16px',cursor:'pointer',color:'#000',fontWeight:700}},'➤'),

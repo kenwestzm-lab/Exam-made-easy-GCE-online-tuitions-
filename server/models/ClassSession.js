@@ -6,7 +6,7 @@ const S = new mongoose.Schema({
   topic: String, subject: String,
   chunks: [{ text: String, board: M }],
   index: { type: Number, default: 0 },
-  run: { playing: { type: Boolean, default: false }, done: { type: Boolean, default: false }, section_end: Date },
+  run: { playing: { type: Boolean, default: false }, done: { type: Boolean, default: false }, section_end: Date, auto: { type: Boolean, default: false }, done_at: Date, tries: { type: Number, default: 0 }, last_try: Date, last_error: String },
   started_at: Date, ended_at: Date, board_state: M,
   images: [{ url: String, caption: String, at: Date }],
   attendance: [{ user_id: String, name: String, joined_at: Date, last_seen: Date }],
