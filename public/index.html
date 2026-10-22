@@ -4410,6 +4410,39 @@ function MaterialsPanel(){
   );
 }
 
+function LessonEditor({cls}){
+  const e=React.createElement;
+  const [open,setOpen]=useState(false),[list,setList]=useState(null),[busy,setBusy]=useState(''),[msg,setMsg]=useState('');
+  const subj=()=>cls.subject_name||SUBJECTS.find(s=>s.id===Number(cls.subject_id))?.n||'General';
+  const load=async()=>{setBusy('Loading the lesson...');try{const x=await apiFetch('GET','/classroom/'+cls._id+'/state',null,tok());if(x&&x.error)throw new Error(x.error);setList(((x.session&&x.session.chunks)||[]).map(c=>({text:c.text||'',board:c.board||{}})));setMsg(x.session&&x.session.status==='live'?'The class is already live, so it cannot be edited.':'');}catch(er){setMsg(er.message||'Could not load the lesson');}setBusy('');};
+  const build=async()=>{if(list&&list.length&&!window.confirm('Replace the current lesson with a new AI version? Your edits will be lost.'))return;setBusy('Building the lesson with AI. This can take up to a minute...');setMsg('');try{const x=await apiFetch('POST','/classroom/'+cls._id+'/prepare',{subject:subj(),topic:cls.lesson_topic||'',notes:cls.lesson_script||''},tok());if(x&&x.error)throw new Error(x.error);await load();setMsg('The AI built the lesson. Review it, then tap Save.');}catch(er){setMsg(er.message||'Could not build the lesson');setBusy('');}};
+  const save=async()=>{setBusy('Saving...');setMsg('');try{const chunks=list.map(c=>({text:c.text,board:{...c.board,points:(c.board.points||[]).map(s=>String(s).trim()).filter(Boolean)}}));const x=await apiFetch('PUT','/classroom/'+cls._id+'/script',{chunks},tok());if(x&&x.error)throw new Error(x.error);setMsg('Saved '+x.total+' sections. The class will teach this lesson when it starts.');}catch(er){setMsg(er.message||'Could not save');}setBusy('');};
+  const up=(i,f)=>setList(l=>l.map((c,j)=>j===i?f(c):c));
+  const mv=(i,d)=>setList(l=>{const n=[...l],k=i+d;if(k<0||k>=n.length)return l;[n[i],n[k]]=[n[k],n[i]];return n;});
+  const del=i=>setList(l=>l.filter((_,j)=>j!==i));
+  const add=()=>setList(l=>[...(l||[]),{text:'',board:{}}]);
+  const I={width:'100%',border:'1px solid #c9d6cf',borderRadius:8,padding:8,fontSize:13,marginTop:4,fontFamily:'inherit',boxSizing:'border-box',color:'#111827',background:'#fff'};
+  const B=(bg,c)=>({background:bg,color:c||'#fff',border:'none',borderRadius:8,padding:'8px 12px',fontWeight:700,cursor:'pointer',fontSize:12});
+  const L=t=>e('div',{style:{fontSize:11,color:'#6b7280',marginTop:8}},t);
+  const bd=(i,k,v)=>up(i,x=>({...x,board:{...x.board,[k]:v}}));
+  const btn=e('button',{onClick:()=>{setOpen(true);if(!list)load();},style:{background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'#fff',borderRadius:14,padding:'12px 0',fontWeight:700,cursor:'pointer',fontSize:14,width:'100%',maxWidth:300}},'📝 Review / edit lesson');
+  if(!open)return btn;
+  return e('div',{style:{width:'100%',display:'flex',justifyContent:'center'}},btn,e('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:9999,overflow:'auto',padding:12}},e('div',{style:{background:'#fff',color:'#111827',borderRadius:14,maxWidth:640,margin:'0 auto',padding:14}},
+    e('div',{style:{display:'flex',alignItems:'center',gap:8}},e('h3',{style:{flex:1,margin:0}},'Lesson: '+(cls.title||'')),e('button',{onClick:()=>setOpen(false),style:B('#6b7280')},'Close')),
+    busy&&e('div',{style:{marginTop:8,fontSize:13,color:'#0a6e3f'}},busy),
+    msg&&e('div',{style:{marginTop:8,fontSize:13,color:/saved|built/i.test(msg)?'#0a6e3f':'#b91c1c'}},msg),
+    list&&list.length===0&&!busy&&e('div',{style:{marginTop:10,fontSize:13,color:'#6b7280'}},'No lesson yet. Tap "Build with AI", or add sections yourself.'),
+    (list||[]).map((c,i)=>e('div',{key:i,style:{border:'1px solid #dde8e3',borderRadius:10,padding:10,marginTop:10}},
+      e('div',{style:{display:'flex',gap:6,alignItems:'center'}},e('b',{style:{flex:1,fontSize:13}},'Section '+(i+1)+' of '+list.length),e('button',{onClick:()=>mv(i,-1),style:B('#edf7f2','#111827')},'▲'),e('button',{onClick:()=>mv(i,1),style:B('#edf7f2','#111827')},'▼'),e('button',{onClick:()=>del(i),style:B('#dc2626')},'✕')),
+      L('What Mr Ken says'),e('textarea',{rows:4,value:c.text,onChange:ev=>up(i,x=>({...x,text:ev.target.value})),style:I}),
+      L('Board heading'),e('input',{value:c.board.heading||'',onChange:ev=>bd(i,'heading',ev.target.value),style:I}),
+      L('Board lines (one per line, up to 3)'),e('textarea',{rows:3,value:(c.board.points||[]).join('\n'),onChange:ev=>bd(i,'points',ev.target.value.split('\n').slice(0,3)),style:I}),
+      L('Formula (optional)'),e('input',{value:c.board.formula||'',onChange:ev=>bd(i,'formula',ev.target.value),style:I}),
+      (c.board.image||c.board.table||c.board.diagram)&&e('div',{style:{fontSize:11,color:'#6b7280',marginTop:8}},[c.board.image&&'Picture attached',c.board.table&&'Table attached',c.board.diagram&&('Diagram: '+c.board.diagram.type)].filter(Boolean).join(' · ')+'  ',e('button',{onClick:()=>up(i,x=>({...x,board:{...x.board,image:undefined,table:undefined,diagram:null}})),style:{border:'none',background:'none',color:'#dc2626',cursor:'pointer',fontSize:11}},'remove'))
+    )),
+    e('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginTop:14}},e('button',{onClick:add,disabled:!!busy,style:B('#edf7f2','#111827')},'＋ Add section'),e('button',{onClick:build,disabled:!!busy,style:B('#c9930a')},'🤖 Build with AI'),e('button',{onClick:save,disabled:!!busy||!list||!list.length,style:B('#0a6e3f')},'💾 Save lesson'))
+  )));
+}
 function ClassLobby({cls,profile,onJoin,onStart,onBack}){
   const [countdown,setCountdown]=useState('--:--');
   const isPresenter=(profile?.role==='admin'||(profile?.role==='tutor'&&String(cls?.tutor_id)===String(profile?._id)));
@@ -4438,7 +4471,7 @@ function ClassLobby({cls,profile,onJoin,onStart,onBack}){
         [['Date',cls.scheduled_date||'TBD'],['Time',cls.scheduled_time||'TBD'],['Teacher',ch?ch.name:'Your Tutor'],['Type',cls.class_type||'Live']].map(([label,val])=>React.createElement('div',{key:label,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}},React.createElement('span',{style:{color:LC.grey}},label),React.createElement('span',{style:{color:LC.white,fontWeight:600}},val)))
       ),
       cls.status==='live'&&React.createElement('button',{onClick:onJoin,style:{background:'linear-gradient(135deg,'+LC.gold+',#f0b429)',color:'#000',border:'none',borderRadius:14,padding:'14px 0',fontWeight:700,cursor:'pointer',fontSize:16,width:'100%',maxWidth:300}},'Join Class Now'),
-      isPresenter&&cls.status==='upcoming'&&React.createElement('button',{onClick:onStart,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:LC.red,borderRadius:14,padding:'12px 0',fontWeight:700,cursor:'pointer',fontSize:14,width:'100%',maxWidth:300}},'Start Class Now'),
+      isPresenter&&cls.presenter_type==='ai'&&cls.status==='upcoming'&&React.createElement(LessonEditor,{cls}),isPresenter&&cls.status==='upcoming'&&React.createElement('button',{onClick:onStart,style:{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:LC.red,borderRadius:14,padding:'12px 0',fontWeight:700,cursor:'pointer',fontSize:14,width:'100%',maxWidth:300}},'Start Class Now'),
       cls.meet_link&&cls.presenter_type==='human'&&React.createElement('a',{href:cls.meet_link,target:'_blank',rel:'noreferrer',style:{background:'rgba(59,130,246,0.15)',border:'1px solid #3b82f6',color:'#3b82f6',borderRadius:14,padding:'12px 0',fontWeight:700,fontSize:14,textDecoration:'none',width:'100%',maxWidth:300,textAlign:'center',display:'block'}},'Join Video Call')
     )
   );

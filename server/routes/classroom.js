@@ -206,6 +206,29 @@ function startScheduler(app) {
 }
 router.startScheduler = startScheduler;
 
+const keepExtras = (src, o) => {
+  src = src && typeof src === 'object' ? src : {};
+  if (typeof src.image === 'string' && /^https:\/\/\S+$/i.test(src.image) && src.image.length < 600) o.image = src.image;
+  if (Array.isArray(src.table)) o.table = src.table.slice(0, 12).map(r => (Array.isArray(r) ? r : []).slice(0, 8).map(c => String(c == null ? '' : c).slice(0, 40)));
+  return o;
+};
+router.post('/:id/prepare', auth, load, control, h(async (req, res) => {
+  const id = String(req.cls._id), s = await session(req.cls);
+  if (s.status === 'live' || starting.has(id)) return res.status(409).json({ error: 'The class is already live or being prepared' });
+  starting.add(id);
+  try { await prepareLesson(req.cls, { subject: req.body.subject, topic: req.body.topic, notes: req.body.notes }); }
+  finally { starting.delete(id); }
+  res.json({ ok: true });
+}));
+router.put('/:id/script', auth, load, control, h(async (req, res) => {
+  const s = await session(req.cls);
+  if (s.status === 'live') return res.status(409).json({ error: 'The class is live. End it before editing the lesson.' });
+  const chunks = (req.body.chunks || []).slice(0, 40).map(c => ({ text: String(c.text || '').trim().slice(0, 900), board: keepExtras(c.board, cleanBoard(c.board, c.text || '')) })).filter(c => c.text.length >= 5);
+  if (!chunks.length) return res.status(400).json({ error: 'The lesson needs at least one section with some text' });
+  await ClassSession.updateOne({ _id: s._id }, { chunks, status: 'ready', index: 0, 'run.tries': 0, 'run.last_error': '' });
+  res.json({ ok: true, total: chunks.length });
+}));
+
 router.post('/:id/playback', auth, load, control, h(async (req, res) => {
   const io = req.app.get('io'), s = await session(req.cls), a = req.body.action;
   if (s.status !== 'live') return res.status(409).json({ error: 'Class is not live' });
