@@ -9,3 +9,13 @@ node_modules
 *.snip
 .env
 server/.env
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated files
+node_modules/
+dist/
+build/

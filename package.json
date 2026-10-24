@@ -1,8 +1,14 @@
 {
   "name": "peace-mindset-school",
   "version": "2.0.0",
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server/server.js"
+  },
+  "dependencies": {
+    "node-record-lpcm16": "^1.0.1",
+    "ws": "^8.22.0"
   }
 }

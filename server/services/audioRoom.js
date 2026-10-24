@@ -83,7 +83,7 @@ function register(io, socket) {
       if (!mongoose.isValidObjectId(classId)) return reply({ error: 'Invalid class' });
       const cls = await LiveClass.findById(classId);
       if (!cls) return reply({ error: 'Class not found' });
-      if (cls.delivery !== 'audio') return reply({ error: 'This is not an audio class' });
+      if (cls.delivery === 'meet' || cls.presenter_type === 'ai') return reply({ error: 'This class does not use the audio room' });
       if (cls.status === 'ended') return reply({ error: 'This class has ended', code: 'ENDED' });
       const owner = me.role === 'admin' || (me.role === 'tutor' && String(cls.tutor_id) === me._id);
       let ok = owner;
