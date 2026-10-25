@@ -272,10 +272,51 @@ router.post('/:id/hand', auth, load, h(async (req, res) => {
   res.json({ ok: true });
 }));
 
+const normTxt = s => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const grounded = (ev, mat) => { const e = normTxt(ev); if (!e) return false; if (mat.includes(e)) return true; const w = e.split(' ').filter(x => x.length > 2); if (w.length < 3) return false; return w.filter(x => mat.includes(x)).length / w.length >= 0.7; };
+router.post('/:id/quiz-draft', auth, load, control, h(async (req, res) => {
+  const s = await session(req.cls), count = 12;
+  let boardText = '';
+  try { require('../services/boardRoom'); const B = mongoose.models.ClassBoard; const d = B && await B.findOne({ class_id: req.cls._id }).lean();
+    boardText = ((d && d.data && d.data.pages) || []).map(p => (p.items || []).filter(i => i.k === 't').map(i => i.s).join(' ')).join(' ').slice(0, 3000); } catch (e) {}
+  const parts = [['Teacher notes', req.cls.lesson_script], ['Lesson text', (s.chunks || []).map(c => c.text).join(' ')], ['Written on the board', boardText], ['What the teacher says was taught', req.body.focus]]
+    .map(([t, v]) => [t, String(v || '').replace(/\s+/g, ' ').trim().slice(0, 6000)]).filter(([, v]) => v);
+  const material = parts.map(([t, v]) => t + ': ' + v).join('\n\n');
+  const subject = String(req.body.subject || s.subject || 'General').slice(0, 60), topic = String(req.cls.lesson_topic || req.cls.title || '').slice(0, 120);
+  const hasMat = material.length >= 150;
+  const sys = `You write multiple-choice questions for Zambian ECZ and GCE students. Subject: ${subject}. Lesson topic: "${topic}".
+Write ${count + 2} questions. Rules:
+1. Every question must be about the lesson topic "${topic}" and nothing else. Never ask about any other topic.
+2. ${hasMat ? 'Base every question only on the TEACHING MATERIAL below. Do not use facts that are not in it.' : 'There is no lesson material, only the topic. Base the questions on the standard ECZ/GCE syllabus for exactly this topic.'}
+3. Each question has 4 options A to D with exactly one correct answer and believable wrong answers. Never use "all of the above" or "none of the above".
+4. Give a one-sentence explanation.
+5. ${hasMat ? '"evidence" must be a short phrase of at most 12 words copied exactly from the teaching material that the question is based on.' : '"evidence" must be an empty string.'}
+Reply with ONLY JSON: {"questions":[{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correct_answer":"A","explanation":"...","evidence":"..."}]}`;
+  const user = hasMat ? 'TEACHING MATERIAL:\n' + material : 'Topic: ' + topic;
+  const mat = normTxt(material), good = [], seen = new Set(), L = 'ABCD';
+  const take = raw => {
+    const m = String(raw).replace(/```json|```/g, '').match(/\{[\s\S]*\}/); let arr = [];
+    try { arr = (JSON.parse(m ? m[0] : '{}').questions) || []; } catch (e) {}
+    for (const q of arr) {
+      if (!q || !q.question || !Array.isArray(q.options) || q.options.length !== 4) continue;
+      const ca = String(q.correct_answer || '').trim().charAt(0).toUpperCase(); if (!ca || !L.includes(ca)) continue;
+      if (hasMat && !grounded(q.evidence, mat)) continue;
+      const key = normTxt(q.question).slice(0, 80); if (seen.has(key)) continue; seen.add(key);
+      good.push({ question: String(q.question).slice(0, 300), options: q.options.map((o, i) => { o = String(o).slice(0, 150); return /^[A-D][.)]\s/.test(o) ? o : L[i] + '. ' + o; }), correct_answer: ca, explanation: String(q.explanation || '').slice(0, 300), evidence: String(q.evidence || '').slice(0, 120) });
+    }
+  };
+  for (let i = 0; i < 2 && good.length < count; i++) {
+    try { const raw = String(await ai.callAI(sys, user, [], 5000)); if (/ask again in a moment/i.test(raw)) continue; take(raw); } catch (e) { console.warn('quiz-draft:', e.message); }
+  }
+  if (good.length < 10) return res.status(422).json({ error: hasMat ? 'Only ' + good.length + ' questions could be tied to your lesson material. Add more notes or type what was taught, then try again.' : 'The AI could not make enough questions. Please try again.', found: good.length });
+  res.json({ questions: good.slice(0, 15), mode: hasMat ? 'material' : 'topic', used: parts.map(([t]) => t) });
+}));
+
 router.post('/:id/quiz', auth, load, control, h(async (req, res) => {
-  const qs = (req.body.questions || []).slice(0, 10).filter(x => x && x.question && Array.isArray(x.options) && x.options.length >= 2 && x.correct_answer)
+  const qs = (req.body.questions || []).slice(0, 20).filter(x => x && x.question && Array.isArray(x.options) && x.options.length >= 2 && x.correct_answer)
     .map(x => ({ question: String(x.question).slice(0, 300), options: x.options.slice(0, 5).map(o => String(o).slice(0, 150)), correct_answer: String(x.correct_answer).trim().charAt(0).toUpperCase(), explanation: String(x.explanation || '').slice(0, 300) }));
   if (!qs.length) return res.status(400).json({ error: 'No valid questions' });
+  if (req.cls.presenter_type !== 'ai' && qs.length < 10) return res.status(400).json({ error: 'A quick check needs at least 10 questions (you have ' + qs.length + ')' });
   const s = await session(req.cls), id = new mongoose.Types.ObjectId();
   await ClassSession.updateOne({ _id: s._id }, { $push: { quizzes: { _id: id, questions: qs, results: [], at: new Date() } } });
   emitTo(req.app.get('io'), req.cls._id, 'cr_quiz', { quizId: id, questions: qs.map(strip) });
