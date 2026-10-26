@@ -8182,6 +8182,24 @@ function MaterialsPage({
     , onClick: () => window.dispatchEvent(new CustomEvent('goto-subscribe', { detail: { tutor_id: m.tutor_id, subject_id: m.subject_id } })), role: 'button' }, "\uD83D\uDD12 Subscribe")))));
   })));
 }
+const subOf=(ms,a)=>Array.isArray(ms)?ms.find(x=>x&&x.assignment_id&&String(x.assignment_id._id||x.assignment_id)===String(a._id)):null;
+const sortAsns=(list,ms)=>{const L=Array.isArray(list)?[...list]:[];return L.sort((x,y)=>{const rx=subOf(ms,x)?1:0,ry=subOf(ms,y)?1:0;if(rx!==ry)return rx-ry;const dx=x.due_date?new Date(String(x.due_date).slice(0,10)).getTime():9e15,dy=y.due_date?new Date(String(y.due_date).slice(0,10)).getTime():9e15;if(dx!==dy)return dx-dy;return new Date(y.createdAt||0)-new Date(x.createdAt||0);});};
+const dueTxt=d=>{if(!d)return '';const t=new Date(String(d).slice(0,10)+'T00:00:00');if(isNaN(t))return ' · Due: '+d;const dd=Math.round((t-new Date(new Date().toDateString()))/864e5);const lab=dd<0?'Overdue by '+(-dd)+' day'+(dd===-1?'':'s'):dd===0?'Due today':dd===1?'Due tomorrow':'Due in '+dd+' days';return React.createElement('span',{style:{color:dd<0?'#dc2626':dd<=1?'#d97706':'inherit',fontWeight:dd<=1?700:400}},' · '+lab+' ('+String(d).slice(0,10)+')');};
+function AssignmentFile({a}){
+  const e=React.createElement,[info,setInfo]=useState(null),[err,setErr]=useState('');
+  useEffect(()=>{let dead=false;Promise.resolve(apiFetch('GET','/assignments/'+a._id+'/info',null,tok())).then(x=>{if(!dead)setInfo(x||{});}).catch(er=>{if(!dead)setErr((er&&er.message)||'The file could not be checked');});return()=>{dead=true;};},[a._id]);
+  const fmt=n=>!n?'':n<1048576?Math.max(1,Math.round(n/1024))+' KB':(n/1048576).toFixed(1)+' MB';
+  const url=k=>BACKEND+'/api/assignments/'+a._id+'/'+k+'?token='+tok();
+  const names={pdf:'PDF',jpg:'Photo',png:'Photo',gif:'Image',webp:'Photo',docx:'Word',doc:'Word',xlsx:'Excel',pptx:'PowerPoint',txt:'Text',zip:'ZIP'};
+  const bt=c=>({background:c,color:'#fff',borderRadius:8,padding:'6px 12px',fontWeight:600,textDecoration:'none',fontSize:12});
+  const bad=err||(info&&(info.error||info.code==='LOCKED'));
+  if(bad)return e('div',{style:{fontSize:12,color:'#dc2626',marginBottom:7}},'📎 '+(err||info.error||'This file is locked'));
+  const t=info&&info.type,label=t?(names[t]||String(t).toUpperCase())+(info.size?' · '+fmt(info.size):''):'Checking the file...';
+  return e('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8,fontSize:12}},
+    e('span',{style:{color:C.grd}},'📎 '+label),
+    (!info||info.inline)&&e('a',{href:url('view'),target:'_blank',rel:'noreferrer',style:bt(C.g)},'👁 Preview'),
+    e('a',{href:url('download'),style:bt(C.gd)},'⬇ Download'));
+}
 function AssignmentsPage({
   subs,
   pays
@@ -8202,14 +8220,18 @@ function AssignmentsPage({
     refetch
   } = useApiData('/assignments/my-submissions', [profile?._id]);
   const { socket } = useAuth();
+  const [newIds, setNewIds] = useState(() => new Set());
+  const asnRef = useRef([]);
+  asnRef.current = Array.isArray(asns) ? asns : [];
   useEffect(() => {
     if (!socket) return;
     const onNew = a => {
+      setNewIds(p => new Set(p).add(a._id));
       setAsns(p => Array.isArray(p) ? [a, ...p.filter(x=>x._id!==a._id)] : [a]);
       add({ title: 'New Assignment!', body: a.title, icon: '📝', type: 'i' });
     };
     const onGraded = (data) => {
-      add({ title: 'Assignment Graded!', body: (data.assignment_title||'Assignment') + ' - ' + (data.marks||data.grade||''), icon: '✅', type: 'i' });
+      const aid = (data.assignment_id && data.assignment_id._id) || data.assignment_id; const at = (asnRef.current.find(x => x._id === aid) || {}).title || data.assignment_title || 'Assignment'; add({ title: 'Assignment Graded!', body: at + ' - ' + (data.marks||data.grade||''), icon: '✅', type: 'i' });
       refetch();
     };
     socket.on('new_assignment', onNew);
@@ -8265,8 +8287,8 @@ function AssignmentsPage({
       padding: 38,
       color: C.gr
     }
-  }, "No assignments yet. Complete your first live class!"), asns.map(a => {
-    const s = mysubs.find ? mysubs.find(x => x.assignment_id === a._id) : null;
+  }, "No assignments yet. Assignments from the tutors you have paid for appear here the moment they are posted. Subscribe to a tutor to see theirs."), sortAsns(asns, mysubs).map(a => {
+    const s = subOf(mysubs, a);
     const ok = isSub(subs, pays, a.subject_id);
     return /*#__PURE__*/React.createElement("div", {
       key: a._id,
@@ -8287,13 +8309,13 @@ function AssignmentsPage({
         fontWeight: 700,
         fontSize: 15
       }
-    }, a.title), /*#__PURE__*/React.createElement("div", {
+    }, a.title, (newIds.has(a._id) || (!s && a.createdAt && Date.now() - new Date(a.createdAt) < 172800000)) && React.createElement("span", { style: { marginLeft: 8, background: C.g, color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 700 } }, "NEW")), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.gr,
         marginTop: 2
       }
-    }, si(a.subject_id), " ", sn(a.subject_id), a.due_date ? ` · Due: ${a.due_date}` : '')), s && /*#__PURE__*/React.createElement("span", {
+    }, si(a.subject_id), " ", sn(a.subject_id), dueTxt(a.due_date))), s && /*#__PURE__*/React.createElement("span", {
       style: {
         background: s.status === 'graded' ? C.okl : C.wal,
         color: s.status === 'graded' ? C.ok : C.wa,
@@ -8309,18 +8331,7 @@ function AssignmentsPage({
         marginBottom: 9,
         lineHeight: 1.6
       }
-    }, a.description), a.file_url && /*#__PURE__*/React.createElement("a", {
-      href: BACKEND+'/api/assignments/'+a._id+'/view?token='+tok(),
-      target: "_blank",
-      rel: "noreferrer",
-      style: {
-        fontSize: 12,
-        color: C.g,
-        fontWeight: 600,
-        display: 'block',
-        marginBottom: 7
-      }
-    }, "\uD83D\uDCCE View file"), s?.feedback && /*#__PURE__*/React.createElement("div", {
+    }, a.description), a.file_url && React.createElement(AssignmentFile, { a }), s?.feedback && /*#__PURE__*/React.createElement("div", {
       style: {
         background: C.gp,
         borderRadius: 9,
@@ -10413,6 +10424,7 @@ function TutorCreateAssignment() {
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      if (file && file.size > 26214400) { add({ title: 'File too large', body: 'Please keep the file under 25 MB', icon: '⚠️', type: 'w' }); return; }
       if (file) fd.append('file', file);
       await apiFetch('POST', '/assignments', null, tok(), fd);
       setForm({
