@@ -6648,14 +6648,6 @@ function ClassBoardPane({cls,socket,isHost}){
     const onOp=o=>apply(o),onL=d=>{dotAt(d.on?d:null);clearTimeout(lzT.current);lzT.current=setTimeout(()=>dotAt(null),1500);};
     join();socket.on('connect',join);socket.on('bd_op',onOp);socket.on('bd_laser',onL);
     return()=>{socket.off('connect',join);socket.off('bd_op',onOp);socket.off('bd_laser',onL);};},[socket,cls._id]);
-  const [qz,setQz]=useState(null),[qr,setQr]=useState(null);
-  useEffect(()=>{if(!socket)return;let dead=false,t=0;
-    const jn=()=>socket.emit('join_class',{classId:cls._id});jn();socket.on('connect',jn);
-    const onQ=d=>{if(!isHost){setQr(null);setQz({quizId:d.quizId,questions:d.questions,a:{}});}};socket.on('cr_quiz',onQ);
-    const st=()=>Promise.resolve(apiFetch('GET','/classroom/'+cls._id+'/state',null,tok())).then(x=>{if(dead||!x||x.error)return;if(x.quiz&&!x.quiz.answered&&!isHost)setQz(q=>q||{quizId:x.quiz.quizId,questions:x.quiz.questions,a:{}});}).catch(()=>{});
-    if(!isHost){st();t=setInterval(st,40000);}
-    return()=>{dead=true;clearInterval(t);socket.off('connect',jn);socket.off('cr_quiz',onQ);};},[socket,cls._id,isHost]);
-  const sendQz=async()=>{try{const x=await apiFetch('POST','/classroom/'+cls._id+'/quiz/'+qz.quizId+'/answer',{answers:qz.a},tok());if(x&&x.error)throw new Error(x.error);setQr(x);}catch(e){setErr(e.message||'Could not submit');}};
   const pt=e=>{const r=cv.current.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};};
   const hit=(q,rad)=>{const its=page().items;for(let i=its.length-1;i>=0;i--){const t=its[i];
     if(t.k==='s'){for(let j=0;j<t.p.length;j+=2)if(Math.hypot(t.p[j]-q.x,t.p[j+1]-q.y)<t.w/2+rad)return t;}
@@ -6725,40 +6717,9 @@ function ClassBoardPane({cls,socket,isHost}){
       h('button',{className:'bd-b',onClick:lands},'⛶'),
       h('button',{className:'bd-b',title:'Voice and chat',onClick:side},'☰')),
     tx&&h('div',{className:'bd-modal'},h('div',{className:'bd-card'},h('b',null,'Type your text'),h('textarea',{autoFocus:true,value:tx.v,onChange:e=>setTx({...tx,v:e.target.value})}),h('div',{style:{display:'flex',gap:8,marginTop:8}},h('button',{className:'bd-b on',onClick:()=>{if(tx.v.trim())putText(tx.v,tx.x,tx.y);setTx(null);}},'Add to board'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:()=>setTx(null)},'Cancel')))),
-    ps&&h('div',{className:'bd-modal'},h('div',{className:'bd-card'},h('b',null,'Paste onto the board'),h('div',{style:{fontSize:12,color:'#6b7280',margin:'4px 0'}},'Paste text below (long-press, then Paste). Laptop: Ctrl+V anywhere on the page also works.'),h('textarea',{id:'bdps'}),h('div',{style:{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}},h('button',{className:'bd-b on',onClick:()=>{const v=document.getElementById('bdps').value;if(v.trim())putText(v,60,60);setPs(false);}},'Add text'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:pasteImg},'Paste picture'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:()=>setPs(false)},'Close')))),qz&&h('div',{className:'bd-modal'},h('div',{className:'bd-card',style:{maxHeight:'90vh',overflow:'auto'}},h('b',null,'Quick check'),
-      qz.questions.map((q,i)=>h('div',{key:i,style:{marginTop:10}},h('div',{style:{fontWeight:600,fontSize:14}},(i+1)+'. '+q.question),q.options.map((o,j)=>h('label',{key:j,style:{display:'block',padding:'6px 4px',fontSize:14}},h('input',{type:'radio',name:'bq'+i,disabled:!!qr,checked:qz.a[i]===String(o).trim().charAt(0),onChange:()=>setQz(z=>({...z,a:{...z.a,[i]:String(o).trim().charAt(0)}})),style:{marginRight:8}}),o)))),
-      qr&&h('div',{style:{marginTop:10,fontSize:13}},h('b',null,'Score: '+qr.score+'/'+qr.total),qr.review.map((x,i)=>h('div',{key:i,style:{color:'#475569'}},(i+1)+'. '+(x.yours===x.correct?'✅':'❌ correct: '+x.correct)+' '+x.explanation))),
-      h('div',{style:{display:'flex',gap:8,marginTop:12}},!qr&&h('button',{className:'bd-b on',onClick:sendQz},'Submit'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:()=>{setQz(null);setQr(null);}},qr?'Done':'Later')))));
+    ps&&h('div',{className:'bd-modal'},h('div',{className:'bd-card'},h('b',null,'Paste onto the board'),h('div',{style:{fontSize:12,color:'#6b7280',margin:'4px 0'}},'Paste text below (long-press, then Paste). Laptop: Ctrl+V anywhere on the page also works.'),h('textarea',{id:'bdps'}),h('div',{style:{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}},h('button',{className:'bd-b on',onClick:()=>{const v=document.getElementById('bdps').value;if(v.trim())putText(v,60,60);setPs(false);}},'Add text'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:pasteImg},'Paste picture'),h('button',{className:'bd-b',style:{color:'#111827',background:'#e5e7eb'},onClick:()=>setPs(false)},'Close')))));
 }
 
-function HostQuizTab({cls,socket}){
-  const h=React.createElement,[busy,setBusy]=useState(''),[msg,setMsg]=useState(''),[rep,setRep]=useState(null),[got,setGot]=useState([]),[focus,setFocus]=useState(''),[draft,setDraft]=useState(null),[mode,setMode]=useState('');
-  const subj=cls.subject_name||(SUBJECTS.find(s=>s.id===Number(cls.subject_id))||{}).n||'General';
-  const load=()=>Promise.resolve(apiFetch('GET','/classroom/'+cls._id+'/report',null,tok())).then(x=>{if(x&&!x.error)setRep(x);}).catch(()=>{});
-  useEffect(()=>{load();const t=setInterval(load,8000);const on=d=>setGot(g=>[...g,d.name]);if(socket)socket.on('cr_quiz_progress',on);return()=>{clearInterval(t);if(socket)socket.off('cr_quiz_progress',on);};},[]);
-  const make=async()=>{setBusy('Preparing questions from your lesson. This can take up to a minute...');setMsg('');setDraft(null);try{const g=await apiFetch('POST','/classroom/'+cls._id+'/quiz-draft',{subject:subj,focus},tok());if(!g||g.error||!g.questions)throw new Error((g&&g.error)||'Could not prepare the questions');setDraft(g.questions);setMode(g.mode);}catch(e){setMsg(e.message||'Could not prepare the questions');}setBusy('');};
-  const send=async()=>{setBusy('Sending...');setMsg('');try{const r=await apiFetch('POST','/classroom/'+cls._id+'/quiz',{questions:draft.map(({evidence,...q})=>q)},tok());if(r&&r.error)throw new Error(r.error);setMsg('Quick check sent to students ('+r.count+' questions).');setDraft(null);setGot([]);load();}catch(e){setMsg(e.message||'Could not send it');}setBusy('');};
-  const csv=()=>{const r=rep;if(!r)return;const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';const L=[['Class',cls.title],[],['Attendance'],['Name','Minutes in class']].concat((r.attendance||[]).map(a=>[a.name,a.minutes])).concat([[],['Quick check results'],['Quick check','Student','Score','Out of']]).concat((r.quizzes||[]).reduce((o,z)=>o.concat((z.results||[]).map(x=>[z.n,x.name,x.score,x.total])),[]));const b=new Blob([L.map(l=>l.map(q).join(',')).join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(cls.title||'class')+'-report.csv';a.click();};
-  const box={background:'#1e293b',borderRadius:10,padding:10,marginTop:10,fontSize:13,color:'#e5e7eb'},row=(a,b,k)=>h('div',{key:k,style:{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #334155'}},h('span',null,a),h('span',{style:{color:'#94a3b8'}},b));
-  const ok=draft&&draft.length>=10;
-  return h('div',{className:'ac-scroll'},
-    h('div',{style:{fontSize:12,color:'#94a3b8',marginBottom:4}},'What did you teach today? (optional, keeps the questions on your lesson)'),
-    h('textarea',{className:'ac-inp',style:{width:'100%',minHeight:70,boxSizing:'border-box'},value:focus,onChange:e=>setFocus(e.target.value),placeholder:'e.g. area of a triangle, base times height divided by two, worked examples'}),
-    h('button',{className:'ac-btn green',style:{marginTop:6},disabled:!!busy,onClick:make},'📝 Prepare quick check'),
-    busy&&h('div',{style:{fontSize:12,marginTop:6,color:'#fbbf24'}},busy),msg&&h('div',{style:{fontSize:12,marginTop:6,color:/sent/i.test(msg)?'#86efac':'#fca5a5'}},msg),
-    draft&&h('div',{style:box},
-      h('b',null,draft.length+' questions (at least 10 needed)'),
-      mode==='topic'&&h('div',{style:{color:'#fbbf24',fontSize:12,marginTop:4}},'No lesson notes were found, so these come from the topic title only. Please read them before sending.'),
-      draft.map((q,i)=>h('div',{key:i,style:{marginTop:10,paddingTop:8,borderTop:'1px solid #334155'}},
-        h('div',{style:{display:'flex',gap:6}},h('div',{style:{flex:1,fontWeight:600}},(i+1)+'. '+q.question),h('button',{className:'ac-mini g',onClick:()=>setDraft(d=>d.filter((_,j)=>j!==i))},'✕')),
-        q.options.map((o,j)=>h('div',{key:j,style:{fontSize:12,color:String(o).trim().charAt(0)===q.correct_answer?'#86efac':'#cbd5e1',fontWeight:String(o).trim().charAt(0)===q.correct_answer?700:400}},o)),
-        q.evidence&&h('div',{style:{fontSize:11,color:'#94a3b8',marginTop:2}},'Based on: '+q.evidence))),
-      h('div',{style:{display:'flex',gap:8,marginTop:12}},h('button',{className:'ac-btn green',disabled:!ok||!!busy,onClick:send},ok?'Send to students':'Keep at least 10'),h('button',{className:'ac-btn ghost',disabled:!!busy,onClick:make},'Prepare again'))),
-    got.length>0&&h('div',{style:{fontSize:12,marginTop:6,color:'#94a3b8'}},'Answered: '+got.join(', ')),
-    h('div',{style:box},h('b',null,'Who attended'),!rep?h('div',{style:{color:'#94a3b8'}},'Loading...'):rep.attendance.length?rep.attendance.map((a,i)=>row(a.name,a.minutes+' min',i)):h('div',{style:{color:'#94a3b8'}},'Nobody yet')),
-    h('div',{style:box},h('b',null,'Quick check results'),rep&&rep.quizzes.length?rep.quizzes.map(z=>h('div',{key:z.n,style:{marginTop:6}},h('div',{style:{fontWeight:600}},'Check '+z.n+': '+z.taken+' answered'+(z.average!==null?', average '+z.average+'%':'')),(z.results||[]).map((x,i)=>row(x.name,x.score+'/'+x.total,i)))):h('div',{style:{color:'#94a3b8'}},'None yet')),
-    h('button',{className:'ac-btn ghost',style:{marginTop:10},onClick:csv},'Download report (CSV)'));
-}
 function AudioClassRoom({ cls, profile, socket, onExit }) {
   const h = React.createElement;
   const { add } = useToast();
@@ -7107,8 +7068,8 @@ function AudioClassRoom({ cls, profile, socket, onExit }) {
       isHost ? null : h('button', { className: 'ac-mini g', onClick: leave }, 'Leave')),
     h('div', { className: 'ac-body bd-on' }, h(ClassBoardPane, { cls, socket, isHost }), stage,
       h('div', { className: 'ac-panel' },
-        h('div', { className: 'ac-tabs' }, tb('people', '👥 People', roster.length), tb('chat', '💬 Chat', unread || 0), tb('notes', '📝 Notes'), isHost && tb('quiz', '📊 Quiz')),
-        tab === 'people' ? people : tab === 'chat' ? chatView : (tab === 'quiz' && isHost) ? h(HostQuizTab, { cls, socket }) : notesView)));
+        h('div', { className: 'ac-tabs' }, tb('people', '👥 People', roster.length), tb('chat', '💬 Chat', unread || 0), tb('notes', '📝 Notes')),
+        tab === 'people' ? people : tab === 'chat' ? chatView : notesView)));
 }
 
 // ---------- TUTOR: schedule + manage audio / Google Meet classes ----------
